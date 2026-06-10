@@ -4,11 +4,7 @@ A registry of Nushell HTTP clients, generated from OpenAPI / Swagger / GraphQL s
 [nu-http-client-generator](https://github.com/lassoColombo/nu-http-client-generator).
 
 You can use the clients in this repository as you wish or fork this to create your own collection.
-
----
-
-See [`CLIENTS.md`](CLIENTS.md) for the full list — it's auto-generated from `clients.yaml`
-every time `scripts/generate.nu` runs.
+See [`CLIENTS.md`](CLIENTS.md) for the full list.
 
 ## Using a generated client
 
@@ -55,15 +51,14 @@ See the [generator README](https://github.com/lassoColombo/nu-http-client-genera
 
 #### Via GitHub Actions
 
-Trigger **Generate clients** under the **Actions** tab. Inputs:
+Trigger **Generate clients** under the **Actions** tab. 
 
+Inputs:
 - **client** — name from `clients.yaml`, or `all` (default) to regenerate everything.
 - **generator_ref** — branch/tag/SHA of `nu-http-client-generator` to use (default `main`).
 
-The workflow commits and pushes any changes back to `main`. If nothing changed, it's a no-op.
-
-It also auto-runs on pushes to `main` that touch `clients.yaml`, `scripts/generate.nu`,
-or the workflow file itself.
+The workflow commits and pushes any changes back to `main`. If nothing changed, does nothing.  
+It also auto-runs on pushes to `main` that touch `clients.yaml`, `scripts/generate.nu`, or the workflow file itself.
 
 #### Locally
 
