@@ -18,12 +18,7 @@
 # See https://github.com/lassoColombo/nu-http-client-generator for the full flag reference.
 
 clients:
-  - name: countries
-    type: graphql
-    source: https://countries.trevorblades.com/graphql
-    flags:
-      default-base-url: https://countries.trevorblades.com/graphql
-
+  # ─── Public sandboxes (no auth needed; good for trying the generator) ──────
   - name: petstore
     type: openapi
     source: https://petstore3.swagger.io/api/v3/openapi.json
@@ -33,3 +28,110 @@ clients:
   - name: httpbin
     type: openapi
     source: https://httpbin.org/spec.json
+
+  # ─── Public data / fun APIs ────────────────────────────────────────────────
+  - name: countries
+    type: graphql
+    source: https://countries.trevorblades.com/graphql
+    flags:
+      default-base-url: https://countries.trevorblades.com/graphql
+
+  - name: swapi
+    type: graphql
+    source: https://swapi-graphql.netlify.app/graphql
+    flags:
+      default-base-url: https://swapi-graphql.netlify.app/graphql
+
+  - name: anilist
+    type: graphql
+    source: https://graphql.anilist.co
+    flags:
+      default-base-url: https://graphql.anilist.co
+
+  - name: pokeapi
+    type: graphql
+    source: https://beta.pokeapi.co/graphql/v1beta
+    flags:
+      default-base-url: https://beta.pokeapi.co/graphql/v1beta
+
+  - name: weather-gov
+    type: openapi
+    source: https://api.weather.gov/openapi.json
+
+  - name: exchangerate
+    type: openapi
+    source: https://api.exchangerate.host/openapi.json
+
+  # ─── Source control & developer platforms ──────────────────────────────────
+  # GitHub: ~1200 commands; the largest entry in this registry.
+  - name: github
+    type: openapi
+    source: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
+    flags:
+      exclude-deprecated: true
+
+  # GitLab: ~1100 commands; comparable in size to GitHub.
+  - name: gitlab
+    type: openapi
+    source: https://gitlab.com/gitlab-org/gitlab/-/raw/master/doc/api/openapi/openapi_v2.yaml
+
+  - name: bitbucket
+    type: openapi
+    source: https://api.bitbucket.org/swagger.json
+
+  # ─── Cloud / infrastructure ────────────────────────────────────────────────
+  - name: digitalocean
+    type: openapi
+    source: https://raw.githubusercontent.com/digitalocean/openapi/main/specification/DigitalOcean-public.v2.yaml
+
+  - name: cloudflare
+    type: openapi
+    source: https://raw.githubusercontent.com/cloudflare/api-schemas/main/openapi.json
+
+  # ─── AI / ML ───────────────────────────────────────────────────────────────
+  - name: openai
+    type: openapi
+    source: https://raw.githubusercontent.com/openai/openai-openapi/master/openapi.yaml
+
+  # ─── Payments & commerce ───────────────────────────────────────────────────
+  - name: stripe
+    type: openapi
+    source: https://raw.githubusercontent.com/stripe/openapi/master/openapi/spec3.json
+
+  - name: square
+    type: openapi
+    source: https://raw.githubusercontent.com/square/connect-api-specification/master/api.json
+
+  # ─── Communications ────────────────────────────────────────────────────────
+  - name: slack
+    type: openapi
+    source: https://raw.githubusercontent.com/slackapi/slack-api-specs/master/web-api/slack_web_openapi_v2.json
+
+  - name: discord
+    type: openapi
+    source: https://raw.githubusercontent.com/discord/discord-api-spec/main/specs/openapi.json
+
+  - name: twilio
+    type: openapi
+    source: https://raw.githubusercontent.com/twilio/twilio-oai/main/spec/json/twilio_api_v2010.json
+
+  # ─── Productivity / SaaS ───────────────────────────────────────────────────
+  - name: asana
+    type: openapi
+    source: https://raw.githubusercontent.com/Asana/openapi/master/defs/asana_oas.yaml
+
+  - name: pagerduty
+    type: openapi
+    source: https://raw.githubusercontent.com/PagerDuty/api-schema/main/reference/REST/openapiv3.json
+
+  - name: jira
+    type: openapi
+    source: https://developer.atlassian.com/cloud/jira/platform/swagger-v3.v3.json
+
+  - name: box
+    type: openapi
+    source: https://raw.githubusercontent.com/box/box-openapi/main/openapi.json
+
+  - name: spotify
+    type: openapi
+    source: https://raw.githubusercontent.com/sonallux/spotify-web-api/main/fixed-spotify-open-api.yml
