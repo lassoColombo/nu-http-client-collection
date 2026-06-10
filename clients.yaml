@@ -1,0 +1,35 @@
+# Registry of HTTP clients to generate.
+#
+# Each entry produces one Nushell module under `clients/<name>.nu`.
+#
+# Required keys:
+#   name    — output filename (becomes `clients/<name>.nu`); also the workflow_dispatch selector
+#   type    — "openapi" or "graphql"
+#   source  — URL or path to the spec (OpenAPI 3.x / Swagger 2.0 JSON|YAML, or a GraphQL endpoint / introspection JSON)
+#
+# Optional:
+#   flags   — record of flags forwarded to `http-gen <type>`. Use the exact flag names from the
+#             generator (kebab-case). Values are passed through with the right shape:
+#               bool      → switch (only emitted when true)
+#               string    → --flag "value"
+#               list      → --flag [a b c]
+#               record    → --flag {a: 1, b: 2}
+#
+# See https://github.com/lassoColombo/nu-http-client-generator for the full flag reference.
+
+clients:
+  - name: countries
+    type: graphql
+    source: https://countries.trevorblades.com/graphql
+    flags:
+      default-base-url: https://countries.trevorblades.com/graphql
+
+  - name: petstore
+    type: openapi
+    source: https://petstore3.swagger.io/api/v3/openapi.json
+    flags:
+      exclude-deprecated: true
+
+  - name: httpbin
+    type: openapi
+    source: https://httpbin.org/spec.json

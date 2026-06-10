@@ -1,0 +1,68 @@
+name: Generate clients
+
+on:
+  workflow_dispatch:
+    inputs:
+      client:
+        description: 'Client to regenerate (leave empty or "all" to regenerate everything).'
+        required: false
+        default: 'all'
+        type: string
+      generator_ref:
+        description: 'nu-http-client-generator ref to use (branch, tag, or SHA).'
+        required: false
+        default: 'main'
+        type: string
+  push:
+    branches: [main]
+    paths:
+      - 'clients.yaml'
+      - 'scripts/generate.nu'
+      - '.github/workflows/generate.yml'
+
+concurrency:
+  group: generate-${{ github.event.inputs.client || 'all' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    env:
+      CLIENT: ${{ github.event.inputs.client || 'all' }}
+      GENERATOR_REF: ${{ github.event.inputs.generator_ref || 'main' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nushell
+        uses: hustcer/setup-nu@v3
+        with:
+          version: '*'
+
+      - name: Clone generator
+        run: |
+          git clone --depth=1 --branch "$GENERATOR_REF" \
+            https://github.com/lassoColombo/nu-http-client-generator.git _generator
+
+      - name: Generate clients
+        run: nu scripts/generate.nu "$CLIENT"
+
+      - name: Commit & push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add clients/
+          if git diff --cached --quiet; then
+            echo "No changes — nothing to commit."
+            exit 0
+          fi
+          if [ "$CLIENT" = "" ] || [ "$CLIENT" = "all" ]; then
+            msg="chore(clients): regenerate all"
+          else
+            msg="chore(clients): regenerate ${CLIENT}"
+          fi
+          git commit -m "$msg"
+          git push
