@@ -49,12 +49,35 @@ def main [
     let generator_path = ($generator | into string)
     let generator_name = ($generator | path basename)
 
-    print $"Generating ($selected | length) client\(s\) into ($out_dir)/"
-    for c in $selected {
-        generate-one $c $out_dir $generator_path $generator_name
-    }
+    print $"Generating ($selected | length) client\(s\) into ($out_dir)/ in parallel"
+    let results = (
+        $selected
+        | par-each {|c|
+            let label = $"($c.category)/($c.name)"
+            try {
+                generate-one $c $out_dir $generator_path $generator_name
+                print $"  ✓ ($label)"
+                { ok: true, label: $label, error: null }
+            } catch {|e|
+                let msg = ($e.msg? | default ($e | to nuon))
+                print -e $"  ✗ ($label): ($msg)"
+                { ok: false, label: $label, error: $msg }
+            }
+        }
+    )
+    let failures = ($results | where ok == false)
 
     write-list-file $list_file $all_clients $out_dir
+
+    if not ($failures | is-empty) {
+        print -e ""
+        print -e $"($failures | length) of ($selected | length) client\(s\) failed:"
+        for f in $failures { print -e $"  - ($f.label)" }
+        # Exit non-zero so CI surfaces the failure, but only after the list
+        # file is refreshed — so any partially-successful clients still get
+        # committed by the workflow's commit step \(run with `if: always()`\).
+        exit 1
+    }
     print "Done."
 }
 
@@ -124,8 +147,6 @@ def generate-one [
     let gen_lit = ($generator_path | to nuon)
 
     let cmd = $"use ($gen_lit); ($generator_name) ($client.type) ($source_lit) -o ($out_lit) ($flags_str)"
-
-    print $"  → ($client.category)/($client.name)  [($client.type)]  ($client.source)"
     nu -c $cmd
 }
 

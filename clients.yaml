@@ -138,4 +138,3 @@ clients:
       source: https://swapi-graphql.netlify.app/graphql
       flags:
         default-base-url: https://swapi-graphql.netlify.app/graphql
-
