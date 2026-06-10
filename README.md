@@ -1,10 +1,9 @@
 # nu-http-client-collection
 
-A registry of Nushell HTTP clients, generated from OpenAPI / Swagger / GraphQL specs by
-[nu-http-client-generator](https://github.com/lassoColombo/nu-http-client-generator).
+A registry of Nushell HTTP clients, generated from OpenAPI / Swagger / GraphQL specs by [nu-http-client-generator](https://github.com/lassoColombo/nu-http-client-generator).
 
-You can use the clients in this repository as you wish or fork this to create your own collection.
-See [`CLIENTS.md`](CLIENTS.md) for the full list.
+You can use the clients in this repository as you wish or use the generator script to create your own collection.  
+See [`CLIENTS.md`](CLIENTS.md) for the full list of clients in the collection.
 
 ## Using a generated client
 
@@ -16,9 +15,13 @@ use clients/sandbox/petstore.nu
 petstore pet get-by-id 1 --token $env.MY_TOKEN
 ```
 
+##### Disclaimer:  
+This repository collects clients generated from the whole specification. This means that they tend to be quite heavy and overkill.  
+If you don't need the whole client it is suggested to either manually strip it down or to use the generator to build a minimal version.
+
 ## Building your own collection
 
-Add an entry under a category in `clients.yaml`:
+Fork this repository and specify your collection in `clients.yaml`:
 
 ```yaml
 clients:
@@ -45,7 +48,7 @@ The driver script forwards `flags` to the generator with the right shape:
 | record    | `--flag {key: value}`    | `default-headers: {X-Tenant-Id: acme}`    |
 
 
-## Running it
+## Running the generator
 
 #### Via GitHub Actions
 
