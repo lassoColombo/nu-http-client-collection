@@ -38,6 +38,24 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | ------------------------------------ | ------- | ------------------------------------------------------------------------------------ |
 | [square](clients/commerce/square.nu) | openapi | <https://raw.githubusercontent.com/square/connect-api-specification/master/api.json> |
 
+## container-orchestration
+
+| Client                                                      | Type    | Source                                                                                         |
+| ----------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------- |
+| [kubernetes](clients/container-orchestration/kubernetes.nu) | openapi | <https://raw.githubusercontent.com/kubernetes/kubernetes/master/api/openapi-spec/swagger.json> |
+
+## containers
+
+| Client                                 | Type    | Source                                                                |
+| -------------------------------------- | ------- | --------------------------------------------------------------------- |
+| [docker](clients/containers/docker.nu) | openapi | <https://raw.githubusercontent.com/moby/moby/master/api/swagger.yaml> |
+
+## error-tracking
+
+| Client                                     | Type    | Source                                                                                    |
+| ------------------------------------------ | ------- | ----------------------------------------------------------------------------------------- |
+| [sentry](clients/error-tracking/sentry.nu) | openapi | <https://raw.githubusercontent.com/getsentry/sentry-api-schema/main/openapi-derefed.json> |
+
 ## finance
 
 | Client                                        | Type    | Source                                     |
@@ -61,6 +79,12 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | Client                                 | Type    | Source                                                                   |
 | -------------------------------------- | ------- | ------------------------------------------------------------------------ |
 | [jira](clients/issue-tracking/jira.nu) | openapi | <https://developer.atlassian.com/cloud/jira/platform/swagger-v3.v3.json> |
+
+## monitoring
+
+| Client                                   | Type    | Source                                                                          |
+| ---------------------------------------- | ------- | ------------------------------------------------------------------------------- |
+| [grafana](clients/monitoring/grafana.nu) | openapi | <https://raw.githubusercontent.com/grafana/grafana/main/public/api-merged.json> |
 
 ## music
 
@@ -97,6 +121,12 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | Client                           | Type    | Source                                      |
 | -------------------------------- | ------- | ------------------------------------------- |
 | [swapi](clients/sci-fi/swapi.nu) | graphql | <https://swapi-graphql.netlify.app/graphql> |
+
+## search
+
+| Client                                   | Type    | Source                                                                              |
+| ---------------------------------------- | ------- | ----------------------------------------------------------------------------------- |
+| [typesense](clients/search/typesense.nu) | openapi | <https://raw.githubusercontent.com/typesense/typesense-api-spec/master/openapi.yml> |
 
 ## storage
 

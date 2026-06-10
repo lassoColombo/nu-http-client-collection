@@ -83,6 +83,26 @@ clients:
       type: openapi
       source: https://raw.githubusercontent.com/cloudflare/api-schemas/main/openapi.json
 
+  container-orchestration:
+    - name: kubernetes
+      type: openapi
+      source: https://raw.githubusercontent.com/kubernetes/kubernetes/master/api/openapi-spec/swagger.json
+
+  containers:
+    - name: docker
+      type: openapi
+      source: https://raw.githubusercontent.com/moby/moby/master/api/swagger.yaml
+
+  monitoring:
+    - name: grafana
+      type: openapi
+      source: https://raw.githubusercontent.com/grafana/grafana/main/public/api-merged.json
+
+  error-tracking:
+    - name: sentry
+      type: openapi
+      source: https://raw.githubusercontent.com/getsentry/sentry-api-schema/main/openapi-derefed.json
+
   chat:
     - name: slack
       type: openapi
@@ -112,6 +132,11 @@ clients:
     - name: box
       type: openapi
       source: https://raw.githubusercontent.com/box/box-openapi/main/openapi.json
+
+  search:
+    - name: typesense
+      type: openapi
+      source: https://raw.githubusercontent.com/typesense/typesense-api-spec/master/openapi.yml
 
   music:
     - name: spotify
