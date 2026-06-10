@@ -16,8 +16,8 @@ def main [
     --config: path = "clients.yaml"          # path to the registry file
     --generator: path = "_generator"         # path to the nu-http-client-generator directory
     --out-dir: path = "clients"              # where to write generated `.nu` files
-    --readme: path = "README.md"             # README to refresh the clients table in
-    --readme-only                            # skip generation; only refresh the README table from `clients.yaml`
+    --list-file: path = "CLIENTS.md"         # markdown file listing the registry; fully overwritten
+    --list-only                              # skip generation; only refresh the list file from `clients.yaml`
 ] {
     if not ($config | path exists) {
         error make { msg: $"config file not found: ($config)" }
@@ -28,9 +28,9 @@ def main [
         error make { msg: $"no clients defined in ($config)" }
     }
 
-    if $readme_only {
-        update-readme-table $readme $all_clients $out_dir
-        print $"Refreshed clients table in ($readme)."
+    if $list_only {
+        write-list-file $list_file $all_clients $out_dir
+        print $"Refreshed clients list in ($list_file)."
         return
     }
 
@@ -49,7 +49,7 @@ def main [
         generate-one $c $out_dir $generator_path $generator_name
     }
 
-    update-readme-table $readme $all_clients $out_dir
+    write-list-file $list_file $all_clients $out_dir
     print "Done."
 }
 
@@ -111,25 +111,12 @@ def build-flag-args [flags: record]: nothing -> string {
     | str join " "
 }
 
-# Replace the section between BEGIN/END marker comments in `readme_path`
-# with a markdown table rendered from `clients`.
-def update-readme-table [readme_path: path, clients: list, out_dir: path] {
-    if not ($readme_path | path exists) {
-        error make { msg: $"README not found at ($readme_path)" }
-    }
-    let begin = "<!-- BEGIN CLIENTS TABLE -->"
-    let end_  = "<!-- END CLIENTS TABLE -->"
-    let content = (open --raw $readme_path)
-    if not ($content | str contains $begin) or not ($content | str contains $end_) {
-        error make { msg: $"README is missing the BEGIN/END CLIENTS TABLE marker comments" }
-    }
-
+# Overwrite `list_path` with a markdown document listing every client in `clients`.
+# The file is fully owned by this script — do not edit it by hand.
+def write-list-file [list_path: path, clients: list, out_dir: path] {
     let table = (render-clients-table $clients $out_dir)
-    let replacement = $"($begin)\n($table)\n($end_)"
-    let pattern = $"\(?s\)($begin).*?($end_)"
-    $content
-    | str replace --regex $pattern $replacement
-    | save -f $readme_path
+    let header = "# Available clients\n\n_This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do not edit by hand._\n\n"
+    $header + $table + "\n" | save -f $list_path
 }
 
 def render-clients-table [clients: list, out_dir: path]: nothing -> string {
