@@ -15,6 +15,12 @@
 #               list      → --flag [a b c]
 #               record    → --flag {a: 1, b: 2}
 #
+# Policy: clients must be generated from the FULL spec. Filter flags
+# (--tags, --prefixes, --methods, --exclude-deprecated, --verb-map) must NOT
+# appear here. Only render customizations are allowed (--default-base-url,
+# --default-timeout, --default-headers, --token-env-var, --body-threshold,
+# --no-introspection, --no-descriptions).
+#
 # See https://github.com/lassoColombo/nu-http-client-generator for the full flag reference.
 
 clients:
@@ -22,8 +28,6 @@ clients:
   - name: petstore
     type: openapi
     source: https://petstore3.swagger.io/api/v3/openapi.json
-    flags:
-      exclude-deprecated: true
 
   - name: httpbin
     type: openapi
@@ -67,8 +71,6 @@ clients:
   - name: github
     type: openapi
     source: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
-    flags:
-      exclude-deprecated: true
 
   # GitLab: ~1100 commands; comparable in size to GitHub.
   - name: gitlab
