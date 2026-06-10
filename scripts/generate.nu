@@ -7,6 +7,9 @@
 #   nu scripts/generate.nu all           # same as above
 #   nu scripts/generate.nu countries     # regenerate only the `countries` client
 #
+# Clients are written to `<out-dir>/<category>/<name>.nu`. Names must be
+# unique across categories (validated at startup).
+#
 # The generator (nu-http-client-generator) must be available at the path passed
 # via --generator (default: ./_generator). Locally:
 #   git clone https://github.com/lassoColombo/nu-http-client-generator _generator
@@ -23,10 +26,12 @@ def main [
         error make { msg: $"config file not found: ($config)" }
     }
     let registry = open $config
-    let all_clients = ($registry.clients? | default [])
+    let grouped = ($registry.clients? | default {})
+    let all_clients = (flatten-registry $grouped)
     if ($all_clients | is-empty) {
         error make { msg: $"no clients defined in ($config)" }
     }
+    validate-unique-names $all_clients
 
     if $list_only {
         write-list-file $list_file $all_clients $out_dir
@@ -53,13 +58,41 @@ def main [
     print "Done."
 }
 
+# Flatten the nested {category: [client, ...]} structure into a list of records,
+# each with a `category` field merged in.
+def flatten-registry [grouped: record]: nothing -> list {
+    $grouped
+    | transpose category entries
+    | each {|grp|
+        let kind = ($grp.entries | describe)
+        if not (($kind | str starts-with "list") or ($kind | str starts-with "table")) {
+            error make { msg: $"category '($grp.category)' must hold a list of clients, got: ($kind)" }
+        }
+        $grp.entries | each {|e| $e | insert category $grp.category }
+    }
+    | flatten
+}
+
+def validate-unique-names [clients: list] {
+    let dupes = (
+        $clients
+        | group-by name
+        | transpose name entries
+        | where ($it.entries | length) > 1
+    )
+    if not ($dupes | is-empty) {
+        let names = ($dupes | get name | str join ", ")
+        error make { msg: $"client names must be unique across categories — found duplicates: ($names)" }
+    }
+}
+
 def filter-clients [clients: list, name: any]: nothing -> list {
     if ($name == null or $name == "" or $name == "all") {
         return $clients
     }
     let matched = ($clients | where name == $name)
     if ($matched | is-empty) {
-        let known = ($clients | get name | str join ", ")
+        let known = ($clients | each {|c| $"($c.category)/($c.name)" } | str join ", ")
         error make { msg: $"no client named '($name)'. Known clients: ($known)" }
     }
     $matched
@@ -71,7 +104,7 @@ def generate-one [
     generator_path: string
     generator_name: string
 ] {
-    let required = ["name" "type" "source"]
+    let required = ["category" "name" "type" "source"]
     for key in $required {
         if ($client | get -o $key) == null {
             error make { msg: $"client entry missing required key '($key)': ($client | to nuon)" }
@@ -81,7 +114,10 @@ def generate-one [
         error make { msg: $"unsupported type '($client.type)' for client '($client.name)' — must be 'openapi' or 'graphql'" }
     }
 
-    let out_path = ($out_dir | path join $"($client.name).nu")
+    let category_dir = ($out_dir | path join $client.category)
+    mkdir $category_dir
+
+    let out_path = ($category_dir | path join $"($client.name).nu")
     let flags_str = (build-flag-args ($client.flags? | default {}))
     let source_lit = ($client.source | to nuon)
     let out_lit = ($out_path | to nuon)
@@ -89,7 +125,7 @@ def generate-one [
 
     let cmd = $"use ($gen_lit); ($generator_name) ($client.type) ($source_lit) -o ($out_lit) ($flags_str)"
 
-    print $"  → ($client.name)  [($client.type)]  ($client.source)"
+    print $"  → ($client.category)/($client.name)  [($client.type)]  ($client.source)"
     nu -c $cmd
 }
 
@@ -111,22 +147,28 @@ def build-flag-args [flags: record]: nothing -> string {
     | str join " "
 }
 
-# Overwrite `list_path` with a markdown document listing every client in `clients`.
-# The file is fully owned by this script — do not edit it by hand.
+# Overwrite `list_path` with a markdown document listing every client in `clients`,
+# one table per category. Fully owned by this script — do not edit by hand.
 def write-list-file [list_path: path, clients: list, out_dir: path] {
-    let table = (render-clients-table $clients $out_dir)
-    let header = "# Available clients\n\n_This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do not edit by hand._\n\n"
-    $header + $table + "\n" | save -f $list_path
+    let header = "# Available clients\n\n_This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do not edit by hand._\n"
+    let body = (render-clients-sections $clients $out_dir)
+    $header + "\n" + $body + "\n" | save -f $list_path
 }
 
-def render-clients-table [clients: list, out_dir: path]: nothing -> string {
+def render-clients-sections [clients: list, out_dir: path]: nothing -> string {
     $clients
-    | each {|c|
-        {
-            Client: $"[($c.name)]\(($out_dir)/($c.name).nu\)"
-            Type: $c.type
-            Source: $"<($c.source)>"
-        }
+    | group-by category
+    | transpose category entries
+    | sort-by category
+    | each {|grp|
+        let rows = ($grp.entries | each {|c|
+            {
+                Client: $"[($c.name)]\(($out_dir)/($c.category)/($c.name).nu\)"
+                Type: $c.type
+                Source: $"<($c.source)>"
+            }
+        })
+        $"## ($grp.category)\n\n" + ($rows | to md --pretty)
     }
-    | to md --pretty
+    | str join "\n\n"
 }

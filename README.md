@@ -9,10 +9,10 @@ See [`CLIENTS.md`](CLIENTS.md) for the full list.
 ## Using a generated client
 
 ```nushell
-use clients/countries.nu
+use clients/public-data/countries.nu
 countries query country "IT" --fields [name capital emoji]
 
-use clients/petstore.nu
+use clients/sandbox/petstore.nu
 petstore pet get-by-id 1 --token $env.MY_TOKEN
 ```
 
@@ -21,18 +21,20 @@ Generated clients are namespaced by filename, so they don't shadow nushell built
 
 ## Building your own collection
 
-Append an entry to `clients.yaml`:
+Add an entry under a category in `clients.yaml`:
 
 ```yaml
-- name: my-service                          # → clients/my-service.nu
-  type: openapi                             # or "graphql"
-  source: https://example.com/openapi.json  # URL or local file
-  flags:                                    # forwarded to `http-gen <type>`; use exact kebab-case flag names
-    tags: [users, billing]
-    exclude-deprecated: true
+clients:
+  my-category:
+    - name: my-service                        # → clients/my-category/my-service.nu
+      type: openapi                           # or "graphql"
+      source: https://example.com/openapi.json
+      flags:                                  # render-only; filter flags are forbidden
+        default-base-url: https://example.com
 ```
 
-Then trigger the workflow (see below). The action commits `clients/my-service.nu` for you.
+Then trigger the workflow (see below). The action commits the generated file for you.
+Client names must be unique across categories — the workflow's `client` input is a bare name.
 
 #### Flag value shapes
 
@@ -40,12 +42,15 @@ The driver script forwards `flags` to the generator with the right shape:
 
 | YAML type | Becomes                  | Example                                   |
 | --------- | ------------------------ | ----------------------------------------- |
-| bool      | switch (when `true`)     | `exclude-deprecated: true`                |
+| bool      | switch (when `true`)     | `no-introspection: true`                  |
 | string    | `--flag "value"`         | `default-base-url: https://example.com`   |
-| list      | `--flag [a b c]`         | `methods: [get, post]`                    |
+| list      | `--flag [a b c]`         | `default-headers: [X-Foo: bar]`           |
 | record    | `--flag {key: value}`    | `default-headers: {X-Tenant-Id: acme}`    |
 
-See the [generator README](https://github.com/lassoColombo/nu-http-client-generator) for the full flag reference.
+Filter flags (`--tags`, `--prefixes`, `--methods`, `--exclude-deprecated`, `--verb-map`)
+are **not allowed** in this registry — every client is generated from the full upstream
+spec. See the [generator README](https://github.com/lassoColombo/nu-http-client-generator)
+for the full flag reference.
 
 ## Running it
 

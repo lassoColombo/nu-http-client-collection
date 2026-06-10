@@ -1,139 +1,140 @@
-# Registry of HTTP clients to generate.
+# Registry of HTTP clients to generate, grouped by category.
 #
-# Each entry produces one Nushell module under `clients/<name>.nu`.
+# Structure:
+#   clients:
+#     <category>:
+#       - name: ...        # required — output filename (becomes `clients/<category>/<name>.nu`)
+#         type: ...        # required — "openapi" or "graphql"
+#         source: ...      # required — URL or path to the spec
+#         flags: {...}     # optional — see policy below
 #
-# Required keys:
-#   name    — output filename (becomes `clients/<name>.nu`); also the workflow_dispatch selector
-#   type    — "openapi" or "graphql"
-#   source  — URL or path to the spec (OpenAPI 3.x / Swagger 2.0 JSON|YAML, or a GraphQL endpoint / introspection JSON)
-#
-# Optional:
-#   flags   — record of flags forwarded to `http-gen <type>`. Use the exact flag names from the
-#             generator (kebab-case). Values are passed through with the right shape:
-#               bool      → switch (only emitted when true)
-#               string    → --flag "value"
-#               list      → --flag [a b c]
-#               record    → --flag {a: 1, b: 2}
+# Names must be unique across categories (the workflow's `client` input
+# is a bare name, so disambiguation would be impossible otherwise).
 #
 # Policy: clients must be generated from the FULL spec. Filter flags
-# (--tags, --prefixes, --methods, --exclude-deprecated, --verb-map) must NOT
-# appear here. Only render customizations are allowed (--default-base-url,
-# --default-timeout, --default-headers, --token-env-var, --body-threshold,
-# --no-introspection, --no-descriptions).
+# (--tags, --prefixes, --methods, --exclude-deprecated, --verb-map) must
+# NOT appear here. Only render customizations are allowed:
+# --default-base-url, --default-timeout, --default-headers,
+# --token-env-var, --body-threshold, --no-introspection, --no-descriptions.
+#
+# Flag value shapes:
+#   bool   → switch (only emitted when true)
+#   string → --flag "value"
+#   list   → --flag [a b c]
+#   record → --flag {a: 1, b: 2}
 #
 # See https://github.com/lassoColombo/nu-http-client-generator for the full flag reference.
 
 clients:
-  # ─── Public sandboxes (no auth needed; good for trying the generator) ──────
-  - name: petstore
-    type: openapi
-    source: https://petstore3.swagger.io/api/v3/openapi.json
+  sandbox:
+    - name: petstore
+      type: openapi
+      source: https://petstore3.swagger.io/api/v3/openapi.json
 
-  - name: httpbin
-    type: openapi
-    source: https://httpbin.org/spec.json
+  testing:
+    - name: httpbin
+      type: openapi
+      source: https://httpbin.org/spec.json
 
-  # ─── Public data / fun APIs ────────────────────────────────────────────────
-  - name: countries
-    type: graphql
-    source: https://countries.trevorblades.com/graphql
-    flags:
-      default-base-url: https://countries.trevorblades.com/graphql
+  public-data:
+    - name: countries
+      type: graphql
+      source: https://countries.trevorblades.com/graphql
+      flags:
+        default-base-url: https://countries.trevorblades.com/graphql
 
-  - name: swapi
-    type: graphql
-    source: https://swapi-graphql.netlify.app/graphql
-    flags:
-      default-base-url: https://swapi-graphql.netlify.app/graphql
+  weather:
+    - name: weather-gov
+      type: openapi
+      source: https://api.weather.gov/openapi.json
 
-  - name: anilist
-    type: graphql
-    source: https://graphql.anilist.co
-    flags:
-      default-base-url: https://graphql.anilist.co
+  finance:
+    - name: exchangerate
+      type: openapi
+      source: https://api.exchangerate.host/openapi.json
 
-  - name: pokeapi
-    type: graphql
-    source: https://beta.pokeapi.co/graphql/v1beta
-    flags:
-      default-base-url: https://beta.pokeapi.co/graphql/v1beta
+  ai:
+    - name: openai
+      type: openapi
+      source: https://raw.githubusercontent.com/openai/openai-openapi/master/openapi.yaml
 
-  - name: weather-gov
-    type: openapi
-    source: https://api.weather.gov/openapi.json
+  payments:
+    - name: stripe
+      type: openapi
+      source: https://raw.githubusercontent.com/stripe/openapi/master/openapi/spec3.json
 
-  - name: exchangerate
-    type: openapi
-    source: https://api.exchangerate.host/openapi.json
+  commerce:
+    - name: square
+      type: openapi
+      source: https://raw.githubusercontent.com/square/connect-api-specification/master/api.json
 
-  # ─── Source control & developer platforms ──────────────────────────────────
-  # GitHub: ~1200 commands; the largest entry in this registry.
-  - name: github
-    type: openapi
-    source: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
+  version-control:
+    - name: github
+      type: openapi
+      source: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
 
-  # GitLab: ~1100 commands; comparable in size to GitHub.
-  - name: gitlab
-    type: openapi
-    source: https://gitlab.com/gitlab-org/gitlab/-/raw/master/doc/api/openapi/openapi_v2.yaml
+  cloud:
+    - name: digitalocean
+      type: openapi
+      source: https://raw.githubusercontent.com/digitalocean/openapi/main/specification/DigitalOcean-public.v2.yaml
 
-  - name: bitbucket
-    type: openapi
-    source: https://api.bitbucket.org/swagger.json
+  cdn:
+    - name: cloudflare
+      type: openapi
+      source: https://raw.githubusercontent.com/cloudflare/api-schemas/main/openapi.json
 
-  # ─── Cloud / infrastructure ────────────────────────────────────────────────
-  - name: digitalocean
-    type: openapi
-    source: https://raw.githubusercontent.com/digitalocean/openapi/main/specification/DigitalOcean-public.v2.yaml
+  chat:
+    - name: slack
+      type: openapi
+      source: https://raw.githubusercontent.com/slackapi/slack-api-specs/master/web-api/slack_web_openapi_v2.json
 
-  - name: cloudflare
-    type: openapi
-    source: https://raw.githubusercontent.com/cloudflare/api-schemas/main/openapi.json
+  telephony:
+    - name: twilio
+      type: openapi
+      source: https://raw.githubusercontent.com/twilio/twilio-oai/main/spec/json/twilio_api_v2010.json
 
-  # ─── AI / ML ───────────────────────────────────────────────────────────────
-  - name: openai
-    type: openapi
-    source: https://raw.githubusercontent.com/openai/openai-openapi/master/openapi.yaml
+  issue-tracking:
+    - name: jira
+      type: openapi
+      source: https://developer.atlassian.com/cloud/jira/platform/swagger-v3.v3.json
 
-  # ─── Payments & commerce ───────────────────────────────────────────────────
-  - name: stripe
-    type: openapi
-    source: https://raw.githubusercontent.com/stripe/openapi/master/openapi/spec3.json
+  project-mgmt:
+    - name: asana
+      type: openapi
+      source: https://raw.githubusercontent.com/Asana/openapi/master/defs/asana_oas.yaml
 
-  - name: square
-    type: openapi
-    source: https://raw.githubusercontent.com/square/connect-api-specification/master/api.json
+  incident:
+    - name: pagerduty
+      type: openapi
+      source: https://raw.githubusercontent.com/PagerDuty/api-schema/main/reference/REST/openapiv3.json
 
-  # ─── Communications ────────────────────────────────────────────────────────
-  - name: slack
-    type: openapi
-    source: https://raw.githubusercontent.com/slackapi/slack-api-specs/master/web-api/slack_web_openapi_v2.json
+  storage:
+    - name: box
+      type: openapi
+      source: https://raw.githubusercontent.com/box/box-openapi/main/openapi.json
 
-  - name: discord
-    type: openapi
-    source: https://raw.githubusercontent.com/discord/discord-api-spec/main/specs/openapi.json
+  music:
+    - name: spotify
+      type: openapi
+      source: https://raw.githubusercontent.com/sonallux/spotify-web-api/main/fixed-spotify-open-api.yml
 
-  - name: twilio
-    type: openapi
-    source: https://raw.githubusercontent.com/twilio/twilio-oai/main/spec/json/twilio_api_v2010.json
+  gaming:
+    - name: pokeapi
+      type: graphql
+      source: https://beta.pokeapi.co/graphql/v1beta
+      flags:
+        default-base-url: https://beta.pokeapi.co/graphql/v1beta
 
-  # ─── Productivity / SaaS ───────────────────────────────────────────────────
-  - name: asana
-    type: openapi
-    source: https://raw.githubusercontent.com/Asana/openapi/master/defs/asana_oas.yaml
+  anime:
+    - name: anilist
+      type: graphql
+      source: https://graphql.anilist.co
+      flags:
+        default-base-url: https://graphql.anilist.co
 
-  - name: pagerduty
-    type: openapi
-    source: https://raw.githubusercontent.com/PagerDuty/api-schema/main/reference/REST/openapiv3.json
-
-  - name: jira
-    type: openapi
-    source: https://developer.atlassian.com/cloud/jira/platform/swagger-v3.v3.json
-
-  - name: box
-    type: openapi
-    source: https://raw.githubusercontent.com/box/box-openapi/main/openapi.json
-
-  - name: spotify
-    type: openapi
-    source: https://raw.githubusercontent.com/sonallux/spotify-web-api/main/fixed-spotify-open-api.yml
+  sci-fi:
+    - name: swapi
+      type: graphql
+      source: https://swapi-graphql.netlify.app/graphql
+      flags:
+        default-base-url: https://swapi-graphql.netlify.app/graphql
