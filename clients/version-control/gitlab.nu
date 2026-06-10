@@ -26169,6 +26169,29 @@ export def "projects-terraform-state-protection-rules patch" [
   do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
 }
 
+# Delete a Terraform state protection rule
+#
+# DELETE /api/v4/projects/{id}/terraform/state_protection_rules/{terraform_state_protection_rule_id}
+# operationId: deleteApiV4ProjectsIdTerraformStateProtectionRulesTerraformStateProtectionRuleId
+export def "projects-terraform-state-protection-rules delete" [
+  id: string
+  terraform_state_protection_rule_id: int
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "private-token"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v4/projects/($id)/terraform/state_protection_rules/($terraform_state_protection_rule_id)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
 # Get a Terraform state version
 #
 # GET /api/v4/projects/{id}/terraform/state/{name}/versions/{serial}

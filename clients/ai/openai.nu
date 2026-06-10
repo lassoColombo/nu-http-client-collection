@@ -1,5 +1,5 @@
 # Auto-generated client for OpenAI API v2.3.0
-# Source: /Users/colombos/projects/personal/nu-http-clients/specs/openai.yaml
+# Source: /home/runner/work/nu-http-client-collection/nu-http-client-collection/specs/openai.yaml
 # Auth: --token flag or $env.OPENAI_API_TOKEN
 
 const BASE_URL = "https://api.openai.com/v1"
