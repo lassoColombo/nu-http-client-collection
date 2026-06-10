@@ -2,7 +2,8 @@
 
 A collection of Nushell HTTP clients generated from OpenAPI, Swagger, and GraphQL specifications using [nu-http-client-generator](https://github.com/lassoColombo/nu-http-client-generator).
 
-You can use the clients in this repository as you wish or use the generator script to create your own collection.  
+You can use the clients in this repository as you wish or use the generator script to create your own collection.
+
 See [`CLIENTS.md`](CLIENTS.md) for the full list of clients in the collection.
 
 ---
