@@ -26,129 +26,28 @@
 # See https://github.com/lassoColombo/nu-http-client-generator for the full flag reference.
 
 clients:
-  sandbox:
-    - name: petstore
-      type: openapi
-      source: https://petstore3.swagger.io/api/v3/openapi.json
-
-  testing:
-    - name: httpbin
-      type: openapi
-      source: https://httpbin.org/spec.json
-
-  public-data:
-    - name: countries
-      type: graphql
-      source: https://countries.trevorblades.com/graphql
-      flags:
-        default-base-url: https://countries.trevorblades.com/graphql
-
-  weather:
-    - name: weather-gov
-      type: openapi
-      source: https://api.weather.gov/openapi.json
-
-  finance:
-    - name: frankfurter
-      type: openapi
-      source: https://api.frankfurter.app/openapi.json
-
   ai:
     - name: openai
       type: openapi
       source: https://raw.githubusercontent.com/openai/openai-openapi/master/openapi.yaml
-
-  payments:
-    - name: stripe
+    - name: cohere
       type: openapi
-      source: https://raw.githubusercontent.com/stripe/openapi/master/openapi/spec3.json
-
-  commerce:
-    - name: square
+      source: https://docs.cohere.com/openapi/cohere-api.json
+    - name: elevenlabs
       type: openapi
-      source: https://raw.githubusercontent.com/square/connect-api-specification/master/api.json
-
-  version-control:
-    - name: github
+      source: https://api.elevenlabs.io/openapi.json
+    - name: assemblyai
       type: openapi
-      source: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
-
-  cloud:
-    - name: digitalocean
+      source: https://www.assemblyai.com/docs/openapi.json
+    - name: deepgram
       type: openapi
-      source: https://raw.githubusercontent.com/digitalocean/openapi/main/specification/DigitalOcean-public.v2.yaml
-
-  cdn:
-    - name: cloudflare
+      source: https://developers.deepgram.com/reference/openapi.json
+    - name: xai
       type: openapi
-      source: https://raw.githubusercontent.com/cloudflare/api-schemas/main/openapi.json
-
-  container-orchestration:
-    - name: kubernetes
+      source: https://docs.x.ai/openapi.json
+    - name: deepinfra
       type: openapi
-      source: https://raw.githubusercontent.com/kubernetes/kubernetes/master/api/openapi-spec/swagger.json
-
-  containers:
-    - name: docker
-      type: openapi
-      source: https://raw.githubusercontent.com/moby/moby/master/api/swagger.yaml
-
-  monitoring:
-    - name: grafana
-      type: openapi
-      source: https://raw.githubusercontent.com/grafana/grafana/main/public/api-merged.json
-
-  error-tracking:
-    - name: sentry
-      type: openapi
-      source: https://raw.githubusercontent.com/getsentry/sentry-api-schema/main/openapi-derefed.json
-
-  chat:
-    - name: slack
-      type: openapi
-      source: https://raw.githubusercontent.com/slackapi/slack-api-specs/master/web-api/slack_web_openapi_v2.json
-
-  telephony:
-    - name: twilio
-      type: openapi
-      source: https://raw.githubusercontent.com/twilio/twilio-oai/main/spec/json/twilio_api_v2010.json
-
-  issue-tracking:
-    - name: jira
-      type: openapi
-      source: https://developer.atlassian.com/cloud/jira/platform/swagger-v3.v3.json
-
-  project-mgmt:
-    - name: asana
-      type: openapi
-      source: https://raw.githubusercontent.com/Asana/openapi/master/defs/asana_oas.yaml
-
-  incident:
-    - name: pagerduty
-      type: openapi
-      source: https://raw.githubusercontent.com/PagerDuty/api-schema/main/reference/REST/openapiv3.json
-
-  storage:
-    - name: box
-      type: openapi
-      source: https://raw.githubusercontent.com/box/box-openapi/main/openapi.json
-
-  search:
-    - name: typesense
-      type: openapi
-      source: https://raw.githubusercontent.com/typesense/typesense-api-spec/master/openapi.yml
-
-  music:
-    - name: spotify
-      type: openapi
-      source: https://raw.githubusercontent.com/sonallux/spotify-web-api/main/fixed-spotify-open-api.yml
-
-  gaming:
-    - name: pokeapi
-      type: graphql
-      source: https://beta.pokeapi.co/graphql/v1beta
-      flags:
-        default-base-url: https://beta.pokeapi.co/graphql/v1beta
+      source: https://api.deepinfra.com/openapi.json
 
   anime:
     - name: anilist
@@ -156,6 +55,385 @@ clients:
       source: https://graphql.anilist.co
       flags:
         default-base-url: https://graphql.anilist.co
+    - name: jikan
+      type: openapi
+      source: https://raw.githubusercontent.com/jikan-me/jikan-rest/master/storage/api-docs/api-docs.json
+    - name: kitsu
+      type: graphql
+      source: https://kitsu.io/api/graphql
+      flags:
+        default-base-url: https://kitsu.io/api/graphql
+    - name: bangumi
+      type: openapi
+      source: https://raw.githubusercontent.com/bangumi/api/master/open-api/api.yml
+    - name: nekosapi
+      type: openapi
+      source: https://api.nekosapi.com/openapi.json
+    - name: dragonball-api
+      type: openapi
+      source: https://dragonball-api.com/api-docs-json
+    - name: ghibli
+      type: openapi
+      source: https://ghibliapi.vercel.app/swagger.yaml
+
+  cdn:
+    - name: cloudflare
+      type: openapi
+      source: https://raw.githubusercontent.com/cloudflare/api-schemas/main/openapi.json
+    - name: aws-cloudfront
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/cloudfront/2020-05-31/openapi.json
+    - name: aws-global-accelerator
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/globalaccelerator/2018-08-08/openapi.json
+    - name: azure-cdn
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/cdn/2019-06-15-preview/swagger.json
+    - name: azure-cdn-waf
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/cdn-cdnwebapplicationfirewall/2019-06-15-preview/swagger.json
+
+  chat:
+    - name: slack
+      type: openapi
+      source: https://raw.githubusercontent.com/slackapi/slack-api-specs/master/web-api/slack_web_openapi_v2.json
+    - name: discord
+      type: openapi
+      source: https://raw.githubusercontent.com/discord/discord-api-spec/main/specs/openapi.json
+    - name: line
+      type: openapi
+      source: https://raw.githubusercontent.com/line/line-openapi/main/messaging-api.yml
+    - name: intercom
+      type: openapi
+      source: https://raw.githubusercontent.com/intercom/Intercom-OpenAPI/main/descriptions/2.11/api.intercom.io.yaml
+    - name: zoom
+      type: openapi
+      source: https://api.apis.guru/v2/specs/zoom.us/2.0.0/openapi.yaml
+    - name: chatwoot
+      type: openapi
+      source: https://raw.githubusercontent.com/chatwoot/chatwoot/develop/swagger/swagger.json
+
+  cloud:
+    - name: digitalocean
+      type: openapi
+      source: https://raw.githubusercontent.com/digitalocean/openapi/main/specification/DigitalOcean-public.v2.yaml
+    - name: exoscale
+      type: openapi
+      source: https://openapi-v2.exoscale.com/source.json
+    - name: fly-machines
+      type: openapi
+      source: https://docs.machines.dev/swagger/doc.json
+    - name: netlify
+      type: openapi
+      source: https://open-api.netlify.com/openapi.json
+    - name: openshift-clusters
+      type: openapi
+      source: https://api.openshift.com/api/clusters_mgmt/v1/openapi
+    - name: openshift-accounts
+      type: openapi
+      source: https://api.openshift.com/api/accounts_mgmt/v1/openapi
+
+  commerce:
+    - name: square
+      type: openapi
+      source: https://raw.githubusercontent.com/square/connect-api-specification/master/api.json
+    - name: ebay-buy-browse
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ebay.com/buy-browse/v1.1.0/swagger.json
+    - name: ebay-sell-fulfillment
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ebay.com/sell-fulfillment/v1.19.19/openapi.json
+    - name: walmart-item
+      type: openapi
+      source: https://api.apis.guru/v2/specs/walmart.com/item/3.0.1/swagger.json
+    - name: walmart-order
+      type: openapi
+      source: https://api.apis.guru/v2/specs/walmart.com/order/3.0.1/swagger.json
+    - name: magento
+      type: openapi
+      source: https://api.apis.guru/v2/specs/magento.com/2.2.10/openapi.json
+    - name: shop-app
+      type: openapi
+      source: https://api.apis.guru/v2/specs/shop.app/v1/openapi.json
+
+  container-orchestration:
+    - name: kubernetes
+      type: openapi
+      source: https://raw.githubusercontent.com/kubernetes/kubernetes/master/api/openapi-spec/swagger.json
+    - name: nomad
+      type: openapi
+      source: https://raw.githubusercontent.com/hashicorp/nomad-openapi/main/v1/openapi.yaml
+    - name: argocd
+      type: openapi
+      source: https://raw.githubusercontent.com/argoproj/argo-cd/master/assets/swagger.json
+    - name: argo-workflows
+      type: openapi
+      source: https://raw.githubusercontent.com/argoproj/argo-workflows/main/api/openapi-spec/swagger.json
+    - name: openfaas
+      type: openapi
+      source: https://raw.githubusercontent.com/openfaas/faas/master/api-docs/spec.openapi.yml
+
+  containers:
+    - name: docker
+      type: openapi
+      source: https://raw.githubusercontent.com/moby/moby/master/api/swagger.yaml
+    - name: podman
+      type: openapi
+      source: https://storage.googleapis.com/libpod-master-releases/swagger-latest.yaml
+    - name: harbor
+      type: openapi
+      source: https://raw.githubusercontent.com/goharbor/harbor/main/api/v2.0/swagger.yaml
+    - name: portainer
+      type: openapi
+      source: https://app.swaggerhub.com/apiproxy/registry/portainer/portainer-ce/2.20.0
+    - name: anchore-engine
+      type: openapi
+      source: https://raw.githubusercontent.com/anchore/anchore-engine/master/anchore_engine/services/apiext/swagger/swagger.yaml
+    - name: rekor
+      type: openapi
+      source: https://raw.githubusercontent.com/sigstore/rekor/main/openapi.yaml
+
+  error-tracking:
+    - name: sentry
+      type: openapi
+      source: https://raw.githubusercontent.com/getsentry/sentry-api-schema/main/openapi-derefed.json
+    - name: datadog-v1
+      type: openapi
+      source: https://raw.githubusercontent.com/DataDog/datadog-api-client-python/master/.generator/schemas/v1/openapi.yaml
+      flags:
+        default-base-url: https://api.datadoghq.com
+        token-env-var: DATADOG_API_KEY
+    - name: sumo-logic
+      type: openapi
+      source: https://api.sumologic.com/docs/sumologic-api.yaml
+      flags:
+        default-base-url: https://api.sumologic.com
+        token-env-var: SUMOLOGIC_TOKEN
+
+  finance:
+    - name: frankfurter
+      type: openapi
+      source: https://api.frankfurter.app/openapi.json
+    - name: polygon-io
+      type: openapi
+      source: https://api.apis.guru/v2/specs/polygon.io/1.0.0/swagger.yaml
+      flags:
+        token-env-var: POLYGON_TOKEN
+    - name: exchangerate-api
+      type: openapi
+      source: https://api.apis.guru/v2/specs/exchangerate-api.com/4/openapi.yaml
+    - name: consumer-finance
+      type: openapi
+      source: https://api.apis.guru/v2/specs/consumerfinance.gov/1.0/swagger.yaml
+    - name: mastercard-currency
+      type: openapi
+      source: https://api.apis.guru/v2/specs/mastercard.com/CurrencyConversionCalculator/1.0.0/swagger.yaml
+      flags:
+        token-env-var: MASTERCARD_TOKEN
+    - name: interzoid-currency
+      type: openapi
+      source: https://api.apis.guru/v2/specs/interzoid.com/getcurrencyrate/1.0.0/openapi.yaml
+      flags:
+        token-env-var: INTERZOID_TOKEN
+
+  gaming:
+    - name: pokeapi
+      type: graphql
+      source: https://beta.pokeapi.co/graphql/v1beta
+      flags:
+        default-base-url: https://beta.pokeapi.co/graphql/v1beta
+    - name: opendota
+      type: openapi
+      source: https://api.opendota.com/api
+    - name: bungie
+      type: openapi
+      source: https://raw.githubusercontent.com/Bungie-net/api/master/openapi.json
+      flags:
+        token-env-var: BUNGIE_API_KEY
+    - name: roblox-users
+      type: openapi
+      source: https://users.roblox.com/docs/json/v1
+    - name: riot
+      type: openapi
+      source: https://mingweisamuel.github.io/riotapi-schema/openapi-3.0.0.json
+      flags:
+        token-env-var: RIOT_API_KEY
+
+  incident:
+    - name: pagerduty
+      type: openapi
+      source: https://raw.githubusercontent.com/PagerDuty/api-schema/main/reference/REST/openapiv3.json
+    - name: opsgenie
+      type: openapi
+      source: https://raw.githubusercontent.com/opsgenie/opsgenie-oas/master/swagger.json
+    - name: incident-io
+      type: openapi
+      source: https://docs.incident.io/openapi/latest.json
+    - name: zenduty
+      type: openapi
+      source: https://apidocs.zenduty.com/openapi.json
+    - name: ilert
+      type: openapi
+      source: https://api.ilert.com/api-docs/openapi.json
+    - name: uptime-com
+      type: openapi
+      source: https://uptime.com/api/v1/openapi/
+
+  issue-tracking:
+    - name: jira
+      type: openapi
+      source: https://developer.atlassian.com/cloud/jira/platform/swagger-v3.v3.json
+    - name: zendesk
+      type: openapi
+      source: https://developer.zendesk.com/zendesk/oas.yaml
+
+  monitoring:
+    - name: grafana
+      type: openapi
+      source: https://raw.githubusercontent.com/grafana/grafana/main/public/api-merged.json
+    - name: datadog
+      type: openapi
+      source: https://raw.githubusercontent.com/DataDog/datadog-api-client-python/master/.generator/schemas/v2/openapi.yaml
+    - name: checkly
+      type: openapi
+      source: https://api.checklyhq.com/openapi.json
+    - name: kibana
+      type: openapi
+      source: https://raw.githubusercontent.com/elastic/kibana/main/oas_docs/output/kibana.serverless.yaml
+    - name: netdata
+      type: openapi
+      source: https://raw.githubusercontent.com/netdata/netdata/master/src/web/api/netdata-swagger.yaml
+    - name: influxdb
+      type: openapi
+      source: https://raw.githubusercontent.com/influxdata/openapi/master/contracts/cloud.yml
+
+  music:
+    - name: spotify
+      type: openapi
+      source: https://raw.githubusercontent.com/sonallux/spotify-web-api/main/fixed-spotify-open-api.yml
+    - name: soundcloud
+      type: openapi
+      source: https://api.apis.guru/v2/specs/soundcloud.com/1.0.0/openapi.json
+    - name: tidal
+      type: openapi
+      source: https://tidal-music.github.io/tidal-api-reference/tidal-api-oas.json
+    - name: setlistfm
+      type: openapi
+      source: https://api.apis.guru/v2/specs/setlist.fm/1.0/swagger.json
+    - name: spinitron
+      type: openapi
+      source: https://api.apis.guru/v2/specs/spinitron.com/1.0.0/openapi.json
+
+  payments:
+    - name: stripe
+      type: openapi
+      source: https://raw.githubusercontent.com/stripe/openapi/master/openapi/spec3.json
+    - name: paypal-orders
+      type: openapi
+      source: https://raw.githubusercontent.com/paypal/paypal-rest-api-specifications/main/openapi/checkout_orders_v2.json
+      flags:
+        default-base-url: https://api-m.paypal.com
+        token-env-var: PAYPAL_TOKEN
+    - name: paypal-payments
+      type: openapi
+      source: https://raw.githubusercontent.com/paypal/paypal-rest-api-specifications/main/openapi/payments_payment_v2.json
+      flags:
+        default-base-url: https://api-m.paypal.com
+        token-env-var: PAYPAL_TOKEN
+    - name: paypal-invoicing
+      type: openapi
+      source: https://raw.githubusercontent.com/paypal/paypal-rest-api-specifications/main/openapi/invoicing_v2.json
+      flags:
+        default-base-url: https://api-m.paypal.com
+        token-env-var: PAYPAL_TOKEN
+    - name: adyen-checkout
+      type: openapi
+      source: https://raw.githubusercontent.com/Adyen/adyen-openapi/main/yaml/CheckoutService-v71.yaml
+      flags:
+        token-env-var: ADYEN_API_KEY
+    - name: adyen-recurring
+      type: openapi
+      source: https://raw.githubusercontent.com/Adyen/adyen-openapi/main/yaml/RecurringService-v68.yaml
+      flags:
+        token-env-var: ADYEN_API_KEY
+    - name: plaid
+      type: openapi
+      source: https://raw.githubusercontent.com/plaid/plaid-openapi/master/2020-09-14.yml
+      flags:
+        default-base-url: https://production.plaid.com
+        token-env-var: PLAID_ACCESS_TOKEN
+
+  project-mgmt:
+    - name: asana
+      type: openapi
+      source: https://raw.githubusercontent.com/Asana/openapi/master/defs/asana_oas.yaml
+    - name: trello
+      type: openapi
+      source: https://developer.atlassian.com/cloud/trello/swagger.v3.json
+    - name: notion
+      type: openapi
+      source: https://developers.notion.com/openapi.json
+    - name: linear
+      type: graphql
+      source: https://api.linear.app/graphql
+      flags:
+        default-base-url: https://api.linear.app/graphql
+    - name: jira-service-management
+      type: openapi
+      source: https://developer.atlassian.com/cloud/jira/service-desk/swagger.v3.json
+    - name: confluence
+      type: openapi
+      source: https://developer.atlassian.com/cloud/confluence/swagger.v3.json
+
+  public-data:
+    - name: countries
+      type: graphql
+      source: https://countries.trevorblades.com/graphql
+      flags:
+        default-base-url: https://countries.trevorblades.com/graphql
+    - name: wikipedia
+      type: openapi
+      source: https://en.wikipedia.org/api/rest_v1/?spec
+      flags:
+        default-headers: {User-Agent: "nu-http-clients (https://github.com/lassoColombo/nu-http-clients)"}
+    - name: open-library
+      type: openapi
+      source: https://openlibrary.org/static/openapi.json
+    - name: open5e
+      type: openapi
+      source: https://api.open5e.com/schema/?format=json
+    - name: tfl
+      type: openapi
+      source: https://api.tfl.gov.uk/swagger/docs/v1
+    - name: met-norway
+      type: openapi
+      source: https://api.met.no/weatherapi/locationforecast/2.0/swagger
+      flags:
+        default-base-url: https://api.met.no
+        default-headers: {User-Agent: "nu-http-clients (https://github.com/lassoColombo/nu-http-clients)"}
+
+  sandbox:
+    - name: petstore
+      type: openapi
+      source: https://petstore3.swagger.io/api/v3/openapi.json
+    - name: reqres
+      type: openapi
+      source: https://reqres.in/openapi.json
+    - name: restful-booker
+      type: openapi
+      source: https://raw.githubusercontent.com/texttest/restful-booker/with_texttests/swagger.json
+    - name: catfact
+      type: openapi
+      source: https://catfact.ninja/docs
+    - name: spaceflight-news
+      type: openapi
+      source: https://api.spaceflightnewsapi.net/v4/schema/
+    - name: train-travel
+      type: openapi
+      source: https://raw.githubusercontent.com/bump-sh-examples/train-travel-api/main/openapi.yaml
+    - name: realworld-conduit
+      type: openapi
+      source: https://raw.githubusercontent.com/realworld-apps/realworld/main/specs/api/openapi.yml
 
   sci-fi:
     - name: swapi
@@ -163,3 +441,150 @@ clients:
       source: https://swapi-graphql.netlify.app/graphql
       flags:
         default-base-url: https://swapi-graphql.netlify.app/graphql
+    - name: rick-and-morty
+      type: graphql
+      source: https://rickandmortyapi.com/graphql
+      flags:
+        default-base-url: https://rickandmortyapi.com/graphql
+    - name: dnd5e
+      type: openapi
+      source: https://api.apis.guru/v2/specs/dnd5eapi.co/0.1/openapi.json
+    - name: dnd5e-graphql
+      type: graphql
+      source: https://www.dnd5eapi.co/graphql/2014
+      flags:
+        default-base-url: https://www.dnd5eapi.co/graphql/2014
+    - name: potterdb
+      type: graphql
+      source: https://api.potterdb.com/graphql
+      flags:
+        default-base-url: https://api.potterdb.com/graphql
+    - name: starwars-translations
+      type: openapi
+      source: https://api.apis.guru/v2/specs/funtranslations.com/starwars/2.3/swagger.json
+
+  search:
+    - name: typesense
+      type: openapi
+      source: https://raw.githubusercontent.com/typesense/typesense-api-spec/master/openapi.yml
+    - name: algolia
+      type: openapi
+      source: https://raw.githubusercontent.com/algolia/api-clients-automation/main/specs/bundled/search.yml
+    - name: elasticsearch
+      type: openapi
+      source: https://raw.githubusercontent.com/elastic/elasticsearch-specification/main/output/openapi/elasticsearch-openapi.json
+    - name: opensearch
+      type: openapi
+      source: https://github.com/opensearch-project/opensearch-api-specification/releases/latest/download/opensearch-openapi.yaml
+    - name: meilisearch
+      type: openapi
+      source: https://raw.githubusercontent.com/meilisearch/specifications/main/open-api.yaml
+    - name: qdrant
+      type: openapi
+      source: https://raw.githubusercontent.com/qdrant/qdrant/master/docs/redoc/master/openapi.json
+    - name: weaviate
+      type: openapi
+      source: https://raw.githubusercontent.com/weaviate/weaviate/main/openapi-specs/schema.json
+
+  storage:
+    - name: box
+      type: openapi
+      source: https://raw.githubusercontent.com/box/box-openapi/main/openapi.json
+    - name: googledrive
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/drive/v3/openapi.yaml
+    - name: gcs
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/storage/v1/openapi.yaml
+    - name: s3
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/s3/2006-03-01/openapi.json
+    - name: glacier
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/glacier/2012-06-01/openapi.json
+    - name: storage-gateway
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/storagegateway/2013-06-30/openapi.json
+    - name: efs
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/elasticfilesystem/2015-02-01/openapi.json
+
+  telephony:
+    - name: twilio
+      type: openapi
+      source: https://raw.githubusercontent.com/twilio/twilio-oai/main/spec/json/twilio_api_v2010.json
+    - name: telnyx
+      type: openapi
+      source: https://raw.githubusercontent.com/team-telnyx/openapi/master/openapi/spec3.json
+    - name: ringcentral
+      type: openapi
+      source: https://netstorage.ringcentral.com/dpw/api-reference/specs/rc-platform.yml
+    - name: bandwidth
+      type: openapi
+      source: https://raw.githubusercontent.com/Bandwidth/node-sdk/main/bandwidth.yml
+    - name: messagebird
+      type: openapi
+      source: https://raw.githubusercontent.com/messagebird/openapi-specs/master/sms/openapi.yaml
+
+  testing:
+    - name: httpbin
+      type: openapi
+      source: https://httpbin.org/spec.json
+    - name: postman
+      type: openapi
+      source: https://api.apis.guru/v2/specs/getpostman.com/1.20.0/openapi.json
+    - name: apis-guru
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apis.guru/2.2.0/openapi.yaml
+    - name: fungenerators-uuid
+      type: openapi
+      source: https://api.apis.guru/v2/specs/fungenerators.com/uuid/1.5/openapi.json
+    - name: fungenerators-fake-identity
+      type: openapi
+      source: https://api.apis.guru/v2/specs/fungenerators.com/fake-identity/1.5/swagger.json
+    - name: fungenerators-random-facts
+      type: openapi
+      source: https://api.apis.guru/v2/specs/fungenerators.com/random-facts/1.5/openapi.json
+
+  version-control:
+    - name: github
+      type: openapi
+      source: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
+    - name: gitlab
+      type: openapi
+      source: https://docs.gitlab.com/api/openapi/openapi_v2.yaml
+    - name: bitbucket
+      type: openapi
+      source: https://api.bitbucket.org/swagger.json
+    - name: gitea
+      type: openapi
+      source: https://gitea.com/swagger.v1.json
+    - name: codeberg
+      type: openapi
+      source: https://codeberg.org/swagger.v1.json
+    - name: forgejo
+      type: openapi
+      source: https://v11.next.forgejo.org/swagger.v1.json
+
+  weather:
+    - name: weather-gov
+      type: openapi
+      source: https://api.weather.gov/openapi.json
+    - name: open-meteo-forecast
+      type: openapi
+      source: https://raw.githubusercontent.com/open-meteo/open-meteo/main/openapi/forecast.yml
+    - name: open-meteo-marine
+      type: openapi
+      source: https://raw.githubusercontent.com/open-meteo/open-meteo/main/openapi/marine.yml
+    - name: open-meteo-air-quality
+      type: openapi
+      source: https://raw.githubusercontent.com/open-meteo/open-meteo/main/openapi/air-quality.yml
+    - name: open-meteo-historical
+      type: openapi
+      source: https://raw.githubusercontent.com/open-meteo/open-meteo/main/openapi/historical-weather.yml
+    - name: met-no-locationforecast
+      type: openapi
+      source: https://api.met.no/weatherapi/locationforecast/2.0/swagger
+    - name: brightsky
+      type: openapi
+      source: https://api.brightsky.dev/openapi.json

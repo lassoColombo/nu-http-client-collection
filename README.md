@@ -1,13 +1,16 @@
 # nu-http-client-collection
 
-A registry of Nushell HTTP clients, generated from OpenAPI / Swagger / GraphQL specs by [nu-http-client-generator](https://github.com/lassoColombo/nu-http-client-generator).
+A collection of Nushell HTTP clients generated from OpenAPI, Swagger, and GraphQL specifications using [nu-http-client-generator](https://github.com/lassoColombo/nu-http-client-generator).
 
 You can use the clients in this repository as you wish or use the generator script to create your own collection.  
 See [`CLIENTS.md`](CLIENTS.md) for the full list of clients in the collection.
 
-## Using a generated client
+---
 
-```nushell
+## Using a client
+
+The nu-http-client-generator generates regular Nushell modules:
+```nu
 use clients/public-data/countries.nu
 countries query country "IT" --fields [name capital emoji]
 
@@ -15,61 +18,80 @@ use clients/sandbox/petstore.nu
 petstore pet get-by-id 1 --token $env.MY_TOKEN
 ```
 
-##### Disclaimer:  
-This repository collects clients generated from the whole specification. This means that they tend to be quite heavy and overkill.  
-If you don't need the whole client it is suggested to either manually strip it down or to use the generator to build a minimal version.
+> This repository intentionally generates clients from complete specifications. That makes them larger than what many real-world workflows require. If you only need a subset of an API, consider trimming the generated module or generating a smaller client.
+
+---
 
 ## Building your own collection
 
-Fork this repository and specify your collection in `clients.yaml`:
+This repository can be forked and used as a client registry.
+Define your APIs in `clients.yaml`:
 
 ```yaml
 clients:
   my-category:
-    - name: my-service                        # → clients/my-category/my-service.nu
-      type: openapi                           # or "graphql"
+    - name: my-service
+      type: openapi
       source: https://example.com/openapi.json
-      flags:                                  # render-only; filter flags are forbidden
+      flags:
         default-base-url: https://example.com
 ```
 
-Then trigger the workflow (see below). The action commits the generated file for you.
-Client names must be unique across categories — the workflow's `client` input is a bare name.
+Each entry produces a Nushell module under:
 
-#### Flag value shapes
+```text
+clients/<category>/<name>.nu
+```
 
-The driver script forwards `flags` to the generator with the right shape:
+Client names must be globally unique. The generation workflow identifies clients by name only, regardless of category.
 
-| YAML type | Becomes                  | Example                                   |
-| --------- | ------------------------ | ----------------------------------------- |
-| bool      | switch (when `true`)     | `no-introspection: true`                  |
-| string    | `--flag "value"`         | `default-base-url: https://example.com`   |
-| list      | `--flag [a b c]`         | `default-headers: [X-Foo: bar]`           |
-| record    | `--flag {key: value}`    | `default-headers: {X-Tenant-Id: acme}`    |
+### Generator flags
+
+The `flags` section is passed directly to the generator:
+
+| YAML type | Generator argument |
+| --- | --- |
+| `bool` | switch flag when `true` |
+| `string` | `--flag "value"` |
+| `list` | `--flag [a b c]` |
+| `record` | `--flag {key: value}` |
 
 
-## Running the generator
+---
 
-#### Via GitHub Actions
+## Generating clients
 
-Trigger **Generate clients** under the **Actions** tab. 
+### GitHub Actions
 
-Inputs:
-- **client** — name from `clients.yaml`, or `all` (default) to regenerate everything.
-- **generator_ref** — branch/tag/SHA of `nu-http-client-generator` to use (default `main`).
+The repository includes a workflow that can regenerate one client or the entire collection.
 
-The workflow commits and pushes any changes back to `main`. If nothing changed, does nothing.  
-It also auto-runs on pushes to `main` that touch `clients.yaml`, `scripts/generate.nu`, or the workflow file itself.
+Run **Generate clients** from the **Actions** tab and provide:
 
-#### Locally
+- **client** — a client name from `clients.yaml`, or `all` (default)
+- **generator_ref** — branch, tag, or commit of `nu-http-client-generator` (default: `main`)
 
-```nushell
-# one-time: clone the generator next to the script
+The workflow commits generated changes automatically. If regeneration produces no changes, nothing is pushed.
+
+Generation is also triggered automatically whenever changes affecting generation are pushed to `main`.
+
+### Local generation
+
+
+```nu
+# Clone the generator alongside this repository:
 git clone https://github.com/lassoColombo/nu-http-client-generator _generator
+# If you already use the generator you can symlink it
+ln -s /path/to/nu-http-client-generator _generator
+```
 
-# regenerate everything
+Regenerate the entire collection:
+
+```nu
 nu scripts/generate.nu
+```
 
-# regenerate a single client
+Or regenerate a single client:
+
+```nu
 nu scripts/generate.nu countries
 ```

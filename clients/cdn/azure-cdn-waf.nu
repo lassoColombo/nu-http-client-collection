@@ -1,0 +1,256 @@
+# Auto-generated client for Azure CDN WebApplicationFirewallManagement v2019-06-15-preview
+# Source: https://api.apis.guru/v2/specs/azure.com/cdn-cdnwebapplicationfirewall/2019-06-15-preview/swagger.json
+# Auth: --token flag or $env.AZURE_CDN_WEBAPPLICATIONFIREWALLMANAGEMENT_TOKEN
+
+const BASE_URL = "https://management.azure.com"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o AZURE_CDN_WEBAPPLICATIONFIREWALLMANAGEMENT_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "bearer" => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
+  if not $is_list { return [$"($name)=($value)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($name)=($v)" } }
+    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
+    _ => { $value | each {|v| $"($name)=($v)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def bool-completer [] { ["'true'" "'false'"] }
+def base-url-completer [] { ["https://management.azure.com"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-cdn-cdn-web-application-firewall-managed-rule-sets List" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Lists all available managed rule sets.
+#
+# GET /subscriptions/{subscriptionId}/providers/Microsoft.Cdn/CdnWebApplicationFirewallManagedRuleSets
+# operationId: ManagedRuleSets_List
+export def "subscriptions-providers-microsoft-cdn-cdn-web-application-firewall-managed-rule-sets List" [
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+]: nothing -> record<nextLink: string, value: table<properties: record, sku: record, id: string, name: string, type: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/providers/Microsoft.Cdn/CdnWebApplicationFirewallManagedRuleSets" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Lists all of the protection policies within a resource group.
+#
+# GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/CdnWebApplicationFirewallPolicies
+# operationId: Policies_List
+export def "subscriptions-resource-groups-providers-microsoft-cdn-cdn-web-application-firewall-policies List" [
+  resourceGroupName: string
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+]: nothing -> record<nextLink: string, value: table<etag: string, properties: record, sku: record, location: string, tags: record>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/CdnWebApplicationFirewallPolicies" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Deletes Policy
+#
+# DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/CdnWebApplicationFirewallPolicies/{policyName}
+# operationId: Policies_Delete
+export def "subscriptions-resource-groups-providers-microsoft-cdn-cdn-web-application-firewall-policies Delete" [
+  resourceGroupName: string
+  policyName: string
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/CdnWebApplicationFirewallPolicies/($policyName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Retrieve protection policy with specified name within a resource group.
+#
+# GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/CdnWebApplicationFirewallPolicies/{policyName}
+# operationId: Policies_Get
+export def "subscriptions-resource-groups-providers-microsoft-cdn-cdn-web-application-firewall-policies Get" [
+  resourceGroupName: string
+  policyName: string
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+]: nothing -> record<etag: string, properties: record<customRules: record<rules: list>, endpointLinks: list<record>, managedRules: record<managedRuleSets: list>, policySettings: record<defaultCustomBlockResponseBody: string, defaultCustomBlockResponseStatusCode: int, defaultRedirectUrl: string, enabledState: string, mode: string>, provisioningState: string, rateLimitRules: record<rules: list>, resourceState: string>, sku: record<name: string>, location: string, tags: record> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/CdnWebApplicationFirewallPolicies/($policyName)" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Update an existing CdnWebApplicationFirewallPolicy with the specified policy name under the specified subscription and resource group
+#
+# PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/CdnWebApplicationFirewallPolicies/{policyName}
+# operationId: Policies_Update
+export def "subscriptions-resource-groups-providers-microsoft-cdn-cdn-web-application-firewall-policies Update" [
+  resourceGroupName: string
+  policyName: string
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --tags: record # CdnWebApplicationFirewallPolicy tags
+]: any -> record<etag: string, properties: record<customRules: record<rules: list>, endpointLinks: list<record>, managedRules: record<managedRuleSets: list>, policySettings: record<defaultCustomBlockResponseBody: string, defaultCustomBlockResponseStatusCode: int, defaultRedirectUrl: string, enabledState: string, mode: string>, provisioningState: string, rateLimitRules: record<rules: list>, resourceState: string>, sku: record<name: string>, location: string, tags: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/CdnWebApplicationFirewallPolicies/($policyName)" $qp)
+  let body = {tags: $tags} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+}
+
+# Create or update policy with specified rule set name within a resource group.
+#
+# PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cdn/CdnWebApplicationFirewallPolicies/{policyName}
+# operationId: Policies_CreateOrUpdate
+# --properties shape: {customRules?: any, managedRules?: any, policySettings?: any, rateLimitRules?: any}
+# --sku shape: {name?: "Standard_Verizon"|"Premium_Verizon"|"Custom_Verizon"|"Standard_Akamai"|"Standard_ChinaCdn"|"Standard_Microsoft"|"Premium_ChinaCdn"}
+export def "subscriptions-resource-groups-providers-microsoft-cdn-cdn-web-application-firewall-policies CreateOrUpdate" [
+  resourceGroupName: string
+  policyName: string
+  subscriptionId: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --api-version: string # Version of the API to be used with the client request. Current version is 2017-04-02.
+  --etag: string # Gets a unique read-only string that changes whenever the resource is updated.
+  --properties: any # Defines CDN web application firewall policy properties. — shape: {customRules?: any, managedRules?: any, policySettings?: any, rateLimitRules?: any}
+  sku: record # The pricing tier (defines a CDN provider, feature list and rate) of the CDN profile. — shape: {name?: "Standard_Verizon"|"Premium_Verizon"|"Custom_Verizon"|"Standard_Akamai"|"Standard_ChinaCdn"|"Standard_Microsoft"|"Premium_ChinaCdn"}
+  location: string # Resource location.
+  --tags: record # Resource tags.
+]: any -> record<etag: string, properties: record<customRules: record<rules: list>, endpointLinks: list<record>, managedRules: record<managedRuleSets: list>, policySettings: record<defaultCustomBlockResponseBody: string, defaultCustomBlockResponseStatusCode: int, defaultRedirectUrl: string, enabledState: string, mode: string>, provisioningState: string, rateLimitRules: record<rules: list>, resourceState: string>, sku: record<name: string>, location: string, tags: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/subscriptions/($subscriptionId)/resourceGroups/($resourceGroupName)/providers/Microsoft.Cdn/CdnWebApplicationFirewallPolicies/($policyName)" $qp)
+  let body = {etag: $etag, properties: $properties, sku: $sku, location: $location, tags: $tags} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+}

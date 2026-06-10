@@ -1856,7 +1856,7 @@ export def "accounts-access-authenticator-device-aaguids access-authenticator-de
 # DEPRECATED
 # operationId: access-bookmark-applications-(-deprecated)-list-bookmark-applications
 @deprecated
-export def "accounts-access-bookmarks access-bookmark-applications-(-deprecated)-list-bookmark-applications" [
+export def "accounts-access-bookmarks access-bookmark-applications--deprecated-list-bookmark-applications" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1880,7 +1880,7 @@ export def "accounts-access-bookmarks access-bookmark-applications-(-deprecated)
 # DEPRECATED
 # operationId: access-bookmark-applications-(-deprecated)-delete-a-bookmark-application
 @deprecated
-export def "accounts-access-bookmarks access-bookmark-applications-(-deprecated)-delete-a-bookmark-application" [
+export def "accounts-access-bookmarks access-bookmark-applications--deprecated-delete-a-bookmark-application" [
   bookmark_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1908,7 +1908,7 @@ export def "accounts-access-bookmarks access-bookmark-applications-(-deprecated)
 # DEPRECATED
 # operationId: access-bookmark-applications-(-deprecated)-get-a-bookmark-application
 @deprecated
-export def "accounts-access-bookmarks access-bookmark-applications-(-deprecated)-get-a-bookmark-application" [
+export def "accounts-access-bookmarks access-bookmark-applications--deprecated-get-a-bookmark-application" [
   bookmark_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1933,7 +1933,7 @@ export def "accounts-access-bookmarks access-bookmark-applications-(-deprecated)
 # DEPRECATED
 # operationId: access-bookmark-applications-(-deprecated)-create-a-bookmark-application
 @deprecated
-export def "accounts-access-bookmarks access-bookmark-applications-(-deprecated)-create-a-bookmark-application" [
+export def "accounts-access-bookmarks access-bookmark-applications--deprecated-create-a-bookmark-application" [
   bookmark_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1961,7 +1961,7 @@ export def "accounts-access-bookmarks access-bookmark-applications-(-deprecated)
 # DEPRECATED
 # operationId: access-bookmark-applications-(-deprecated)-update-a-bookmark-application
 @deprecated
-export def "accounts-access-bookmarks access-bookmark-applications-(-deprecated)-update-a-bookmark-application" [
+export def "accounts-access-bookmarks access-bookmark-applications--deprecated-update-a-bookmark-application" [
   bookmark_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8197,11 +8197,12 @@ export def "accounts-ai-models-search workers-ai-search-model" [
   --qp-source: float # Filter by Source Id
   --hide-experimental: string@bool-completer # Filter to hide experimental models (default: false)
   --search: string # Search (default: )
+  --include-deprecated: string@bool-completer # If true, include models whose planned_deprecation_date is in the past — but only within a three-month grace window after that date. Models whose planned_deprecation_date is more than three months in the past remain hidden regardless of this flag. Future planned-deprecation dates are always included regardless of this flag. Defaults to false, preserving the existing behavior of hiding all past-dated deprecations. (default: false)
   --format: string@format-completer # If set, return models in the requested marketplace format instead of the default response.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "task" $task "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "hide_experimental" $hide_experimental "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "task" $task "scalar") (serialize-qp "author" $author "scalar") (serialize-qp "source" $qp_source "scalar") (serialize-qp "hide_experimental" $hide_experimental "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "include_deprecated" $include_deprecated "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/accounts/($account_id)/ai/models/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -14131,7 +14132,7 @@ export def "accounts-billable-usage billable-usage-v2-get-account-usage" [
 # DEPRECATED
 # operationId: account-billing-profile-(-deprecated)-billing-profile-details
 @deprecated
-export def "accounts-billing-profile account-billing-profile-(-deprecated)-billing-profile-details" [
+export def "accounts-billing-profile account-billing-profile--deprecated-billing-profile-details" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -31793,7 +31794,7 @@ export def "accounts-gateway-configuration zero-trust-accounts-patch-zero-trust-
 # PUT /accounts/{account_id}/gateway/configuration
 # operationId: zero-trust-accounts-update-zero-trust-account-configuration.
 # --settings shape: {activity_log?: record, antivirus?: record, block_page?: record, body_scanning?: record, browser_isolation?: record, certificate?: record, custom_certificate?: record, extended_email_matching?: record, fips?: record, host_selector?: record, inspection?: record, protocol_detection?: record, sandbox?: record, tls_decrypt?: record}
-export def "accounts-gateway-configuration zero-trust-accounts-update-zero-trust-account-configuration." [
+export def "accounts-gateway-configuration zero-trust-accounts-update-zero-trust-account-configuration" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -39794,7 +39795,7 @@ export def "accounts-magic-ipsec-tunnels magic-ipsec-tunnels-update-ipsec-tunnel
 #
 # POST /accounts/{account_id}/magic/ipsec_tunnels/{ipsec_tunnel_id}/psk_generate
 # operationId: magic-ipsec-tunnels-generate-pre-shared-key-(-psk)-for-ipsec-tunnels
-export def "accounts-magic-ipsec-tunnels-psk-generate magic-ipsec-tunnels-generate-pre-shared-key-(-psk)-for-ipsec-tunnels" [
+export def "accounts-magic-ipsec-tunnels-psk-generate magic-ipsec-tunnels-generate-pre-shared-key--psk-for-ipsec-tunnels" [
   ipsec_tunnel_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -42691,7 +42692,7 @@ export def "accounts-pages-projects-source pages-project-connect-project-source"
 #
 # DELETE /accounts/{account_id}/pay-per-crawl/crawler/stripe
 # operationId: pay-per-crawl.crawlerDeleteStripeConfig
-export def "accounts-pay-per-crawl-crawler-stripe pay-per-crawl.crawlerDeleteStripeConfig" [
+export def "accounts-pay-per-crawl-crawler-stripe pay-per-crawlcrawlerDeleteStripeConfig" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -42713,7 +42714,7 @@ export def "accounts-pay-per-crawl-crawler-stripe pay-per-crawl.crawlerDeleteStr
 #
 # GET /accounts/{account_id}/pay-per-crawl/crawler/stripe
 # operationId: pay-per-crawl.crawlerGetStripeConfig
-export def "accounts-pay-per-crawl-crawler-stripe pay-per-crawl.crawlerGetStripeConfig" [
+export def "accounts-pay-per-crawl-crawler-stripe pay-per-crawlcrawlerGetStripeConfig" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -42735,7 +42736,7 @@ export def "accounts-pay-per-crawl-crawler-stripe pay-per-crawl.crawlerGetStripe
 #
 # POST /accounts/{account_id}/pay-per-crawl/crawler/stripe
 # operationId: pay-per-crawl.crawlerCreateStripeConfig
-export def "accounts-pay-per-crawl-crawler-stripe pay-per-crawl.crawlerCreateStripeConfig" [
+export def "accounts-pay-per-crawl-crawler-stripe pay-per-crawlcrawlerCreateStripeConfig" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -42757,7 +42758,7 @@ export def "accounts-pay-per-crawl-crawler-stripe pay-per-crawl.crawlerCreateStr
 #
 # DELETE /accounts/{account_id}/pay-per-crawl/publisher/stripe
 # operationId: pay-per-crawl.publisherDeleteStripeConfig
-export def "accounts-pay-per-crawl-publisher-stripe pay-per-crawl.publisherDeleteStripeConfig" [
+export def "accounts-pay-per-crawl-publisher-stripe pay-per-crawlpublisherDeleteStripeConfig" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -42779,7 +42780,7 @@ export def "accounts-pay-per-crawl-publisher-stripe pay-per-crawl.publisherDelet
 #
 # GET /accounts/{account_id}/pay-per-crawl/publisher/stripe
 # operationId: pay-per-crawl.publisherGetStripeConfig
-export def "accounts-pay-per-crawl-publisher-stripe pay-per-crawl.publisherGetStripeConfig" [
+export def "accounts-pay-per-crawl-publisher-stripe pay-per-crawlpublisherGetStripeConfig" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -42801,7 +42802,7 @@ export def "accounts-pay-per-crawl-publisher-stripe pay-per-crawl.publisherGetSt
 #
 # POST /accounts/{account_id}/pay-per-crawl/publisher/stripe
 # operationId: pay-per-crawl.publisherCreateStripeConfig
-export def "accounts-pay-per-crawl-publisher-stripe pay-per-crawl.publisherCreateStripeConfig" [
+export def "accounts-pay-per-crawl-publisher-stripe pay-per-crawlpublisherCreateStripeConfig" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -42824,7 +42825,7 @@ export def "accounts-pay-per-crawl-publisher-stripe pay-per-crawl.publisherCreat
 # PATCH /accounts/{account_id}/pay-per-crawl/zones_can_be_enabled
 # operationId: pay-per-crawl.setZonesCanBeEnabled
 # --zones item shape: {can_be_enabled?: bool, id?: string}
-export def "accounts-pay-per-crawl-zones-can-be-enabled pay-per-crawl.setZonesCanBeEnabled" [
+export def "accounts-pay-per-crawl-zones-can-be-enabled pay-per-crawlsetZonesCanBeEnabled" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -42851,7 +42852,7 @@ export def "accounts-pay-per-crawl-zones-can-be-enabled pay-per-crawl.setZonesCa
 # POST /accounts/{account_id}/pay-per-crawl/zones_can_be_enabled/query
 # operationId: pay-per-crawl.queryZonesCanBeEnabled
 # --zones item shape: {can_be_enabled?: bool, id?: string}
-export def "accounts-pay-per-crawl-zones-can-be-enabled-query pay-per-crawl.queryZonesCanBeEnabled" [
+export def "accounts-pay-per-crawl-zones-can-be-enabled-query pay-per-crawlqueryZonesCanBeEnabled" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -49008,7 +49009,7 @@ export def "accounts-scim-users scim-users-put" [
 #
 # GET /accounts/{account_id}/secondary_dns/acls
 # operationId: secondary-dns-(-acl)-list-ac-ls
-export def "accounts-secondary-dns-acls secondary-dns-(-acl)-list-ac-ls" [
+export def "accounts-secondary-dns-acls secondary-dns--acl-list-ac-ls" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -49030,7 +49031,7 @@ export def "accounts-secondary-dns-acls secondary-dns-(-acl)-list-ac-ls" [
 #
 # POST /accounts/{account_id}/secondary_dns/acls
 # operationId: secondary-dns-(-acl)-create-acl
-export def "accounts-secondary-dns-acls secondary-dns-(-acl)-create-acl" [
+export def "accounts-secondary-dns-acls secondary-dns--acl-create-acl" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -49057,7 +49058,7 @@ export def "accounts-secondary-dns-acls secondary-dns-(-acl)-create-acl" [
 #
 # DELETE /accounts/{account_id}/secondary_dns/acls/{acl_id}
 # operationId: secondary-dns-(-acl)-delete-acl
-export def "accounts-secondary-dns-acls secondary-dns-(-acl)-delete-acl" [
+export def "accounts-secondary-dns-acls secondary-dns--acl-delete-acl" [
   acl_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -49083,7 +49084,7 @@ export def "accounts-secondary-dns-acls secondary-dns-(-acl)-delete-acl" [
 #
 # GET /accounts/{account_id}/secondary_dns/acls/{acl_id}
 # operationId: secondary-dns-(-acl)-acl-details
-export def "accounts-secondary-dns-acls secondary-dns-(-acl)-acl-details" [
+export def "accounts-secondary-dns-acls secondary-dns--acl-acl-details" [
   acl_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -49106,7 +49107,7 @@ export def "accounts-secondary-dns-acls secondary-dns-(-acl)-acl-details" [
 #
 # PUT /accounts/{account_id}/secondary_dns/acls/{acl_id}
 # operationId: secondary-dns-(-acl)-update-acl
-export def "accounts-secondary-dns-acls secondary-dns-(-acl)-update-acl" [
+export def "accounts-secondary-dns-acls secondary-dns--acl-update-acl" [
   acl_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -49134,7 +49135,7 @@ export def "accounts-secondary-dns-acls secondary-dns-(-acl)-update-acl" [
 #
 # GET /accounts/{account_id}/secondary_dns/peers
 # operationId: secondary-dns-(-peer)-list-peers
-export def "accounts-secondary-dns-peers secondary-dns-(-peer)-list-peers" [
+export def "accounts-secondary-dns-peers secondary-dns--peer-list-peers" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -49156,7 +49157,7 @@ export def "accounts-secondary-dns-peers secondary-dns-(-peer)-list-peers" [
 #
 # POST /accounts/{account_id}/secondary_dns/peers
 # operationId: secondary-dns-(-peer)-create-peer
-export def "accounts-secondary-dns-peers secondary-dns-(-peer)-create-peer" [
+export def "accounts-secondary-dns-peers secondary-dns--peer-create-peer" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -49182,7 +49183,7 @@ export def "accounts-secondary-dns-peers secondary-dns-(-peer)-create-peer" [
 #
 # DELETE /accounts/{account_id}/secondary_dns/peers/{peer_id}
 # operationId: secondary-dns-(-peer)-delete-peer
-export def "accounts-secondary-dns-peers secondary-dns-(-peer)-delete-peer" [
+export def "accounts-secondary-dns-peers secondary-dns--peer-delete-peer" [
   peer_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -49208,7 +49209,7 @@ export def "accounts-secondary-dns-peers secondary-dns-(-peer)-delete-peer" [
 #
 # GET /accounts/{account_id}/secondary_dns/peers/{peer_id}
 # operationId: secondary-dns-(-peer)-peer-details
-export def "accounts-secondary-dns-peers secondary-dns-(-peer)-peer-details" [
+export def "accounts-secondary-dns-peers secondary-dns--peer-peer-details" [
   peer_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -49231,7 +49232,7 @@ export def "accounts-secondary-dns-peers secondary-dns-(-peer)-peer-details" [
 #
 # PUT /accounts/{account_id}/secondary_dns/peers/{peer_id}
 # operationId: secondary-dns-(-peer)-update-peer
-export def "accounts-secondary-dns-peers secondary-dns-(-peer)-update-peer" [
+export def "accounts-secondary-dns-peers secondary-dns--peer-update-peer" [
   peer_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -49262,7 +49263,7 @@ export def "accounts-secondary-dns-peers secondary-dns-(-peer)-update-peer" [
 #
 # GET /accounts/{account_id}/secondary_dns/tsigs
 # operationId: secondary-dns-(-tsig)-list-tsi-gs
-export def "accounts-secondary-dns-tsigs secondary-dns-(-tsig)-list-tsi-gs" [
+export def "accounts-secondary-dns-tsigs secondary-dns--tsig-list-tsi-gs" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -49284,7 +49285,7 @@ export def "accounts-secondary-dns-tsigs secondary-dns-(-tsig)-list-tsi-gs" [
 #
 # POST /accounts/{account_id}/secondary_dns/tsigs
 # operationId: secondary-dns-(-tsig)-create-tsig
-export def "accounts-secondary-dns-tsigs secondary-dns-(-tsig)-create-tsig" [
+export def "accounts-secondary-dns-tsigs secondary-dns--tsig-create-tsig" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -49312,7 +49313,7 @@ export def "accounts-secondary-dns-tsigs secondary-dns-(-tsig)-create-tsig" [
 #
 # DELETE /accounts/{account_id}/secondary_dns/tsigs/{tsig_id}
 # operationId: secondary-dns-(-tsig)-delete-tsig
-export def "accounts-secondary-dns-tsigs secondary-dns-(-tsig)-delete-tsig" [
+export def "accounts-secondary-dns-tsigs secondary-dns--tsig-delete-tsig" [
   tsig_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -49338,7 +49339,7 @@ export def "accounts-secondary-dns-tsigs secondary-dns-(-tsig)-delete-tsig" [
 #
 # GET /accounts/{account_id}/secondary_dns/tsigs/{tsig_id}
 # operationId: secondary-dns-(-tsig)-tsig-details
-export def "accounts-secondary-dns-tsigs secondary-dns-(-tsig)-tsig-details" [
+export def "accounts-secondary-dns-tsigs secondary-dns--tsig-tsig-details" [
   tsig_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -49361,7 +49362,7 @@ export def "accounts-secondary-dns-tsigs secondary-dns-(-tsig)-tsig-details" [
 #
 # PUT /accounts/{account_id}/secondary_dns/tsigs/{tsig_id}
 # operationId: secondary-dns-(-tsig)-update-tsig
-export def "accounts-secondary-dns-tsigs secondary-dns-(-tsig)-update-tsig" [
+export def "accounts-secondary-dns-tsigs secondary-dns--tsig-update-tsig" [
   tsig_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -51127,7 +51128,7 @@ export def "accounts-storage-kv-namespaces-bulk-get workers-kv-namespace-get-mul
 #
 # GET /accounts/{account_id}/storage/kv/namespaces/{namespace_id}/keys
 # operationId: workers-kv-namespace-list-a-namespace'-s-keys
-export def "accounts-storage-kv-namespaces-keys workers-kv-namespace-list-a-namespace'-s-keys" [
+export def "accounts-storage-kv-namespaces-keys workers-kv-namespace-list-a-namespace-s-keys" [
   namespace_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -51723,7 +51724,7 @@ export def "accounts-stream-live-inputs-outputs stream-live-inputs-list-all-outp
 #
 # POST /accounts/{account_id}/stream/live_inputs/{live_input_identifier}/outputs
 # operationId: stream-live-inputs-create-a-new-output,-connected-to-a-live-input
-export def "accounts-stream-live-inputs-outputs stream-live-inputs-create-a-new-output,-connected-to-a-live-input" [
+export def "accounts-stream-live-inputs-outputs stream-live-inputs-create-a-new-output-connected-to-a-live-input" [
   live_input_identifier: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -53807,7 +53808,7 @@ export def "accounts-urlscanner-search urlscanner-search-scans-v2" [
 # DEPRECATED
 # operationId: vectorize-(-deprecated)-list-vectorize-indexes
 @deprecated
-export def "accounts-vectorize-indexes vectorize-(-deprecated)-list-vectorize-indexes" [
+export def "accounts-vectorize-indexes vectorize--deprecated-list-vectorize-indexes" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -53831,7 +53832,7 @@ export def "accounts-vectorize-indexes vectorize-(-deprecated)-list-vectorize-in
 # DEPRECATED
 # operationId: vectorize-(-deprecated)-create-vectorize-index
 @deprecated
-export def "accounts-vectorize-indexes vectorize-(-deprecated)-create-vectorize-index" [
+export def "accounts-vectorize-indexes vectorize--deprecated-create-vectorize-index" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -53861,7 +53862,7 @@ export def "accounts-vectorize-indexes vectorize-(-deprecated)-create-vectorize-
 # DEPRECATED
 # operationId: vectorize-(-deprecated)-delete-vectorize-index
 @deprecated
-export def "accounts-vectorize-indexes vectorize-(-deprecated)-delete-vectorize-index" [
+export def "accounts-vectorize-indexes vectorize--deprecated-delete-vectorize-index" [
   account_id: string
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -53886,7 +53887,7 @@ export def "accounts-vectorize-indexes vectorize-(-deprecated)-delete-vectorize-
 # DEPRECATED
 # operationId: vectorize-(-deprecated)-get-vectorize-index
 @deprecated
-export def "accounts-vectorize-indexes vectorize-(-deprecated)-get-vectorize-index" [
+export def "accounts-vectorize-indexes vectorize--deprecated-get-vectorize-index" [
   account_id: string
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -53911,7 +53912,7 @@ export def "accounts-vectorize-indexes vectorize-(-deprecated)-get-vectorize-ind
 # DEPRECATED
 # operationId: vectorize-(-deprecated)-update-vectorize-index
 @deprecated
-export def "accounts-vectorize-indexes vectorize-(-deprecated)-update-vectorize-index" [
+export def "accounts-vectorize-indexes vectorize--deprecated-update-vectorize-index" [
   account_id: string
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -53940,7 +53941,7 @@ export def "accounts-vectorize-indexes vectorize-(-deprecated)-update-vectorize-
 # DEPRECATED
 # operationId: vectorize-(-deprecated)-delete-vectors-by-id
 @deprecated
-export def "accounts-vectorize-indexes-delete-by-ids vectorize-(-deprecated)-delete-vectors-by-id" [
+export def "accounts-vectorize-indexes-delete-by-ids vectorize--deprecated-delete-vectors-by-id" [
   account_id: string
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -53969,7 +53970,7 @@ export def "accounts-vectorize-indexes-delete-by-ids vectorize-(-deprecated)-del
 # DEPRECATED
 # operationId: vectorize-(-deprecated)-get-vectors-by-id
 @deprecated
-export def "accounts-vectorize-indexes-get-by-ids vectorize-(-deprecated)-get-vectors-by-id" [
+export def "accounts-vectorize-indexes-get-by-ids vectorize--deprecated-get-vectors-by-id" [
   account_id: string
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -53998,7 +53999,7 @@ export def "accounts-vectorize-indexes-get-by-ids vectorize-(-deprecated)-get-ve
 # DEPRECATED
 # operationId: vectorize-(-deprecated)-insert-vector
 @deprecated
-export def "accounts-vectorize-indexes-insert vectorize-(-deprecated)-insert-vector" [
+export def "accounts-vectorize-indexes-insert vectorize--deprecated-insert-vector" [
   account_id: string
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -54026,7 +54027,7 @@ export def "accounts-vectorize-indexes-insert vectorize-(-deprecated)-insert-vec
 # DEPRECATED
 # operationId: vectorize-(-deprecated)-query-vector
 @deprecated
-export def "accounts-vectorize-indexes-query vectorize-(-deprecated)-query-vector" [
+export def "accounts-vectorize-indexes-query vectorize--deprecated-query-vector" [
   account_id: string
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -54059,7 +54060,7 @@ export def "accounts-vectorize-indexes-query vectorize-(-deprecated)-query-vecto
 # DEPRECATED
 # operationId: vectorize-(-deprecated)-upsert-vector
 @deprecated
-export def "accounts-vectorize-indexes-upsert vectorize-(-deprecated)-upsert-vector" [
+export def "accounts-vectorize-indexes-upsert vectorize--deprecated-upsert-vector" [
   account_id: string
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -56105,7 +56106,7 @@ export def "accounts-workers-dispatch-namespaces-scripts-tags namespace-worker-p
 # GET /accounts/{account_id}/workers/domains
 # operationId: workers.domains.list
 @deprecated --flag environment
-export def "accounts-workers-domains workers.domains.list" [
+export def "accounts-workers-domains workersdomainslist" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -56133,7 +56134,7 @@ export def "accounts-workers-domains workers.domains.list" [
 #
 # PUT /accounts/{account_id}/workers/domains
 # operationId: workers.domains.update
-export def "accounts-workers-domains workers.domains.update" [
+export def "accounts-workers-domains workersdomainsupdate" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -56163,7 +56164,7 @@ export def "accounts-workers-domains workers.domains.update" [
 #
 # DELETE /accounts/{account_id}/workers/domains/{domain_id}
 # operationId: workers.domains.delete
-export def "accounts-workers-domains workers.domains.delete" [
+export def "accounts-workers-domains workersdomainsdelete" [
   account_id: string
   domain_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -56186,7 +56187,7 @@ export def "accounts-workers-domains workers.domains.delete" [
 #
 # GET /accounts/{account_id}/workers/domains/{domain_id}
 # operationId: workers.domains.get
-export def "accounts-workers-domains workers.domains.get" [
+export def "accounts-workers-domains workersdomainsget" [
   account_id: string
   domain_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -56260,7 +56261,7 @@ export def "accounts-workers-durable-objects-namespaces-objects durable-objects-
 #
 # GET /accounts/{account_id}/workers/observability/destinations
 # operationId: destination.list
-export def "accounts-workers-observability-destinations destination.list" [
+export def "accounts-workers-observability-destinations destinationlist" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -56288,7 +56289,7 @@ export def "accounts-workers-observability-destinations destination.list" [
 # POST /accounts/{account_id}/workers/observability/destinations
 # operationId: destination.create
 # --configuration shape: {headers: record, logpushDataset: any, type: "logpush", url: string}
-export def "accounts-workers-observability-destinations destination.create" [
+export def "accounts-workers-observability-destinations destinationcreate" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -56317,7 +56318,7 @@ export def "accounts-workers-observability-destinations destination.create" [
 #
 # DELETE /accounts/{account_id}/workers/observability/destinations/{slug}
 # operationId: destinations.delete
-export def "accounts-workers-observability-destinations destinations.delete" [
+export def "accounts-workers-observability-destinations destinationsdelete" [
   account_id: string
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -56341,7 +56342,7 @@ export def "accounts-workers-observability-destinations destinations.delete" [
 # PATCH /accounts/{account_id}/workers/observability/destinations/{slug}
 # operationId: destination.update
 # --configuration shape: {headers: record, type: "logpush", url: string}
-export def "accounts-workers-observability-destinations destination.update" [
+export def "accounts-workers-observability-destinations destinationupdate" [
   account_id: string
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -56369,7 +56370,7 @@ export def "accounts-workers-observability-destinations destination.update" [
 #
 # GET /accounts/{account_id}/workers/observability/queries
 # operationId: queries.list
-export def "accounts-workers-observability-queries queries.list" [
+export def "accounts-workers-observability-queries querieslist" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -56397,7 +56398,7 @@ export def "accounts-workers-observability-queries queries.list" [
 # POST /accounts/{account_id}/workers/observability/queries
 # operationId: queries.post
 # --parameters shape: {calculations?: list, datasets?: list, filterCombination?: "and"|"or"|"AND"|"OR", filters?: list, groupBys?: list, havings?: list, limit?: int, needle?: record, orderBy?: record}
-export def "accounts-workers-observability-queries queries.post" [
+export def "accounts-workers-observability-queries queriespost" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -56425,7 +56426,7 @@ export def "accounts-workers-observability-queries queries.post" [
 #
 # DELETE /accounts/{account_id}/workers/observability/queries/{queryId}
 # operationId: queries.delete
-export def "accounts-workers-observability-queries queries.delete" [
+export def "accounts-workers-observability-queries queriesdelete" [
   account_id: string
   queryId: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -56448,7 +56449,7 @@ export def "accounts-workers-observability-queries queries.delete" [
 #
 # GET /accounts/{account_id}/workers/observability/queries/{queryId}
 # operationId: queries.get
-export def "accounts-workers-observability-queries queries.get" [
+export def "accounts-workers-observability-queries queriesget" [
   account_id: string
   queryId: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -56472,7 +56473,7 @@ export def "accounts-workers-observability-queries queries.get" [
 # PATCH /accounts/{account_id}/workers/observability/queries/{queryId}
 # operationId: queries.patch
 # --parameters shape: {calculations?: list, datasets?: list, filterCombination?: "and"|"or"|"AND"|"OR", filters?: list, groupBys?: list, havings?: list, limit?: int, needle?: record, orderBy?: record}
-export def "accounts-workers-observability-queries queries.patch" [
+export def "accounts-workers-observability-queries queriespatch" [
   account_id: string
   queryId: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -56503,7 +56504,7 @@ export def "accounts-workers-observability-queries queries.patch" [
 # operationId: shared.query.post
 # --parameters shape: {calculations?: list, datasets?: list, filterCombination?: "and"|"or"|"AND"|"OR", filters?: list, groupBys?: list, havings?: list, limit?: int, needle?: record, orderBy?: record}
 # --timeframe shape: {from: float, to: float}
-export def "accounts-workers-observability-shared-query shared.query.post" [
+export def "accounts-workers-observability-shared-query sharedquerypost" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -56541,7 +56542,7 @@ export def "accounts-workers-observability-shared-query shared.query.post" [
 #
 # GET /accounts/{account_id}/workers/observability/shared/query/{id}
 # operationId: shared.query.get
-export def "accounts-workers-observability-shared-query shared.query.get" [
+export def "accounts-workers-observability-shared-query sharedqueryget" [
   account_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -56568,7 +56569,7 @@ export def "accounts-workers-observability-shared-query shared.query.get" [
 # operationId: telemetry.keys.list
 # --keyNeedle shape: {isRegex?: bool, matchCase?: bool, value: any}
 # --needle shape: {isRegex?: bool, matchCase?: bool, value: any}
-export def "accounts-workers-observability-telemetry-keys telemetry.keys.list" [
+export def "accounts-workers-observability-telemetry-keys telemetrykeyslist" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -56600,7 +56601,7 @@ export def "accounts-workers-observability-telemetry-keys telemetry.keys.list" [
 #
 # POST /accounts/{account_id}/workers/observability/telemetry/live-tail
 # operationId: telemetry.live-tail.post
-export def "accounts-workers-observability-telemetry-live-tail telemetry.live-tail.post" [
+export def "accounts-workers-observability-telemetry-live-tail telemetrylive-tailpost" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -56628,7 +56629,7 @@ export def "accounts-workers-observability-telemetry-live-tail telemetry.live-ta
 #
 # POST /accounts/{account_id}/workers/observability/telemetry/live-tail/heartbeat
 # operationId: telemetry.live-tail.heartbeat.get
-export def "accounts-workers-observability-telemetry-live-tail-heartbeat telemetry.live-tail.heartbeat.get" [
+export def "accounts-workers-observability-telemetry-live-tail-heartbeat telemetrylive-tailheartbeatget" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -56656,7 +56657,7 @@ export def "accounts-workers-observability-telemetry-live-tail-heartbeat telemet
 # operationId: telemetry.query
 # --parameters shape: {calculations?: list, datasets?: list, filterCombination?: "and"|"or"|"AND"|"OR", filters?: list, groupBys?: list, havings?: list, limit?: int, needle?: record, orderBy?: record}
 # --timeframe shape: {from: float, to: float}
-export def "accounts-workers-observability-telemetry-query telemetry.query" [
+export def "accounts-workers-observability-telemetry-query telemetryquery" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -56696,7 +56697,7 @@ export def "accounts-workers-observability-telemetry-query telemetry.query" [
 # operationId: telemetry.values.list
 # --needle shape: {isRegex?: bool, matchCase?: bool, value: any}
 # --timeframe shape: {from: float, to: float}
-export def "accounts-workers-observability-telemetry-values telemetry.values.list" [
+export def "accounts-workers-observability-telemetry-values telemetryvalueslist" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -56728,7 +56729,7 @@ export def "accounts-workers-observability-telemetry-values telemetry.values.lis
 #
 # GET /accounts/{account_id}/workers/observability/usage
 # operationId: usage.get
-export def "accounts-workers-observability-usage usage.get" [
+export def "accounts-workers-observability-usage usageget" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -59392,7 +59393,7 @@ export def "live get" [
 #
 # GET /memberships
 # operationId: user'-s-account-memberships-list-memberships
-export def "memberships user'-s-account-memberships-list-memberships" [
+export def "memberships user-s-account-memberships-list-memberships" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -59421,7 +59422,7 @@ export def "memberships user'-s-account-memberships-list-memberships" [
 #
 # DELETE /memberships/{membership_id}
 # operationId: user'-s-account-memberships-delete-membership
-export def "memberships user'-s-account-memberships-delete-membership" [
+export def "memberships user-s-account-memberships-delete-membership" [
   membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -59446,7 +59447,7 @@ export def "memberships user'-s-account-memberships-delete-membership" [
 #
 # GET /memberships/{membership_id}
 # operationId: user'-s-account-memberships-membership-details
-export def "memberships user'-s-account-memberships-membership-details" [
+export def "memberships user-s-account-memberships-membership-details" [
   membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -59468,7 +59469,7 @@ export def "memberships user'-s-account-memberships-membership-details" [
 #
 # PUT /memberships/{membership_id}
 # operationId: user'-s-account-memberships-update-membership
-export def "memberships user'-s-account-memberships-update-membership" [
+export def "memberships user-s-account-memberships-update-membership" [
   membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -70007,7 +70008,7 @@ export def "user-audit-logs audit-logs-get-user-audit-logs" [
 # DEPRECATED
 # operationId: user-billing-history-(-deprecated)-billing-history-details
 @deprecated
-export def "user-billing-history user-billing-history-(-deprecated)-billing-history-details" [
+export def "user-billing-history user-billing-history--deprecated-billing-history-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -70037,7 +70038,7 @@ export def "user-billing-history user-billing-history-(-deprecated)-billing-hist
 # DEPRECATED
 # operationId: user-billing-profile-(-deprecated)-billing-profile-details
 @deprecated
-export def "user-billing-profile user-billing-profile-(-deprecated)-billing-profile-details" [
+export def "user-billing-profile user-billing-profile--deprecated-billing-profile-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -70191,7 +70192,7 @@ export def "user-firewall-access-rules-rules ip-access-rules-for-a-user-update-a
 #
 # GET /user/invites
 # operationId: user'-s-invites-list-invitations
-export def "user-invites user'-s-invites-list-invitations" [
+export def "user-invites user-s-invites-list-invitations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -70212,7 +70213,7 @@ export def "user-invites user'-s-invites-list-invitations" [
 #
 # GET /user/invites/{invite_id}
 # operationId: user'-s-invites-invitation-details
-export def "user-invites user'-s-invites-invitation-details" [
+export def "user-invites user-s-invites-invitation-details" [
   invite_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -70234,7 +70235,7 @@ export def "user-invites user'-s-invites-invitation-details" [
 #
 # PATCH /user/invites/{invite_id}
 # operationId: user'-s-invites-respond-to-invitation
-export def "user-invites user'-s-invites-respond-to-invitation" [
+export def "user-invites user-s-invites-respond-to-invitation" [
   invite_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -70876,7 +70877,7 @@ export def "user-load-balancing-analytics-events load-balancer-healthcheck-event
 # DEPRECATED
 # operationId: user'-s-organizations-list-organizations
 @deprecated
-export def "user-organizations user'-s-organizations-list-organizations" [
+export def "user-organizations user-s-organizations-list-organizations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -70907,7 +70908,7 @@ export def "user-organizations user'-s-organizations-list-organizations" [
 # DEPRECATED
 # operationId: user'-s-organizations-leave-organization
 @deprecated
-export def "user-organizations user'-s-organizations-leave-organization" [
+export def "user-organizations user-s-organizations-leave-organization" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -70934,7 +70935,7 @@ export def "user-organizations user'-s-organizations-leave-organization" [
 # DEPRECATED
 # operationId: user'-s-organizations-organization-details
 @deprecated
-export def "user-organizations user'-s-organizations-organization-details" [
+export def "user-organizations user-s-organizations-organization-details" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -71346,7 +71347,7 @@ export def "zones zones-post" [
 # DEPRECATED
 # operationId: zone-analytics-(-deprecated)-get-analytics-by-co-locations
 @deprecated
-export def "zones-analytics-colos zone-analytics-(-deprecated)-get-analytics-by-co-locations" [
+export def "zones-analytics-colos zone-analytics--deprecated-get-analytics-by-co-locations" [
   zone_identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -71374,7 +71375,7 @@ export def "zones-analytics-colos zone-analytics-(-deprecated)-get-analytics-by-
 # DEPRECATED
 # operationId: zone-analytics-(-deprecated)-get-dashboard
 @deprecated
-export def "zones-analytics-dashboard zone-analytics-(-deprecated)-get-dashboard" [
+export def "zones-analytics-dashboard zone-analytics--deprecated-get-dashboard" [
   zone_identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -76130,7 +76131,7 @@ export def "zones-custom-hostnames-fallback-origin custom-hostname-fallback-orig
 #
 # DELETE /zones/{zone_id}/custom_hostnames/{custom_hostname_id}
 # operationId: custom-hostname-for-a-zone-delete-custom-hostname-(-and-any-issued-ssl-certificates)
-export def "zones-custom-hostnames custom-hostname-for-a-zone-delete-custom-hostname-(-and-any-issued-ssl-certificates)" [
+export def "zones-custom-hostnames custom-hostname-for-a-zone-delete-custom-hostname--and-any-issued-ssl-certificates" [
   custom_hostname_id: string
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -82201,7 +82202,7 @@ export def "zones-pagerules page-rules-update-a-page-rule" [
 #
 # GET /zones/{zone_id}/pay-per-crawl/configuration
 # operationId: pay-per-crawl.getConfig
-export def "zones-pay-per-crawl-configuration pay-per-crawl.getConfig" [
+export def "zones-pay-per-crawl-configuration pay-per-crawlgetConfig" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -82223,7 +82224,7 @@ export def "zones-pay-per-crawl-configuration pay-per-crawl.getConfig" [
 #
 # PATCH /zones/{zone_id}/pay-per-crawl/configuration
 # operationId: pay-per-crawl.patchConfig
-export def "zones-pay-per-crawl-configuration pay-per-crawl.patchConfig" [
+export def "zones-pay-per-crawl-configuration pay-per-crawlpatchConfig" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -82251,7 +82252,7 @@ export def "zones-pay-per-crawl-configuration pay-per-crawl.patchConfig" [
 #
 # POST /zones/{zone_id}/pay-per-crawl/configuration
 # operationId: pay-per-crawl.createConfig
-export def "zones-pay-per-crawl-configuration pay-per-crawl.createConfig" [
+export def "zones-pay-per-crawl-configuration pay-per-crawlcreateConfig" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -83254,7 +83255,7 @@ export def "zones-schema-validation-settings-operations schema-validation-update
 #
 # POST /zones/{zone_id}/secondary_dns/force_axfr
 # operationId: secondary-dns-(-secondary-zone)-force-axfr
-export def "zones-secondary-dns-force-axfr secondary-dns-(-secondary-zone)-force-axfr" [
+export def "zones-secondary-dns-force-axfr secondary-dns--secondary-zone-force-axfr" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -83279,7 +83280,7 @@ export def "zones-secondary-dns-force-axfr secondary-dns-(-secondary-zone)-force
 #
 # DELETE /zones/{zone_id}/secondary_dns/incoming
 # operationId: secondary-dns-(-secondary-zone)-delete-secondary-zone-configuration
-export def "zones-secondary-dns-incoming secondary-dns-(-secondary-zone)-delete-secondary-zone-configuration" [
+export def "zones-secondary-dns-incoming secondary-dns--secondary-zone-delete-secondary-zone-configuration" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -83304,7 +83305,7 @@ export def "zones-secondary-dns-incoming secondary-dns-(-secondary-zone)-delete-
 #
 # GET /zones/{zone_id}/secondary_dns/incoming
 # operationId: secondary-dns-(-secondary-zone)-secondary-zone-configuration-details
-export def "zones-secondary-dns-incoming secondary-dns-(-secondary-zone)-secondary-zone-configuration-details" [
+export def "zones-secondary-dns-incoming secondary-dns--secondary-zone-secondary-zone-configuration-details" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -83326,7 +83327,7 @@ export def "zones-secondary-dns-incoming secondary-dns-(-secondary-zone)-seconda
 #
 # POST /zones/{zone_id}/secondary_dns/incoming
 # operationId: secondary-dns-(-secondary-zone)-create-secondary-zone-configuration
-export def "zones-secondary-dns-incoming secondary-dns-(-secondary-zone)-create-secondary-zone-configuration" [
+export def "zones-secondary-dns-incoming secondary-dns--secondary-zone-create-secondary-zone-configuration" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -83354,7 +83355,7 @@ export def "zones-secondary-dns-incoming secondary-dns-(-secondary-zone)-create-
 #
 # PUT /zones/{zone_id}/secondary_dns/incoming
 # operationId: secondary-dns-(-secondary-zone)-update-secondary-zone-configuration
-export def "zones-secondary-dns-incoming secondary-dns-(-secondary-zone)-update-secondary-zone-configuration" [
+export def "zones-secondary-dns-incoming secondary-dns--secondary-zone-update-secondary-zone-configuration" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -83382,7 +83383,7 @@ export def "zones-secondary-dns-incoming secondary-dns-(-secondary-zone)-update-
 #
 # DELETE /zones/{zone_id}/secondary_dns/outgoing
 # operationId: secondary-dns-(-primary-zone)-delete-primary-zone-configuration
-export def "zones-secondary-dns-outgoing secondary-dns-(-primary-zone)-delete-primary-zone-configuration" [
+export def "zones-secondary-dns-outgoing secondary-dns--primary-zone-delete-primary-zone-configuration" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -83407,7 +83408,7 @@ export def "zones-secondary-dns-outgoing secondary-dns-(-primary-zone)-delete-pr
 #
 # GET /zones/{zone_id}/secondary_dns/outgoing
 # operationId: secondary-dns-(-primary-zone)-primary-zone-configuration-details
-export def "zones-secondary-dns-outgoing secondary-dns-(-primary-zone)-primary-zone-configuration-details" [
+export def "zones-secondary-dns-outgoing secondary-dns--primary-zone-primary-zone-configuration-details" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -83429,7 +83430,7 @@ export def "zones-secondary-dns-outgoing secondary-dns-(-primary-zone)-primary-z
 #
 # POST /zones/{zone_id}/secondary_dns/outgoing
 # operationId: secondary-dns-(-primary-zone)-create-primary-zone-configuration
-export def "zones-secondary-dns-outgoing secondary-dns-(-primary-zone)-create-primary-zone-configuration" [
+export def "zones-secondary-dns-outgoing secondary-dns--primary-zone-create-primary-zone-configuration" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -83456,7 +83457,7 @@ export def "zones-secondary-dns-outgoing secondary-dns-(-primary-zone)-create-pr
 #
 # PUT /zones/{zone_id}/secondary_dns/outgoing
 # operationId: secondary-dns-(-primary-zone)-update-primary-zone-configuration
-export def "zones-secondary-dns-outgoing secondary-dns-(-primary-zone)-update-primary-zone-configuration" [
+export def "zones-secondary-dns-outgoing secondary-dns--primary-zone-update-primary-zone-configuration" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -83483,7 +83484,7 @@ export def "zones-secondary-dns-outgoing secondary-dns-(-primary-zone)-update-pr
 #
 # POST /zones/{zone_id}/secondary_dns/outgoing/disable
 # operationId: secondary-dns-(-primary-zone)-disable-outgoing-zone-transfers
-export def "zones-secondary-dns-outgoing-disable secondary-dns-(-primary-zone)-disable-outgoing-zone-transfers" [
+export def "zones-secondary-dns-outgoing-disable secondary-dns--primary-zone-disable-outgoing-zone-transfers" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -83508,7 +83509,7 @@ export def "zones-secondary-dns-outgoing-disable secondary-dns-(-primary-zone)-d
 #
 # POST /zones/{zone_id}/secondary_dns/outgoing/enable
 # operationId: secondary-dns-(-primary-zone)-enable-outgoing-zone-transfers
-export def "zones-secondary-dns-outgoing-enable secondary-dns-(-primary-zone)-enable-outgoing-zone-transfers" [
+export def "zones-secondary-dns-outgoing-enable secondary-dns--primary-zone-enable-outgoing-zone-transfers" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -83533,7 +83534,7 @@ export def "zones-secondary-dns-outgoing-enable secondary-dns-(-primary-zone)-en
 #
 # POST /zones/{zone_id}/secondary_dns/outgoing/force_notify
 # operationId: secondary-dns-(-primary-zone)-force-dns-notify
-export def "zones-secondary-dns-outgoing-force-notify secondary-dns-(-primary-zone)-force-dns-notify" [
+export def "zones-secondary-dns-outgoing-force-notify secondary-dns--primary-zone-force-dns-notify" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -83558,7 +83559,7 @@ export def "zones-secondary-dns-outgoing-force-notify secondary-dns-(-primary-zo
 #
 # GET /zones/{zone_id}/secondary_dns/outgoing/status
 # operationId: secondary-dns-(-primary-zone)-get-outgoing-zone-transfer-status
-export def "zones-secondary-dns-outgoing-status secondary-dns-(-primary-zone)-get-outgoing-zone-transfer-status" [
+export def "zones-secondary-dns-outgoing-status secondary-dns--primary-zone-get-outgoing-zone-transfer-status" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -85257,7 +85258,7 @@ export def "zones-spectrum-analytics-aggregate-current spectrum-aggregate-analyt
 #
 # GET /zones/{zone_id}/spectrum/analytics/events/bytime
 # operationId: spectrum-analytics-(-by-time)-get-analytics-by-time
-export def "zones-spectrum-analytics-events-bytime spectrum-analytics-(-by-time)-get-analytics-by-time" [
+export def "zones-spectrum-analytics-events-bytime spectrum-analytics--by-time-get-analytics-by-time" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -85287,7 +85288,7 @@ export def "zones-spectrum-analytics-events-bytime spectrum-analytics-(-by-time)
 #
 # GET /zones/{zone_id}/spectrum/analytics/events/summary
 # operationId: spectrum-analytics-(-summary)-get-analytics-summary
-export def "zones-spectrum-analytics-events-summary spectrum-analytics-(-summary)-get-analytics-summary" [
+export def "zones-spectrum-analytics-events-summary spectrum-analytics--summary-get-analytics-summary" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

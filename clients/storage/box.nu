@@ -218,7 +218,7 @@ export def "oauth2-token token" [
 #
 # POST /oauth2/token#refresh
 # operationId: post_oauth2_token#refresh
-export def "oauth2-tokenrefresh token#refresh" [
+export def "oauth2-tokenrefresh tokenrefresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2306,7 +2306,7 @@ export def "metadata-templates-enterprise-security-classification-6vm-vochw-u-wo
 #
 # PUT /metadata_templates/enterprise/securityClassification-6VMVochwUWo/schema#add
 # operationId: put_metadata_templates_enterprise_securityClassification-6VMVochwUWo_schema#add
-export def "metadata-templates-enterprise-security-classification-6vm-vochw-u-wo-schemaadd schema#add" [
+export def "metadata-templates-enterprise-security-classification-6vm-vochw-u-wo-schemaadd schemaadd" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2330,7 +2330,7 @@ export def "metadata-templates-enterprise-security-classification-6vm-vochw-u-wo
 #
 # PUT /metadata_templates/enterprise/securityClassification-6VMVochwUWo/schema#update
 # operationId: put_metadata_templates_enterprise_securityClassification-6VMVochwUWo_schema#update
-export def "metadata-templates-enterprise-security-classification-6vm-vochw-u-wo-schemaupdate schema#update" [
+export def "metadata-templates-enterprise-security-classification-6vm-vochw-u-wo-schemaupdate schemaupdate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2528,7 +2528,7 @@ export def "metadata-templates-schema schema" [
 # POST /metadata_templates/schema#classifications
 # operationId: post_metadata_templates_schema#classifications
 # --fields item shape: {type: "enum", key: "Box__Security__Classification__Key", displayName: "Classification", hidden?: bool, options: list}
-export def "metadata-templates-schemaclassifications schema#classifications" [
+export def "metadata-templates-schemaclassifications schemaclassifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3358,7 +3358,7 @@ export def "files link-by-file_id-3" [
 #
 # GET /shared_items#folders
 # operationId: get_shared_items#folders
-export def "shared-itemsfolders items#folders" [
+export def "shared-itemsfolders itemsfolders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
