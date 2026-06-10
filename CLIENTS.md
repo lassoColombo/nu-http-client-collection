@@ -40,9 +40,9 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## finance
 
-| Client                                          | Type    | Source                                       |
-| ----------------------------------------------- | ------- | -------------------------------------------- |
-| [exchangerate](clients/finance/exchangerate.nu) | openapi | <https://api.exchangerate.host/openapi.json> |
+| Client                                        | Type    | Source                                     |
+| --------------------------------------------- | ------- | ------------------------------------------ |
+| [frankfurter](clients/finance/frankfurter.nu) | openapi | <https://api.frankfurter.app/openapi.json> |
 
 ## gaming
 

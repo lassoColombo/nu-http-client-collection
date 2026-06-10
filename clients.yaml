@@ -49,9 +49,9 @@ clients:
       source: https://api.weather.gov/openapi.json
 
   finance:
-    - name: exchangerate
+    - name: frankfurter
       type: openapi
-      source: https://api.exchangerate.host/openapi.json
+      source: https://api.frankfurter.app/openapi.json
 
   ai:
     - name: openai
@@ -138,3 +138,4 @@ clients:
       source: https://swapi-graphql.netlify.app/graphql
       flags:
         default-base-url: https://swapi-graphql.netlify.app/graphql
+
