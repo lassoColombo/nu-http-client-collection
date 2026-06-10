@@ -6,19 +6,19 @@ on:
       client:
         description: 'Client to regenerate (leave empty or "all" to regenerate everything).'
         required: false
-        default: 'all'
+        default: "all"
         type: string
       generator_ref:
-        description: 'nu-http-client-generator ref to use (branch, tag, or SHA).'
+        description: "nu-http-client-generator ref to use (branch, tag, or SHA)."
         required: false
-        default: 'main'
+        default: "main"
         type: string
   push:
     branches: [main]
     paths:
-      - 'clients.yaml'
-      - 'scripts/generate.nu'
-      - '.github/workflows/generate.yml'
+      - "clients.yaml"
+      - "scripts/generate.nu"
+      - ".github/workflows/generate.yml"
 
 concurrency:
   group: generate-${{ github.event.inputs.client || 'all' }}
@@ -40,7 +40,7 @@ jobs:
       - name: Install Nushell
         uses: hustcer/setup-nu@v3
         with:
-          version: '*'
+          version: "*"
 
       - name: Clone generator
         run: |
@@ -54,7 +54,7 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add clients/
+          git add clients/ README.md
           if git diff --cached --quiet; then
             echo "No changes — nothing to commit."
             exit 0

@@ -16,18 +16,26 @@ def main [
     --config: path = "clients.yaml"          # path to the registry file
     --generator: path = "_generator"         # path to the nu-http-client-generator directory
     --out-dir: path = "clients"              # where to write generated `.nu` files
+    --readme: path = "README.md"             # README to refresh the clients table in
+    --readme-only                            # skip generation; only refresh the README table from `clients.yaml`
 ] {
     if not ($config | path exists) {
         error make { msg: $"config file not found: ($config)" }
     }
-    if not (($generator | path join "mod.nu") | path exists) {
-        error make { msg: $"generator not found at ($generator). Clone it with: git clone https://github.com/lassoColombo/nu-http-client-generator ($generator)" }
-    }
-
     let registry = open $config
     let all_clients = ($registry.clients? | default [])
     if ($all_clients | is-empty) {
         error make { msg: $"no clients defined in ($config)" }
+    }
+
+    if $readme_only {
+        update-readme-table $readme $all_clients $out_dir
+        print $"Refreshed clients table in ($readme)."
+        return
+    }
+
+    if not (($generator | path join "mod.nu") | path exists) {
+        error make { msg: $"generator not found at ($generator). Clone it with: git clone https://github.com/lassoColombo/nu-http-client-generator ($generator)" }
     }
 
     let selected = (filter-clients $all_clients $client)
@@ -40,6 +48,8 @@ def main [
     for c in $selected {
         generate-one $c $out_dir $generator_path $generator_name
     }
+
+    update-readme-table $readme $all_clients $out_dir
     print "Done."
 }
 
@@ -99,4 +109,37 @@ def build-flag-args [flags: record]: nothing -> string {
     }
     | compact
     | str join " "
+}
+
+# Replace the section between BEGIN/END marker comments in `readme_path`
+# with a markdown table rendered from `clients`.
+def update-readme-table [readme_path: path, clients: list, out_dir: path] {
+    if not ($readme_path | path exists) {
+        error make { msg: $"README not found at ($readme_path)" }
+    }
+    let begin = "<!-- BEGIN CLIENTS TABLE -->"
+    let end_  = "<!-- END CLIENTS TABLE -->"
+    let content = (open --raw $readme_path)
+    if not ($content | str contains $begin) or not ($content | str contains $end_) {
+        error make { msg: $"README is missing the BEGIN/END CLIENTS TABLE marker comments" }
+    }
+
+    let table = (render-clients-table $clients $out_dir)
+    let replacement = $"($begin)\n($table)\n($end_)"
+    let pattern = $"\(?s\)($begin).*?($end_)"
+    $content
+    | str replace --regex $pattern $replacement
+    | save -f $readme_path
+}
+
+def render-clients-table [clients: list, out_dir: path]: nothing -> string {
+    $clients
+    | each {|c|
+        {
+            Client: $"[($c.name)]\(($out_dir)/($c.name).nu\)"
+            Type: $c.type
+            Source: $"<($c.source)>"
+        }
+    }
+    | to md --pretty
 }
