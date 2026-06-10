@@ -1,4 +1,4 @@
-# nu-http-clients
+# nu-http-client-collection
 
 A registry of Nushell HTTP clients, generated from OpenAPI / Swagger / GraphQL specs by
 [nu-http-client-generator](https://github.com/lassoColombo/nu-http-client-generator).
@@ -15,9 +15,6 @@ countries query country "IT" --fields [name capital emoji]
 use clients/sandbox/petstore.nu
 petstore pet get-by-id 1 --token $env.MY_TOKEN
 ```
-
-Generated clients are namespaced by filename, so they don't shadow nushell builtins like
-`get`/`delete`. See each client's `--help` for the full command list.
 
 ## Building your own collection
 
@@ -47,10 +44,6 @@ The driver script forwards `flags` to the generator with the right shape:
 | list      | `--flag [a b c]`         | `default-headers: [X-Foo: bar]`           |
 | record    | `--flag {key: value}`    | `default-headers: {X-Tenant-Id: acme}`    |
 
-Filter flags (`--tags`, `--prefixes`, `--methods`, `--exclude-deprecated`, `--verb-map`)
-are **not allowed** in this registry — every client is generated from the full upstream
-spec. See the [generator README](https://github.com/lassoColombo/nu-http-client-generator)
-for the full flag reference.
 
 ## Running it
 
