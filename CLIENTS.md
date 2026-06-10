@@ -4,15 +4,15 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## ai
 
-| Client                                 | Type    | Source                                                                        |
-| -------------------------------------- | ------- | ----------------------------------------------------------------------------- |
-| [openai](clients/ai/openai.nu)         | openapi | <https://raw.githubusercontent.com/openai/openai-openapi/master/openapi.yaml> |
-| [cohere](clients/ai/cohere.nu)         | openapi | <https://docs.cohere.com/openapi/cohere-api.json>                             |
-| [elevenlabs](clients/ai/elevenlabs.nu) | openapi | <https://api.elevenlabs.io/openapi.json>                                      |
-| [assemblyai](clients/ai/assemblyai.nu) | openapi | <https://www.assemblyai.com/docs/openapi.json>                                |
-| [deepgram](clients/ai/deepgram.nu)     | openapi | <https://developers.deepgram.com/reference/openapi.json>                      |
-| [xai](clients/ai/xai.nu)               | openapi | <https://docs.x.ai/openapi.json>                                              |
-| [deepinfra](clients/ai/deepinfra.nu)   | openapi | <https://api.deepinfra.com/openapi.json>                                      |
+| Client                                 | Type    | Source                                                   |
+| -------------------------------------- | ------- | -------------------------------------------------------- |
+| [openai](clients/ai/openai.nu)         | openapi | <specs/openai.yaml>                                      |
+| [cohere](clients/ai/cohere.nu)         | openapi | <https://docs.cohere.com/openapi/cohere-api.json>        |
+| [elevenlabs](clients/ai/elevenlabs.nu) | openapi | <https://api.elevenlabs.io/openapi.json>                 |
+| [assemblyai](clients/ai/assemblyai.nu) | openapi | <https://www.assemblyai.com/docs/openapi.json>           |
+| [deepgram](clients/ai/deepgram.nu)     | openapi | <https://developers.deepgram.com/reference/openapi.json> |
+| [xai](clients/ai/xai.nu)               | openapi | <https://docs.x.ai/openapi.json>                         |
+| [deepinfra](clients/ai/deepinfra.nu)   | openapi | <https://api.deepinfra.com/openapi.json>                 |
 
 ## anime
 

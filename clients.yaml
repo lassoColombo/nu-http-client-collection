@@ -29,7 +29,11 @@ clients:
   ai:
     - name: openai
       type: openapi
-      source: https://raw.githubusercontent.com/openai/openai-openapi/master/openapi.yaml
+      # Locally-patched copy of https://raw.githubusercontent.com/openai/openai-openapi/master/openapi.yaml
+      # — the upstream spec has `minimum/maximum: ±9223372036854776000` on `seed`,
+      # which is just outside i64 range and trips nushell's `from yaml`. Local
+      # copy rounds those bounds to ±i64::MIN/MAX. Refresh manually when upstream changes.
+      source: specs/openai.yaml
     - name: cohere
       type: openapi
       source: https://docs.cohere.com/openapi/cohere-api.json
