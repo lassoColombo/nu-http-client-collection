@@ -2914,6 +2914,11 @@ clients:
       type: openapi
       source: https://docs.dokploy.com/openapi.json
 
+  webhooks:
+    - name: svix
+      type: openapi
+      source: https://api.svix.com/api/v1/openapi.json
+
   workflow-automation:
     - name: n8n
       type: openapi
