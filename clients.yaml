@@ -64,6 +64,15 @@ clients:
     - name: jina
       type: openapi
       source: https://api.jina.ai/openapi.json
+    - name: replicate
+      type: openapi
+      source: https://api.replicate.com/openapi.json
+    - name: together-ai
+      type: openapi
+      source: https://docs.together.ai/openapi.yaml
+    - name: fireworks-ai
+      type: openapi
+      source: https://docs.fireworks.ai/merged.openapi.yaml
 
   analytics:
     - name: google-analytics
@@ -204,6 +213,19 @@ clients:
     - name: billbee
       type: openapi
       source: https://api.apis.guru/v2/specs/billbee.io/v1/openapi.json
+    - name: chargebee
+      type: openapi
+      source: https://raw.githubusercontent.com/chargebee/openapi/main/spec/chargebee_api_v2_pc_v2_spec.json
+
+  blockchain:
+    - name: alchemy-nft
+      type: openapi
+      source: https://raw.githubusercontent.com/alchemyplatform/docs-openapi-specs/main/nft/nfts.yaml
+
+  browser-automation:
+    - name: browserless
+      type: openapi
+      source: https://docs.browserless.io/redocusaurus/plugin-redoc-0.yaml
 
   calendar:
     - name: google-calendar
@@ -408,6 +430,7 @@ clients:
     - name: azure-automation-runbook
       type: openapi
       source: https://api.apis.guru/v2/specs/azure.com/automation-runbook/2018-06-30/swagger.json
+
   cloud:
     - name: digitalocean
       type: openapi
@@ -439,6 +462,11 @@ clients:
     - name: koyeb
       type: openapi
       source: https://raw.githubusercontent.com/koyeb/koyeb-api-client-go/master/api/v1/koyeb/api/openapi.yaml
+
+  collaboration:
+    - name: miro
+      type: openapi
+      source: https://raw.githubusercontent.com/miroapp/api-clients/main/packages/generator/spec.json
 
   commerce:
     - name: square
@@ -674,6 +702,16 @@ clients:
     - name: aws-datapipeline
       type: openapi
       source: https://api.apis.guru/v2/specs/amazonaws.com/datapipeline/2012-10-29/openapi.json
+
+  data-warehouse:
+    - name: snowflake-account
+      type: openapi
+      source: https://raw.githubusercontent.com/snowflakedb/snowflake-rest-api-specs/main/specifications/account.yaml
+
+  database:
+    - name: neon
+      type: openapi
+      source: https://neon.com/api_spec/release/v2.json
 
   dns:
     - name: aws-route53
@@ -1141,6 +1179,9 @@ clients:
       source: https://api.apis.guru/v2/specs/twinehealth.com/v7.78.1/openapi.json
 
   identity:
+    - name: auth0
+      type: openapi
+      source: https://auth0.com/docs/api/management/openapi.json
     - name: okta
       type: openapi
       source: https://api.apis.guru/v2/specs/okta.local/1.0.0/openapi.json
@@ -1649,6 +1690,11 @@ clients:
     - name: sportsdata-mlb-news
       type: openapi
       source: https://api.apis.guru/v2/specs/sportsdata.io/mlb-v3-rotoballer-premium-news/1.0/openapi.json
+
+  password-manager:
+    - name: onepassword-connect
+      type: openapi
+      source: https://raw.githubusercontent.com/1Password/connect/main/docs/openapi/spec.yaml
 
   payments:
     - name: stripe
@@ -2695,6 +2741,11 @@ clients:
       type: openapi
       source: https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/Whisparr.Api.V3/openapi.json
 
+  time-tracking:
+    - name: toggl-track
+      type: openapi
+      source: https://engineering.toggl.com/assets/files/api-d56ecbd7b19d9020283019e0581d80ca.json
+
   torrent:
     - name: qbittorrent
       type: openapi
@@ -2731,3 +2782,13 @@ clients:
     - name: meteosource
       type: openapi
       source: https://api.apis.guru/v2/specs/meteosource.com/v1/openapi.json
+
+  web-hosting:
+    - name: render
+      type: openapi
+      source: https://api-docs.render.com/openapi/render-public-api-1.json
+
+  workflow-automation:
+    - name: n8n
+      type: openapi
+      source: https://docs.n8n.io/api/v1/openapi.yml
