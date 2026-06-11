@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -165,14 +166,14 @@ export def "manga get-search-manga" [
   --createdAtSince: string
   --updatedAtSince: string
   --order: record # default: {latestUploadedChapter: desc}
-  --includes: string
+  --includes: list
   --hasAvailableChapters: string@hasAvailableChapters-completer
   --hasUnavailableChapters: string@hasUnavailableChapters-completer
   --group: string # format: uuid
 ]: nothing -> record<result: string, response: string, data: table<id: string, type: string, attributes: record, relationships: list>, limit: int, offset: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "authorOrArtist" $authorOrArtist "scalar") (serialize-qp "authors[]" $authors "multi") (serialize-qp "artists[]" $artists "multi") (serialize-qp "year" $year "scalar") (serialize-qp "includedTags[]" $includedTags "multi") (serialize-qp "includedTagsMode" $includedTagsMode "scalar") (serialize-qp "excludedTags[]" $excludedTags "multi") (serialize-qp "excludedTagsMode" $excludedTagsMode "scalar") (serialize-qp "status[]" $status "multi") (serialize-qp "originalLanguage[]" $originalLanguage "multi") (serialize-qp "excludedOriginalLanguage[]" $excludedOriginalLanguage "multi") (serialize-qp "availableTranslatedLanguage[]" $availableTranslatedLanguage "multi") (serialize-qp "publicationDemographic[]" $publicationDemographic "multi") (serialize-qp "ids[]" $ids "multi") (serialize-qp "contentRating[]" $contentRating "multi") (serialize-qp "createdAtSince" $createdAtSince "scalar") (serialize-qp "updatedAtSince" $updatedAtSince "scalar") (serialize-qp "order" $order "deepObject") (serialize-qp "includes[]" $includes "scalar") (serialize-qp "hasAvailableChapters" $hasAvailableChapters "scalar") (serialize-qp "hasUnavailableChapters" $hasUnavailableChapters "scalar") (serialize-qp "group" $group "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "authorOrArtist" $authorOrArtist "scalar") (serialize-qp "authors[]" $authors "multi") (serialize-qp "artists[]" $artists "multi") (serialize-qp "year" $year "scalar") (serialize-qp "includedTags[]" $includedTags "multi") (serialize-qp "includedTagsMode" $includedTagsMode "scalar") (serialize-qp "excludedTags[]" $excludedTags "multi") (serialize-qp "excludedTagsMode" $excludedTagsMode "scalar") (serialize-qp "status[]" $status "multi") (serialize-qp "originalLanguage[]" $originalLanguage "multi") (serialize-qp "excludedOriginalLanguage[]" $excludedOriginalLanguage "multi") (serialize-qp "availableTranslatedLanguage[]" $availableTranslatedLanguage "multi") (serialize-qp "publicationDemographic[]" $publicationDemographic "multi") (serialize-qp "ids[]" $ids "multi") (serialize-qp "contentRating[]" $contentRating "multi") (serialize-qp "createdAtSince" $createdAtSince "scalar") (serialize-qp "updatedAtSince" $updatedAtSince "scalar") (serialize-qp "order" $order "deepObject") (serialize-qp "includes[]" $includes "multi") (serialize-qp "hasAvailableChapters" $hasAvailableChapters "scalar") (serialize-qp "hasUnavailableChapters" $hasUnavailableChapters "scalar") (serialize-qp "group" $group "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/manga" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -263,13 +264,13 @@ export def "manga-recommendation get-manga-recommendation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includes: string
+  --includes: list
   --order: record # default: {score: desc}
   --contentRating: list # default: [safe, suggestive, erotica]
 ]: nothing -> record<result: string, response: string, data: table<id: string, type: string, attributes: record, relationships: list>, limit: int, offset: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includes[]" $includes "scalar") (serialize-qp "order" $order "deepObject") (serialize-qp "contentRating[]" $contentRating "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "includes[]" $includes "multi") (serialize-qp "order" $order "deepObject") (serialize-qp "contentRating[]" $contentRating "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/manga/($id)/recommendation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -289,11 +290,11 @@ export def "manga get-manga-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includes: string
+  --includes: list
 ]: nothing -> record<result: string, response: string, data: record<id: string, type: string, attributes: record<title: record, altTitles: list, description: record, isLocked: bool, links: record, officialLinks: record, originalLanguage: string, lastVolume: string, lastChapter: string, publicationDemographic: string, status: string, year: int, contentRating: string, chapterNumbersResetOnNewVolume: bool, availableTranslatedLanguages: list, latestUploadedChapter: string, tags: list, state: string, version: int, createdAt: string, updatedAt: string>, relationships: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includes[]" $includes "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "includes[]" $includes "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/manga/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -474,12 +475,12 @@ export def "client get-list-apiclients" [
   --offset: int
   --state: string@state-completer
   --name: string
-  --includes: string
+  --includes: list
   --order: record # default: {createdAt: desc}
 ]: nothing -> record<result: string, response: string, data: table<id: string, type: string, attributes: record, relationships: list>, limit: int, offset: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "includes[]" $includes "scalar") (serialize-qp "order" $order "deepObject")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "includes[]" $includes "multi") (serialize-qp "order" $order "deepObject")] | flatten | str join "&"
   let full_url = (build-url $base "/client" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -530,11 +531,11 @@ export def "client get-apiclient" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includes: string
+  --includes: list
 ]: nothing -> record<result: string, response: string, data: record<id: string, type: string, attributes: record<name: string, description: string, profile: string, externalClientId: string, isActive: bool, state: string, createdAt: string, updatedAt: string, version: int>, relationships: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includes[]" $includes "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "includes[]" $includes "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/client/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -662,12 +663,12 @@ export def "group get-search-group" [
   --ids: list # ScanlationGroup ids (limited to 100 per request)
   --name: string
   --focusedLanguage: string
-  --includes: string
+  --includes: list
   --order: record # default: {latestUploadedChapter: desc}
 ]: nothing -> record<result: string, response: string, data: table<id: string, type: string, attributes: record, relationships: list>, limit: int, offset: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ids[]" $ids "multi") (serialize-qp "name" $name "scalar") (serialize-qp "focusedLanguage" $focusedLanguage "scalar") (serialize-qp "includes[]" $includes "scalar") (serialize-qp "order" $order "deepObject")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ids[]" $ids "multi") (serialize-qp "name" $name "scalar") (serialize-qp "focusedLanguage" $focusedLanguage "scalar") (serialize-qp "includes[]" $includes "multi") (serialize-qp "order" $order "deepObject")] | flatten | str join "&"
   let full_url = (build-url $base "/group" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -725,11 +726,11 @@ export def "group get-group-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includes: string
+  --includes: list
 ]: nothing -> record<result: string, response: string, data: record<id: string, type: string, attributes: record<name: string, altNames: list, website: string, ircServer: string, ircChannel: string, discord: string, contactEmail: string, description: string, twitter: string, mangaUpdates: string, focusedLanguage: list, locked: bool, official: bool, verified: bool, inactive: bool, exLicensed: bool, publishDelay: string, version: int, createdAt: string, updatedAt: string>, relationships: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includes[]" $includes "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "includes[]" $includes "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/group/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1264,11 +1265,11 @@ export def "chapter get-chapter-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includes: string
+  --includes: list
 ]: nothing -> record<result: string, response: string, data: record<id: string, type: string, attributes: record<title: string, volume: string, chapter: string, pages: int, translatedLanguage: string, uploader: string, externalUrl: string, version: int, createdAt: string, updatedAt: string, publishAt: string, readableAt: string, isUnavailable: bool>, relationships: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includes[]" $includes "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "includes[]" $includes "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/chapter/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1358,7 +1359,7 @@ export def "user-follows-manga-feed get-user-follows-manga-feed" [
   --updatedAtSince: string
   --publishAtSince: string
   --order: record
-  --includes: string
+  --includes: list
   --includeEmptyPages: int@includeEmptyPages-completer
   --includeFuturePublishAt: int@includeFuturePublishAt-completer
   --includeExternalUrl: int@includeExternalUrl-completer
@@ -1366,7 +1367,7 @@ export def "user-follows-manga-feed get-user-follows-manga-feed" [
 ]: nothing -> record<result: string, response: string, data: table<id: string, type: string, attributes: record, relationships: list>, limit: int, offset: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "translatedLanguage[]" $translatedLanguage "multi") (serialize-qp "originalLanguage[]" $originalLanguage "multi") (serialize-qp "excludedOriginalLanguage[]" $excludedOriginalLanguage "multi") (serialize-qp "contentRating[]" $contentRating "multi") (serialize-qp "excludedGroups[]" $excludedGroups "multi") (serialize-qp "excludedUploaders[]" $excludedUploaders "multi") (serialize-qp "includeFutureUpdates" $includeFutureUpdates "scalar") (serialize-qp "externalUrl" $externalUrl "scalar") (serialize-qp "excludeExternalUrl" $excludeExternalUrl "scalar") (serialize-qp "createdAtSince" $createdAtSince "scalar") (serialize-qp "updatedAtSince" $updatedAtSince "scalar") (serialize-qp "publishAtSince" $publishAtSince "scalar") (serialize-qp "order" $order "deepObject") (serialize-qp "includes[]" $includes "scalar") (serialize-qp "includeEmptyPages" $includeEmptyPages "scalar") (serialize-qp "includeFuturePublishAt" $includeFuturePublishAt "scalar") (serialize-qp "includeExternalUrl" $includeExternalUrl "scalar") (serialize-qp "includeUnavailable" $includeUnavailable "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "translatedLanguage[]" $translatedLanguage "multi") (serialize-qp "originalLanguage[]" $originalLanguage "multi") (serialize-qp "excludedOriginalLanguage[]" $excludedOriginalLanguage "multi") (serialize-qp "contentRating[]" $contentRating "multi") (serialize-qp "excludedGroups[]" $excludedGroups "multi") (serialize-qp "excludedUploaders[]" $excludedUploaders "multi") (serialize-qp "includeFutureUpdates" $includeFutureUpdates "scalar") (serialize-qp "externalUrl" $externalUrl "scalar") (serialize-qp "excludeExternalUrl" $excludeExternalUrl "scalar") (serialize-qp "createdAtSince" $createdAtSince "scalar") (serialize-qp "updatedAtSince" $updatedAtSince "scalar") (serialize-qp "publishAtSince" $publishAtSince "scalar") (serialize-qp "order" $order "deepObject") (serialize-qp "includes[]" $includes "multi") (serialize-qp "includeEmptyPages" $includeEmptyPages "scalar") (serialize-qp "includeFuturePublishAt" $includeFuturePublishAt "scalar") (serialize-qp "includeExternalUrl" $includeExternalUrl "scalar") (serialize-qp "includeUnavailable" $includeUnavailable "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/follows/manga/feed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1401,7 +1402,7 @@ export def "list-feed get-list-id-feed" [
   --updatedAtSince: string
   --publishAtSince: string
   --order: record
-  --includes: string
+  --includes: list
   --includeEmptyPages: int@includeEmptyPages-completer
   --includeFuturePublishAt: int@includeFuturePublishAt-completer
   --includeExternalUrl: int@includeExternalUrl-completer
@@ -1409,7 +1410,7 @@ export def "list-feed get-list-id-feed" [
 ]: nothing -> record<result: string, response: string, data: table<id: string, type: string, attributes: record, relationships: list>, limit: int, offset: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "translatedLanguage[]" $translatedLanguage "multi") (serialize-qp "originalLanguage[]" $originalLanguage "multi") (serialize-qp "excludedOriginalLanguage[]" $excludedOriginalLanguage "multi") (serialize-qp "contentRating[]" $contentRating "multi") (serialize-qp "excludedGroups[]" $excludedGroups "multi") (serialize-qp "excludedUploaders[]" $excludedUploaders "multi") (serialize-qp "includeFutureUpdates" $includeFutureUpdates "scalar") (serialize-qp "externalUrl" $externalUrl "scalar") (serialize-qp "excludeExternalUrl" $excludeExternalUrl "scalar") (serialize-qp "createdAtSince" $createdAtSince "scalar") (serialize-qp "updatedAtSince" $updatedAtSince "scalar") (serialize-qp "publishAtSince" $publishAtSince "scalar") (serialize-qp "order" $order "deepObject") (serialize-qp "includes[]" $includes "scalar") (serialize-qp "includeEmptyPages" $includeEmptyPages "scalar") (serialize-qp "includeFuturePublishAt" $includeFuturePublishAt "scalar") (serialize-qp "includeExternalUrl" $includeExternalUrl "scalar") (serialize-qp "includeUnavailable" $includeUnavailable "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "translatedLanguage[]" $translatedLanguage "multi") (serialize-qp "originalLanguage[]" $originalLanguage "multi") (serialize-qp "excludedOriginalLanguage[]" $excludedOriginalLanguage "multi") (serialize-qp "contentRating[]" $contentRating "multi") (serialize-qp "excludedGroups[]" $excludedGroups "multi") (serialize-qp "excludedUploaders[]" $excludedUploaders "multi") (serialize-qp "includeFutureUpdates" $includeFutureUpdates "scalar") (serialize-qp "externalUrl" $externalUrl "scalar") (serialize-qp "excludeExternalUrl" $excludeExternalUrl "scalar") (serialize-qp "createdAtSince" $createdAtSince "scalar") (serialize-qp "updatedAtSince" $updatedAtSince "scalar") (serialize-qp "publishAtSince" $publishAtSince "scalar") (serialize-qp "order" $order "deepObject") (serialize-qp "includes[]" $includes "multi") (serialize-qp "includeEmptyPages" $includeEmptyPages "scalar") (serialize-qp "includeFuturePublishAt" $includeFuturePublishAt "scalar") (serialize-qp "includeExternalUrl" $includeExternalUrl "scalar") (serialize-qp "includeUnavailable" $includeUnavailable "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/list/($id)/feed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1479,11 +1480,11 @@ export def "cover get-cover" [
   --uploaders: list # User ids (limited to 100 per request)
   --locales: list # Locales of cover art (limited to 100 per request)
   --order: record
-  --includes: string
+  --includes: list
 ]: nothing -> record<result: string, response: string, data: table<id: string, type: string, attributes: record, relationships: list>, limit: int, offset: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "manga[]" $manga "multi") (serialize-qp "ids[]" $ids "multi") (serialize-qp "uploaders[]" $uploaders "multi") (serialize-qp "locales[]" $locales "multi") (serialize-qp "order" $order "deepObject") (serialize-qp "includes[]" $includes "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "manga[]" $manga "multi") (serialize-qp "ids[]" $ids "multi") (serialize-qp "uploaders[]" $uploaders "multi") (serialize-qp "locales[]" $locales "multi") (serialize-qp "order" $order "deepObject") (serialize-qp "includes[]" $includes "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/cover" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1535,11 +1536,11 @@ export def "cover get-cover-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includes: string
+  --includes: list
 ]: nothing -> record<result: string, response: string, data: record<id: string, type: string, attributes: record<volume: string, fileName: string, description: string, locale: string, version: int, createdAt: string, updatedAt: string>, relationships: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includes[]" $includes "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "includes[]" $includes "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/cover/($mangaOrCoverId)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1617,11 +1618,11 @@ export def "author get-author" [
   --ids: list # Author ids (limited to 100 per request)
   --name: string
   --order: record
-  --includes: string
+  --includes: list
 ]: nothing -> record<result: string, response: string, data: table<id: string, type: string, attributes: record, relationships: list>, limit: int, offset: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ids[]" $ids "multi") (serialize-qp "name" $name "scalar") (serialize-qp "order" $order "deepObject") (serialize-qp "includes[]" $includes "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "ids[]" $ids "multi") (serialize-qp "name" $name "scalar") (serialize-qp "order" $order "deepObject") (serialize-qp "includes[]" $includes "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/author" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1683,11 +1684,11 @@ export def "author get-author-id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includes: string
+  --includes: list
 ]: nothing -> record<result: string, response: string, data: record<id: string, type: string, attributes: record<name: string, imageUrl: string, biography: record, twitter: string, pixiv: string, melonBook: string, fanBox: string, booth: string, nicoVideo: string, skeb: string, fantia: string, tumblr: string, youtube: string, weibo: string, naver: string, namicomi: string, website: string, version: int, createdAt: string, updatedAt: string>, relationships: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includes[]" $includes "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "includes[]" $includes "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/author/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1817,7 +1818,7 @@ export def "manga-feed get-manga-id-feed" [
   --updatedAtSince: string
   --publishAtSince: string
   --order: record
-  --includes: string
+  --includes: list
   --includeEmptyPages: int@includeEmptyPages-completer
   --includeFuturePublishAt: int@includeFuturePublishAt-completer
   --includeExternalUrl: int@includeExternalUrl-completer
@@ -1825,7 +1826,7 @@ export def "manga-feed get-manga-id-feed" [
 ]: nothing -> record<result: string, response: string, data: table<id: string, type: string, attributes: record, relationships: list>, limit: int, offset: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "translatedLanguage[]" $translatedLanguage "multi") (serialize-qp "originalLanguage[]" $originalLanguage "multi") (serialize-qp "excludedOriginalLanguage[]" $excludedOriginalLanguage "multi") (serialize-qp "contentRating[]" $contentRating "multi") (serialize-qp "excludedGroups[]" $excludedGroups "multi") (serialize-qp "excludedUploaders[]" $excludedUploaders "multi") (serialize-qp "includeFutureUpdates" $includeFutureUpdates "scalar") (serialize-qp "externalUrl" $externalUrl "scalar") (serialize-qp "excludeExternalUrl" $excludeExternalUrl "scalar") (serialize-qp "createdAtSince" $createdAtSince "scalar") (serialize-qp "updatedAtSince" $updatedAtSince "scalar") (serialize-qp "publishAtSince" $publishAtSince "scalar") (serialize-qp "order" $order "deepObject") (serialize-qp "includes[]" $includes "scalar") (serialize-qp "includeEmptyPages" $includeEmptyPages "scalar") (serialize-qp "includeFuturePublishAt" $includeFuturePublishAt "scalar") (serialize-qp "includeExternalUrl" $includeExternalUrl "scalar") (serialize-qp "includeUnavailable" $includeUnavailable "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "translatedLanguage[]" $translatedLanguage "multi") (serialize-qp "originalLanguage[]" $originalLanguage "multi") (serialize-qp "excludedOriginalLanguage[]" $excludedOriginalLanguage "multi") (serialize-qp "contentRating[]" $contentRating "multi") (serialize-qp "excludedGroups[]" $excludedGroups "multi") (serialize-qp "excludedUploaders[]" $excludedUploaders "multi") (serialize-qp "includeFutureUpdates" $includeFutureUpdates "scalar") (serialize-qp "externalUrl" $externalUrl "scalar") (serialize-qp "excludeExternalUrl" $excludeExternalUrl "scalar") (serialize-qp "createdAtSince" $createdAtSince "scalar") (serialize-qp "updatedAtSince" $updatedAtSince "scalar") (serialize-qp "publishAtSince" $publishAtSince "scalar") (serialize-qp "order" $order "deepObject") (serialize-qp "includes[]" $includes "multi") (serialize-qp "includeEmptyPages" $includeEmptyPages "scalar") (serialize-qp "includeFuturePublishAt" $includeFuturePublishAt "scalar") (serialize-qp "includeExternalUrl" $includeExternalUrl "scalar") (serialize-qp "includeUnavailable" $includeUnavailable "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/manga/($id)/feed" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1919,7 +1920,7 @@ export def "manga-random get-manga-random" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includes: string
+  --includes: list
   --contentRating: list # default: [safe, suggestive, erotica]
   --includedTags: list
   --includedTagsMode: string@includedTagsMode-completer # default: AND
@@ -1928,7 +1929,7 @@ export def "manga-random get-manga-random" [
 ]: nothing -> record<result: string, response: string, data: record<id: string, type: string, attributes: record<title: record, altTitles: list, description: record, isLocked: bool, links: record, officialLinks: record, originalLanguage: string, lastVolume: string, lastChapter: string, publicationDemographic: string, status: string, year: int, contentRating: string, chapterNumbersResetOnNewVolume: bool, availableTranslatedLanguages: list, latestUploadedChapter: string, tags: list, state: string, version: int, createdAt: string, updatedAt: string>, relationships: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includes[]" $includes "scalar") (serialize-qp "contentRating[]" $contentRating "multi") (serialize-qp "includedTags[]" $includedTags "multi") (serialize-qp "includedTagsMode" $includedTagsMode "scalar") (serialize-qp "excludedTags[]" $excludedTags "multi") (serialize-qp "excludedTagsMode" $excludedTagsMode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "includes[]" $includes "multi") (serialize-qp "contentRating[]" $contentRating "multi") (serialize-qp "includedTags[]" $includedTags "multi") (serialize-qp "includedTagsMode" $includedTagsMode "scalar") (serialize-qp "excludedTags[]" $excludedTags "multi") (serialize-qp "excludedTagsMode" $excludedTagsMode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/manga/random" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2015,11 +2016,11 @@ export def "user-follows-group get-user-follows-group" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # default: 10
   --offset: int
-  --includes: string
+  --includes: list
 ]: nothing -> record<result: string, response: string, data: table<id: string, type: string, attributes: record, relationships: list>, limit: int, offset: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "includes[]" $includes "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "includes[]" $includes "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/user/follows/group" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2108,11 +2109,11 @@ export def "user-follows-manga get-user-follows-manga" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # default: 10
   --offset: int
-  --includes: string
+  --includes: list
 ]: nothing -> record<result: string, response: string, data: table<id: string, type: string, attributes: record, relationships: list>, limit: int, offset: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "includes[]" $includes "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "includes[]" $includes "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/user/follows/manga" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2274,11 +2275,11 @@ export def "manga-draft get-manga-id-draft" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includes: string
+  --includes: list
 ]: nothing -> record<result: string, response: string, data: record<id: string, type: string, attributes: record<title: record, altTitles: list, description: record, isLocked: bool, links: record, officialLinks: record, originalLanguage: string, lastVolume: string, lastChapter: string, publicationDemographic: string, status: string, year: int, contentRating: string, chapterNumbersResetOnNewVolume: bool, availableTranslatedLanguages: list, latestUploadedChapter: string, tags: list, state: string, version: int, createdAt: string, updatedAt: string>, relationships: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includes[]" $includes "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "includes[]" $includes "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/manga/draft/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2327,11 +2328,11 @@ export def "manga-draft get-manga-drafts" [
   --offset: int
   --state: string@state-completer-1
   --order: record # default: {createdAt: desc}
-  --includes: string
+  --includes: list
 ]: nothing -> record<result: string, response: string, data: record<id: string, type: string, attributes: record<title: record, altTitles: list, description: record, isLocked: bool, links: record, officialLinks: record, originalLanguage: string, lastVolume: string, lastChapter: string, publicationDemographic: string, status: string, year: int, contentRating: string, chapterNumbersResetOnNewVolume: bool, availableTranslatedLanguages: list, latestUploadedChapter: string, tags: list, state: string, version: int, createdAt: string, updatedAt: string>, relationships: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "order" $order "deepObject") (serialize-qp "includes[]" $includes "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "order" $order "deepObject") (serialize-qp "includes[]" $includes "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/manga/draft" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2407,11 +2408,11 @@ export def "report get-reports" [
   --objectId: string # format: uuid
   --status: string@status-completer-2
   --order: record # default: {createdAt: desc}
-  --includes: string
+  --includes: list
 ]: nothing -> record<result: string, response: string, data: table<id: string, type: string, attributes: record, relationships: list>, limit: int, offset: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "reasonId" $reasonId "scalar") (serialize-qp "objectId" $objectId "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "order" $order "deepObject") (serialize-qp "includes[]" $includes "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "category" $category "scalar") (serialize-qp "reasonId" $reasonId "scalar") (serialize-qp "objectId" $objectId "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "order" $order "deepObject") (serialize-qp "includes[]" $includes "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/report" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2701,11 +2702,11 @@ export def "manga-relation get-manga-relation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --includes: string
+  --includes: list
 ]: nothing -> record<result: string, response: string, data: table<id: string, type: string, attributes: record, relationships: list>, limit: int, offset: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "includes[]" $includes "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "includes[]" $includes "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/manga/($mangaId)/relation" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

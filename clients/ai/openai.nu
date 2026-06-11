@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -98,6 +99,7 @@ def purpose-completer-1 [] { ["assistants" "batch" "fine-tune" "vision"] }
 def filter-completer [] { ["cancelled" "completed" "failed" "in_progress"] }
 def seconds-completer [] { ["12" "4" "8"] }
 def size-completer-1 [] { ["1024x1792" "1280x720" "1792x1024" "720x1280"] }
+def variant-completer [] { ["spritesheet" "thumbnail" "video"] }
 def accept-completer-2 [] { ["application/json" "image/webp" "video/mp4"] }
 def truncation-completer [] { ["auto" "disabled"] }
 def accept-completer-3 [] { ["application/json" "application/zip"] }
@@ -5827,7 +5829,7 @@ export def "videos ListVideos" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Number of items to retrieve
-  --order: string # Sort order of results by timestamp. Use `asc` for ascending order or `desc` for descending order.
+  --order: string@order-completer # Sort order of results by timestamp. Use `asc` for ascending order or `desc` for descending order.
   --after: string # Identifier for the last item from the previous pagination request
 ]: nothing -> record<object: string, data: table<id: string, object: string, model: any, status: string, progress: int, created_at: int, completed_at: any, expires_at: any, prompt: any, size: string, seconds: string, remixed_from_video_id: any, error: any>, first_id: any, last_id: any, has_more: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6000,7 +6002,7 @@ export def "videos-content RetrieveVideoContent" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-2 # Response content type
-  --variant: string # Which downloadable asset to return. Defaults to the MP4 video.
+  --variant: string@variant-completer # Which downloadable asset to return. Defaults to the MP4 video.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6141,7 +6143,7 @@ export def "skills ListSkills" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Number of items to retrieve
-  --order: string # Sort order of results by timestamp. Use `asc` for ascending order or `desc` for descending order.
+  --order: string@order-completer # Sort order of results by timestamp. Use `asc` for ascending order or `desc` for descending order.
   --after: string # Identifier for the last item from the previous pagination request
 ]: nothing -> record<object: string, data: table<id: string, object: string, name: string, description: string, created_at: int, default_version: string, latest_version: string>, first_id: any, last_id: any, has_more: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6287,7 +6289,7 @@ export def "skills-versions ListSkillVersions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Number of versions to retrieve.
-  --order: string # Sort order of results by version number.
+  --order: string@order-completer # Sort order of results by version number.
   --after: string # The skill version ID to start after. (e.g. skillver_123)
 ]: nothing -> record<object: string, data: table<object: string, id: string, skill_id: string, version: string, created_at: int, name: string, description: string>, first_id: any, last_id: any, has_more: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6438,7 +6440,7 @@ export def "chatkit-threads-items ListThreadItemsMethod" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Maximum number of thread items to return. Defaults to 20.
-  --order: string # Sort order for results by creation time. Defaults to `desc`.
+  --order: string@order-completer # Sort order for results by creation time. Defaults to `desc`.
   --after: string # List items created after this thread item ID. Defaults to null for the first page.
   --before: string # List items created before this thread item ID. Defaults to null for the newest results.
 ]: nothing -> record<object: string, data: list<any>, first_id: any, last_id: any, has_more: bool> {
@@ -6508,7 +6510,7 @@ export def "chatkit-threads ListThreadsMethod" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Maximum number of thread items to return. Defaults to 20.
-  --order: string # Sort order for results by creation time. Defaults to `desc`.
+  --order: string@order-completer # Sort order for results by creation time. Defaults to `desc`.
   --after: string # List items created after this thread item ID. Defaults to null for the first page.
   --before: string # List items created before this thread item ID. Defaults to null for the newest results.
   --user: string # Filter threads that belong to this user identifier. Defaults to null to return all users.

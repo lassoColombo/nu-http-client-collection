@@ -19,17 +19,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -65,7 +66,12 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def service-tier-completer [] { ["auto" "standard_only"] }
+def view-completer [] { ["basic" "full"] }
+def order-completer [] { ["asc" "desc"] }
+def operation-completer [] { ["created" "deleted" "modified"] }
 def type-completer [] { ["file"] }
+def status-completer [] { ["active" "paused"] }
+def trigger-type-completer [] { ["manual" "schedule"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -1595,7 +1601,7 @@ export def "memory-stores-memories-betatrue BetaCreateMemory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --view: string # Query parameter for view
+  --view: string@view-completer # Query parameter for view
   --anthropic-version: string
   --anthropic-beta: string
   path: string # Hierarchical path for the new memory, e.g. `/projects/foo/notes.md`. Must start with `/`, contain at least one non-empty segment, and be at most 1,024 bytes. Must not contain empty segments, `.` or `..` segments, control or format characters, and must be NFC-normalized. Paths are case-sensitive.
@@ -1631,10 +1637,10 @@ export def "memory-stores-memories-betatrue BetaListMemories" [
   --path-prefix: string # Optional path prefix filter (raw string-prefix match; include a trailing slash for directory-scoped lists). This value appears in request URLs. Do not include secrets or personally identifiable information.
   --depth: int # Query parameter for depth (format: int32)
   --order-by: string # Query parameter for order_by
-  --order: string # Query parameter for order
+  --order: string@order-completer # Query parameter for order
   --limit: int # Query parameter for limit (format: int32)
   --page: string # Query parameter for page
-  --view: string # Query parameter for view
+  --view: string@view-completer # Query parameter for view
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -1664,7 +1670,7 @@ export def "memory-stores-memories BetaGetMemory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --view: string # Query parameter for view
+  --view: string@view-completer # Query parameter for view
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -1694,7 +1700,7 @@ export def "memory-stores-memories BetaUpdateMemory" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --view: string # Query parameter for view
+  --view: string@view-completer # Query parameter for view
   --anthropic-version: string
   --anthropic-beta: string
   --content: string # New UTF-8 text content for the memory. Maximum 100 kB (102,400 bytes). Omit to leave the content unchanged (e.g., for a rename-only update). (nullable)
@@ -1761,12 +1767,12 @@ export def "memory-stores-memory-versions-betatrue BetaListMemoryVersions" [
   --memory-id: string # Query parameter for memory_id
   --session-id: string # Query parameter for session_id
   --api-key-id: string # Query parameter for api_key_id
-  --operation: string # Query parameter for operation
-  --created-atgte: string # Return versions created at or after this time (inclusive).
-  --created-atlte: string # Return versions created at or before this time (inclusive).
+  --operation: string@operation-completer # Query parameter for operation
+  --created-atgte: string # Return versions created at or after this time (inclusive). (format: date-time)
+  --created-atlte: string # Return versions created at or before this time (inclusive). (format: date-time)
   --limit: int # Query parameter for limit (format: int32)
   --page: string # Query parameter for page
-  --view: string # Query parameter for view
+  --view: string@view-completer # Query parameter for view
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -1796,7 +1802,7 @@ export def "memory-stores-memory-versions BetaGetMemoryVersion" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --view: string # Query parameter for view
+  --view: string@view-completer # Query parameter for view
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -1886,8 +1892,8 @@ export def "memory-stores-betatrue BetaListMemoryStores" [
   --limit: int # Maximum number of stores to return per page. Must be between 1 and 100. Defaults to 20 when omitted. (format: int32)
   --page: string # Opaque pagination cursor (a `page_...` value). Pass the `next_page` value from a previous response to fetch the next page; omit for the first page.
   --include-archived: string@bool-completer # When `true`, archived stores are included in the results. Defaults to `false` (archived stores are excluded).
-  --created-atgte: string # Return only stores whose `created_at` is at or after this time (inclusive). Sent on the wire as `created_at[gte]`.
-  --created-atlte: string # Return only stores whose `created_at` is at or before this time (inclusive). Sent on the wire as `created_at[lte]`.
+  --created-atgte: string # Return only stores whose `created_at` is at or after this time (inclusive). Sent on the wire as `created_at[gte]`. (format: date-time)
+  --created-atlte: string # Return only stores whose `created_at` is at or before this time (inclusive). Sent on the wire as `created_at[lte]`. (format: date-time)
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -2065,7 +2071,7 @@ export def "user-profiles-betatrue BetaListUserProfiles" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Query parameter for limit (format: int32)
   --page: string # Query parameter for page
-  --order: string # Query parameter for order
+  --order: string@order-completer # Query parameter for order
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -2216,13 +2222,13 @@ export def "sessions-betatrue BetaListSessions" [
   --limit: int # Maximum number of results to return. (format: int32)
   --page: string # Opaque pagination cursor from a previous response.
   --include-archived: string@bool-completer # When true, includes archived sessions. Default: false (exclude archived).
-  --created-atgte: string # Return sessions created at or after this time (inclusive).
-  --created-atgt: string # Return sessions created after this time (exclusive).
-  --created-atlte: string # Return sessions created at or before this time (inclusive).
-  --created-atlt: string # Return sessions created before this time (exclusive).
+  --created-atgte: string # Return sessions created at or after this time (inclusive). (format: date-time)
+  --created-atgt: string # Return sessions created after this time (exclusive). (format: date-time)
+  --created-atlte: string # Return sessions created at or before this time (inclusive). (format: date-time)
+  --created-atlt: string # Return sessions created before this time (exclusive). (format: date-time)
   --agent-id: string # Filter sessions created with this agent ID.
   --agent-version: int # Filter by agent version. Only applies when agent_id is also set. (format: int32)
-  --order: string # Sort direction for results, ordered by created_at. Defaults to desc (newest first).
+  --order: string@order-completer # Sort direction for results, ordered by created_at. Defaults to desc (newest first).
   --memory-store-id: string # Filter sessions whose resources contain a memory_store with this memory store ID.
   --deployment-id: string # Filter sessions created by this deployment ID.
   --statuses: list # Filter by session status. Repeat the parameter to match any of multiple statuses.
@@ -2343,12 +2349,12 @@ export def "sessions-events-betatrue BetaListEvents" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Query parameter for limit (format: int32)
   --page: string # Opaque pagination cursor from a previous response's next_page.
-  --order: string # Sort direction for results, ordered by created_at. Defaults to asc (chronological).
+  --order: string@order-completer # Sort direction for results, ordered by created_at. Defaults to asc (chronological).
   --types: list # Filter by event type. Values match the `type` field on returned events (for example, `user.message` or `agent.tool_use`). Omit to return all event types.
-  --created-atgte: string # Return events created at or after this time (inclusive).
-  --created-atgt: string # Return events created after this time (exclusive).
-  --created-atlte: string # Return events created at or before this time (inclusive).
-  --created-atlt: string # Return events created before this time (exclusive).
+  --created-atgte: string # Return events created at or after this time (inclusive). (format: date-time)
+  --created-atgt: string # Return events created after this time (exclusive). (format: date-time)
+  --created-atlte: string # Return events created at or before this time (inclusive). (format: date-time)
+  --created-atlt: string # Return events created before this time (exclusive). (format: date-time)
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
@@ -2796,8 +2802,8 @@ export def "agents-betatrue BetaListAgents" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Maximum results per page. Default 20, maximum 100. (format: int32)
   --page: string # Opaque pagination cursor from a previous response.
-  --created-atgte: string # Return agents created at or after this time (inclusive).
-  --created-atlte: string # Return agents created at or before this time (inclusive).
+  --created-atgte: string # Return agents created at or after this time (inclusive). (format: date-time)
+  --created-atlte: string # Return agents created at or before this time (inclusive). (format: date-time)
   --include-archived: string@bool-completer # Include archived agents in results. Defaults to false.
   --x-api-key: string
   --anthropic-version: string
@@ -2990,9 +2996,9 @@ export def "deployments-betatrue BetaListDeployments" [
   --limit: int # Maximum results per page. Default 20, maximum 100. (format: int32)
   --page: string # Opaque pagination cursor.
   --agent-id: string # Filter by agent ID.
-  --status: string # Filter by status: active or paused. Omit for both. To include archived deployments, use include_archived instead; the two cannot be combined.
-  --created-atgte: string # Return deployments created at or after this time (inclusive).
-  --created-atlte: string # Return deployments created at or before this time (inclusive).
+  --status: string@status-completer # Filter by status: active or paused. Omit for both. To include archived deployments, use include_archived instead; the two cannot be combined.
+  --created-atgte: string # Return deployments created at or after this time (inclusive). (format: date-time)
+  --created-atlte: string # Return deployments created at or before this time (inclusive). (format: date-time)
   --include-archived: string@bool-completer # When true, includes archived deployments. Default: false (exclude archived).
   --x-api-key: string
   --anthropic-version: string
@@ -3193,12 +3199,12 @@ export def "deployment-runs-betatrue BetaListDeploymentRuns" [
   --limit: int # Maximum results per page. Default 20, maximum 1000. (format: int32)
   --page: string # Opaque pagination cursor. Pass next_page from the previous response. Invalid or expired cursors return 400.
   --deployment-id: string # Filter to a specific deployment. Omit to list across all deployments in the workspace. Filtering by a non-existent deployment_id returns 200 with empty data.
-  --trigger-type: string # Filter runs by what triggered them. Omit to return all runs.
+  --trigger-type: string@trigger-type-completer # Filter runs by what triggered them. Omit to return all runs.
   --has-error: string@bool-completer # Filter: true for runs with non-null error, false for runs with non-null session_id. Omit for all.
-  --created-atgte: string # Return runs created at or after this time (inclusive).
-  --created-atlte: string # Return runs created at or before this time (inclusive).
-  --created-atgt: string # Return runs created strictly after this time (exclusive).
-  --created-atlt: string # Return runs created strictly before this time (exclusive).
+  --created-atgte: string # Return runs created at or after this time (inclusive). (format: date-time)
+  --created-atlte: string # Return runs created at or before this time (inclusive). (format: date-time)
+  --created-atgt: string # Return runs created strictly after this time (exclusive). (format: date-time)
+  --created-atlt: string # Return runs created strictly before this time (exclusive). (format: date-time)
   --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string

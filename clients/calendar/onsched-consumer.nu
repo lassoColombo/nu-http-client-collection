@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -64,6 +65,9 @@ def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://sandbox-api.onsched.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def scope-completer [] { ["all" "company" "location"] }
+def sortOrder-completer [] { ["name" "natural"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -999,12 +1003,12 @@ export def "consumer-services list" [
   --serviceGroupId: int # Filter by groupId (format: int32)
   --defaultService: string@bool-completer # Filter by default service, default is false
   --allLocations: string@bool-completer # Search All Locations, default is false
-  --scope: string # Filter by scope, Company, Location or All, default is All
+  --scope: string@scope-completer # Filter by scope, Company, Location or All, default is All
   --name: string # Filter by Name, supports Partial name search
   --serviceId: string # Filter by ServiceId, using this parameter would ignore all other parameters
   --offset: int # Starting row of page, default 0 (format: int32)
   --limit: int # Page limit default 20, max 100 (format: int32)
-  --sortOrder: string # Sort results using Natural Sort or Sorted alphabetically by Service Names, default is natural
+  --sortOrder: string@sortOrder-completer # Sort results using Natural Sort or Sorted alphabetically by Service Names, default is natural
   --sortDescending: string@bool-completer # Sort results in Descending Order, default true
 ]: nothing -> record<count: int, data: table<availability: record, bookAheadUnit: int, bookAheadValue: int, bookInAdvance: int, bookingInterval: int, bookingLimit: int, calendarId: string, calendarResourceGroupId: string, cancellationFeeAmount: float, cancellationFeeTaxable: bool, companyId: string, consumerPadding: bool, customFields: record, dailyBookingLimitCount: int, dailyBookingLimitMinutes: int, defaultService: bool, description: string, duration: int, durationInterval: int, durationMax: int, durationMin: int, durationSelect: bool, feeAmount: float, feeTaxable: bool, id: string, imageUrl: string, locationId: string, maxBookingLimit: int, maxCapacity: int, maxGroupSize: int, maxResourceBookingLimit: int, mediaPageUrl: string, name: string, nonRefundable: bool, object: string, padding: int, roundRobin: int, serviceGroupId: int, serviceGroupName: string, showOnline: bool, type: string>, hasMore: bool, object: string, total: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

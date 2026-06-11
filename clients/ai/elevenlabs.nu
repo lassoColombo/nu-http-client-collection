@@ -19,17 +19,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -80,19 +81,28 @@ def accept-completer [] { ["audio/mpeg" "video/mp4"] }
 def format-type-completer [] { ["json" "srt" "webvtt"] }
 def accept-completer-1 [] { ["application/json" "text/plain"] }
 def category-completer [] { ["famous" "high_quality" "professional"] }
+def breakdown-type-completer [] { ["all_api_keys" "api_keys" "groups" "has_api_key" "model" "none" "product_type" "region" "reporting_workspace_id" "request_queue" "request_source" "resource" "subresource_id" "user" "voice" "voice_multiplier"] }
+def aggregation-interval-completer [] { ["cumulative" "day" "hour" "month" "week"] }
+def metric-completer [] { ["concurrency" "concurrency_average" "credits" "fiat_units_spent" "minutes_used" "request_count" "ttfb_avg" "ttfb_p95" "tts_characters"] }
 def algorithm-completer [] { ["HS256" "HS384" "HS512" "RS256" "RS384" "RS512"] }
 def token-response-field-completer [] { ["access_token" "id_token"] }
-def role-completer [] { ["admin" "commenter" "editor" "viewer"] }
 def resource-type-completer [] { ["assets" "avatar_video_generations" "avatars" "content_generations" "content_templates" "convai_agent_branches" "convai_agent_drafts" "convai_agent_response_tests" "convai_agent_versions" "convai_agent_versions_deployments" "convai_agents" "convai_api_integration_connections" "convai_api_integration_trigger_connections" "convai_batch_calls" "convai_coaching_proposals" "convai_crawl_jobs" "convai_crawl_tasks" "convai_knowledge_base_documents" "convai_mcp_servers" "convai_memory_entries" "convai_phone_numbers" "convai_secrets" "convai_settings" "convai_templates" "convai_test_suite_invocations" "convai_tools" "convai_whatsapp_accounts" "dashboard" "dashboard_configuration" "dubbing" "project" "pronunciation_dictionary" "resource_collection" "resource_locators" "songs" "studio_projects" "transcription_tasks" "voice" "voice_collection" "workspace_auth_connections"] }
+def role-completer [] { ["admin" "commenter" "editor" "viewer"] }
 def model-id-completer-2 [] { ["scribe_v1" "scribe_v2"] }
 def timestamps-granularity-completer [] { ["character" "none" "word"] }
 def file-format-completer [] { ["other" "pcm_s16le_16"] }
 def direction-completer [] { ["inbound" "outbound"] }
+def sort-direction-completer [] { ["asc" "desc"] }
 def sort-mode-completer [] { ["default" "folders_first"] }
+def sharing-mode-completer [] { ["all" "shared_with_me"] }
 def summary-mode-completer [] { ["exclude" "include"] }
+def sort-by-completer [] { ["conversation_count" "last_contact_unix_secs"] }
 def format-completer [] { ["json" "opentelemetry"] }
+def sort-by-completer-1 [] { ["created_at" "search_score"] }
 def api-subdomain-completer [] { ["api.exotel.com" "api.in.exotel.com"] }
 def model-completer [] { ["e5_mistral_7b_instruct" "multilingual_e5_large_instruct"] }
+def dependent-type-completer [] { ["all" "direct" "transitive"] }
+def embedding-model-completer [] { ["e5_mistral_7b_instruct" "multilingual_e5_large_instruct"] }
 def default-livekit-stack-completer [] { ["standard" "static"] }
 def approval-policy-completer [] { ["auto_approve_all" "require_approval_all" "require_approval_per_tool"] }
 def approval-policy-completer-1 [] { ["auto_approved" "requires_approval"] }
@@ -273,7 +283,7 @@ export def "sound-generation generation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
+  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   text: string # The text that will get converted into a sound effect.
   --body-loop: string@bool-completer # Whether to create a sound effect that loops smoothly. Only available for the 'eleven_text_to_sound_v2 model'. (default: false)
@@ -699,7 +709,7 @@ export def "text-to-dialogue-stream stream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
+  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --enable-logging: string@bool-completer # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   inputs: list # A list of dialogue inputs, each containing text and a voice ID which will be converted into speech. The maximum number of unique voice IDs is 10. For reliable generation, keep the total character count across all `inputs[].text` values at or below 2,000 characters per request. Longer requests can terminate early in streaming responses or return a validation error. — item shape: {text: string, voice_id: string}
@@ -737,7 +747,7 @@ export def "text-to-dialogue-stream-with-timestamps timestamps" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
+  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --enable-logging: string@bool-completer # When enable_logging is set to false zero retention mode will be used for the request. This will mean history features are unavailable for this request, including request stitching. Zero retention mode may only be used by enterprise customers. (default: true)
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   inputs: list # A list of dialogue inputs, each containing text and a voice ID which will be converted into speech. The maximum number of unique voice IDs is 10. For reliable generation, keep the total character count across all `inputs[].text` values at or below 2,000 characters per request. Longer requests can terminate early in streaming responses or return a validation error. — item shape: {text: string, voice_id: string}
@@ -892,7 +902,7 @@ export def "text-to-voice-create-previews voice" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_192)
+  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   voice_description: string # Description to use for the created voice.
   --text: any # Text to generate, text length has to be between 100 and 1000.
@@ -961,7 +971,7 @@ export def "text-to-voice-design design" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_192)
+  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   voice_description: string # Description to use for the created voice.
   --model-id: string@model-id-completer # Model to use for the voice generation. Possible values: eleven_multilingual_ttv_v2, eleven_ttv_v3. (default: eleven_multilingual_ttv_v2)
@@ -1005,7 +1015,7 @@ export def "text-to-voice-remix remix" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_192)
+  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   voice_description: string # Description of the changes to make to the voice.
   --text: any # Text to generate, text length has to be between 100 and 1000.
@@ -1448,7 +1458,7 @@ export def "music-video-to-music music" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
+  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   videos: list #              One or more video files sent via FormData array (multipart/form-data). They will be combined into one codec in order.             A maximum of 10 videos is allowed, where the total size of the combined video is limited to 200MB.             In total, the video can be up to 600 seconds long. Note that combining multiple videos may increase the request duration significantly. If possible, combine the videos beforehand.             
   --description: any # Optional text description of the music you want. A maximum of 1000 characters is allowed.
@@ -2978,10 +2988,10 @@ export def "usage-character-stats characters" [
   --start-unix: int # UTC Unix timestamp for the start of the usage window, in milliseconds. To include the first day of the window, the timestamp should be at 00:00:00 of that day.
   --end-unix: int # UTC Unix timestamp for the end of the usage window, in milliseconds. To include the last day of the window, the timestamp should be at 23:59:59 of that day.
   --include-workspace-metrics: string@bool-completer # Whether or not to include the statistics of the entire workspace. (default: false)
-  --breakdown-type: string # How to break down the information. Cannot be "user" if include_workspace_metrics is False. (default: none)
-  --aggregation-interval: string # How to aggregate usage data over time. Can be "hour", "day", "week", "month", or "cumulative". (default: day)
+  --breakdown-type: string@breakdown-type-completer # How to break down the information. Cannot be "user" if include_workspace_metrics is False.
+  --aggregation-interval: string@aggregation-interval-completer # How to aggregate usage data over time. Can be "hour", "day", "week", "month", or "cumulative".
   --aggregation-bucket-size: string # Aggregation bucket size in seconds. Overrides the aggregation interval.
-  --metric: string # Which metric to aggregate. (default: credits)
+  --metric: string@metric-completer # Which metric to aggregate.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<time: list<int>, usage: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3846,7 +3856,7 @@ export def "workspace-resources metadata" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --resource-type: string # Resource type of the target resource.
+  --resource-type: string@resource-type-completer # Resource type of the target resource.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<resource_id: string, resource_name: any, resource_type: string, creator_user_id: any, anonymous_access_level_override: any, role_to_group_ids: record, share_options: table<name: string, id: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4704,7 +4714,7 @@ export def "convai-agents route" [
   --archived: string # Filter agents by archived status (default: false)
   --show-only-owned-agents: string@bool-completer # If set to true, the endpoint will omit any agents that were shared with you by someone else and include only the ones you own. Deprecated: use created_by_user_id instead. (DEPRECATED, default: false)
   --created-by-user-id: string # Filter agents by creator user ID. When set, only agents created by this user are returned. Takes precedence over show_only_owned_agents. Use '@me' to refer to the authenticated user.
-  --sort-direction: string # The direction to sort the results (default: desc)
+  --sort-direction: string@sort-direction-completer # The direction to sort the results
   --sort-by: string # The field to sort the results by
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -5207,7 +5217,7 @@ export def "convai-agent-testing route" [
   --types: string # If present, the endpoint will return only tests/folders of the given types.
   --include-folders: string # Deprecated. Use the `types` query param and include `folder` instead. (DEPRECATED)
   --sort-mode: string@sort-mode-completer # Sort mode for listing tests. Use 'folders_first' to place folders before tests. (default: default)
-  --sharing-mode: string # Filter test visibility. Use `shared_with_me` to return only tests/folders shared with the current user that they did not create. (default: all)
+  --sharing-mode: string@sharing-mode-completer # Filter test visibility. Use `shared_with_me` to return only tests/folders shared with the current user that they did not create.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<tests: table<id: string, name: string, access_info: any, created_at_unix_secs: int, last_updated_at_unix_secs: int, type: string, entity_type: string, folder_parent_id: any, folder_path: list, children_count: any, conversation_initiation_source: any>, next_cursor: any, has_more: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5410,7 +5420,7 @@ export def "convai-users route" [
   --call-start-after-unix: string # Unix timestamp (in seconds) to filter conversations after to this start date.
   --search: string # Search/filter by user ID (exact match).
   --page-size: int # How many users to return at maximum. Defaults to 30. (default: 30)
-  --sort-by: string # The field to sort the results by. Defaults to last_contact_unix_secs. (default: last_contact_unix_secs)
+  --sort-by: string@sort-by-completer # The field to sort the results by. Defaults to last_contact_unix_secs.
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<users: table<user_id: string, last_contact_unix_secs: int, first_contact_unix_secs: int, conversation_count: int, last_contact_agent_id: any, last_contact_conversation_id: string, last_contact_agent_name: any>, next_cursor: any, has_more: bool> {
@@ -5591,7 +5601,7 @@ export def "convai-conversations-messages-text-search route" [
   --text-only: string
   --branch-id: string # Filter conversations by branch ID.
   --topic-ids: string # Filter conversations by topic IDs assigned during topic discovery.
-  --sort-by: string # Sort order for search results. 'search_score' sorts by search score, 'created_at' sorts by conversation start time. (default: search_score)
+  --sort-by: string@sort-by-completer-1 # Sort order for search results. 'search_score' sorts by search score, 'created_at' sorts by conversation start time.
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
 ]: nothing -> record<meta: record<total: any, page: any, page_size: any>, results: table<conversation_id: string, agent_id: string, agent_name: any, transcript_index: int, chunk_text: string, chunk_highlights: any, score: float, conversation_start_time_unix_secs: int>, next_cursor: any, has_more: bool> {
@@ -6228,7 +6238,7 @@ export def "convai-knowledge-base route" [
   --parent-folder-id: string # If set, the endpoint will return only documents that are direct children of the given folder.
   --ancestor-folder-id: string # If set, the endpoint will return only documents that are descendants of the given folder.
   --folders-first: string@bool-completer # Whether folders should be returned first in the list of documents. (default: false)
-  --sort-direction: string # The direction to sort the results (default: desc)
+  --sort-direction: string@sort-direction-completer # The direction to sort the results
   --sort-by: string # The field to sort the results by
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -6684,7 +6694,7 @@ export def "convai-knowledge-base-dependent-agents agents" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dependent-type: string # Type of dependent agents to return. (default: all)
+  --dependent-type: string@dependent-type-completer # Type of dependent agents to return.
   --page-size: int # How many documents to return at maximum. Can not exceed 100, defaults to 30. (default: 30)
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -6791,7 +6801,7 @@ export def "convai-knowledge-base-chunks base" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --embedding-model: string # The embedding model used to retrieve the chunk.
+  --embedding-model: string@embedding-model-completer # The embedding model used to retrieve the chunk. (default: e5_mistral_7b_instruct)
   --page-size: int # How many documents to return at maximum. Can not exceed 100, defaults to 30. (default: 30)
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -6937,7 +6947,7 @@ export def "convai-tools route-1" [
   --show-only-owned-documents: string@bool-completer # If set to true, the endpoint will return only tools owned by you (and not shared from somebody else). Deprecated: use created_by_user_id instead. (DEPRECATED, default: false)
   --created-by-user-id: string # Filter tools by creator user ID. When set, only tools created by this user are returned. Takes precedence over show_only_owned_documents. Use '@me' to refer to the authenticated user.
   --types: string # If present, the endpoint will return only tools of the given types.
-  --sort-direction: string # The direction to sort the results (default: desc)
+  --sort-direction: string@sort-direction-completer # The direction to sort the results
   --sort-by: string # The field to sort the results by
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -8357,7 +8367,7 @@ export def "speech-engine engines" [
   --allow-errors(-e) # Return full response without error handling
   --page-size: int # How many Speech Engines to return at maximum. Can not exceed 100, defaults to 30. (default: 30)
   --search: string # Search term to filter Speech Engines by name
-  --sort-direction: string # The direction to sort the results (default: desc)
+  --sort-direction: string@sort-direction-completer # The direction to sort the results
   --sort-by: string # The field to sort the results by
   --cursor: string # Used for fetching next page. Cursor is returned in the response.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
@@ -8692,7 +8702,7 @@ export def "music generate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
+  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --prompt: any # A simple text prompt to generate a song from. Cannot be used in conjunction with `composition_plan`.
   --generation-mode: any # Optional generation mode hint for prompt-based music generation. Can only be used with `prompt`.
@@ -8737,7 +8747,7 @@ export def "music-detailed detailed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
+  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --prompt: any # A simple text prompt to generate a song from. Cannot be used in conjunction with `composition_plan`.
   --generation-mode: any # Optional generation mode hint for prompt-based music generation. Can only be used with `prompt`.
@@ -8784,7 +8794,7 @@ export def "music-stream compose" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
+  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   --prompt: any # A simple text prompt to generate a song from. Cannot be used in conjunction with `composition_plan`.
   --generation-mode: any # Optional generation mode hint for prompt-based music generation. Can only be used with `prompt`.
@@ -8856,7 +8866,7 @@ export def "music-stem-separation stems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs. (default: mp3_44100_128)
+  --output-format: string@output-format-completer # Output format of the generated audio. Formatted as codec_sample_rate_bitrate. So an mp3 with 22.05kHz sample rate at 32kbs is represented as mp3_22050_32. MP3 with 192kbps bitrate requires you to be subscribed to Creator tier or above. PCM with 44.1kHz sample rate requires you to be subscribed to Pro tier or above. Note that the μ-law format (sometimes written mu-law, often approximated as u-law) is commonly used for Twilio audio inputs.
   --xi-api-key: string # Your API key. This is required by most endpoints to access our API programmatically. You can view your xi-api-key using the 'Profile' tab on the website.
   file: string # The audio file to separate into stems. (format: binary)
   --stem-variation-id: string@stem-variation-id-completer # The id of the stem variation to use. (default: six_stems_v1)

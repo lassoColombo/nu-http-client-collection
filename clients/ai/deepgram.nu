@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -64,6 +65,20 @@ def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://agent.deepgram.com" "https://api.deepgram.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def callback-method-completer [] { ["POST" "PUT"] }
+def custom-topic-mode-completer [] { ["extended" "strict"] }
+def custom-intent-mode-completer [] { ["extended" "strict"] }
+def diarize-model-completer [] { ["latest" "v1" "v2"] }
+def encoding-completer [] { ["amr-nb" "amr-wb" "flac" "g729" "linear16" "mulaw" "opus" "speex"] }
+def model-completer [] { ["aura-2-alvaro-es" "aura-2-amalthea-en" "aura-2-andromeda-en" "aura-2-apollo-en" "aura-2-aquila-es" "aura-2-arcas-en" "aura-2-aries-en" "aura-2-asteria-en" "aura-2-athena-en" "aura-2-atlas-en" "aura-2-aurora-en" "aura-2-callista-en" "aura-2-carina-es" "aura-2-celeste-es" "aura-2-cora-en" "aura-2-cordelia-en" "aura-2-delia-en" "aura-2-diana-es" "aura-2-draco-en" "aura-2-electra-en" "aura-2-estrella-es" "aura-2-harmonia-en" "aura-2-helena-en" "aura-2-hera-en" "aura-2-hermes-en" "aura-2-hyperion-en" "aura-2-iris-en" "aura-2-janus-en" "aura-2-javier-es" "aura-2-juno-en" "aura-2-jupiter-en" "aura-2-luna-en" "aura-2-mars-en" "aura-2-minerva-en" "aura-2-neptune-en" "aura-2-nestor-es" "aura-2-odysseus-en" "aura-2-ophelia-en" "aura-2-orion-en" "aura-2-orpheus-en" "aura-2-pandora-en" "aura-2-phoebe-en" "aura-2-pluto-en" "aura-2-saturn-en" "aura-2-selena-es" "aura-2-selene-en" "aura-2-sirio-es" "aura-2-thalia-en" "aura-2-theia-en" "aura-2-vesta-en" "aura-2-zeus-en" "aura-angus-en" "aura-arcas-en" "aura-asteria-en" "aura-athena-en" "aura-helios-en" "aura-hera-en" "aura-luna-en" "aura-orion-en" "aura-orpheus-en" "aura-perseus-en" "aura-stella-en" "aura-zeus-en"] }
+def status-completer [] { ["active" "expired"] }
+def deployment-completer [] { ["beta" "hosted" "self-hosted"] }
+def endpoint-completer [] { ["agent" "listen" "read" "speak"] }
+def method-completer [] { ["async" "streaming" "sync"] }
+def status-completer-1 [] { ["failed" "succeeded"] }
+def grouping-completer [] { ["accessor" "deployment" "endpoint" "feature_set" "method" "models" "tags"] }
+def provider-completer [] { ["quay"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -398,41 +413,41 @@ export def "listen transcribe" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --callback: string # URL to which we'll make the callback request
-  --callback-method: string # HTTP method by which the callback request will be made (default: POST)
+  --callback-method: string@callback-method-completer # HTTP method by which the callback request will be made (default: POST)
   --extra: string # Arbitrary key-value pairs that are attached to the API response for usage in downstream processing
   --sentiment: string@bool-completer # Recognizes the sentiment throughout a transcript or text (default: false)
   --summarize: string # Summarize content. For Listen API, supports string version option. For Read API, accepts boolean only.
   --tag: string # Label your requests for the purpose of identification during usage reporting
   --topics: string@bool-completer # Detect topics throughout a transcript or text (default: false)
   --custom-topic: string # Custom topics you want the model to detect within your input audio or text if present Submit up to `100`.
-  --custom-topic-mode: string # Sets how the model will interpret strings submitted to the `custom_topic` param. When `strict`, the model will only return topics submitted using the `custom_topic` param. When `extended`, the model will return its own detected topics in addition to those submitted using the `custom_topic` param (default: extended)
+  --custom-topic-mode: string@custom-topic-mode-completer # Sets how the model will interpret strings submitted to the `custom_topic` param. When `strict`, the model will only return topics submitted using the `custom_topic` param. When `extended`, the model will return its own detected topics in addition to those submitted using the `custom_topic` param (default: extended)
   --intents: string@bool-completer # Recognizes speaker intent throughout a transcript or text (default: false)
   --custom-intent: string # Custom intents you want the model to detect within your input audio if present
-  --custom-intent-mode: string # Sets how the model will interpret intents submitted to the `custom_intent` param. When `strict`, the model will only return intents submitted using the `custom_intent` param. When `extended`, the model will return its own detected intents in the `custom_intent` param. (default: extended)
+  --custom-intent-mode: string@custom-intent-mode-completer # Sets how the model will interpret intents submitted to the `custom_intent` param. When `strict`, the model will only return intents submitted using the `custom_intent` param. When `extended`, the model will return its own detected intents in the `custom_intent` param. (default: extended)
   --detect-entities: string@bool-completer # Identifies and extracts key entities from content in submitted audio (default: false)
   --detect-language: string # Identifies the dominant language spoken in submitted audio
   --diarize: string@bool-completer # Recognize speaker changes. Each word in the transcript will be assigned a speaker number starting at 0 (default: false)
-  --diarize-model: string # Select and enable a specific batch diarization model version. If specifying this parameter, you should not set the deprecated `diarize=true` parameter. Not accepted on streaming requests.
+  --diarize-model: string@diarize-model-completer # Select and enable a specific batch diarization model version. If specifying this parameter, you should not set the deprecated `diarize=true` parameter. Not accepted on streaming requests.
   --dictation: string@bool-completer # Dictation mode for controlling formatting with dictated speech (default: false)
-  --encoding: string # Specify the expected encoding of your submitted audio
+  --encoding: string@encoding-completer # Specify the expected encoding of your submitted audio
   --filler-words: string@bool-completer # Filler Words can help transcribe interruptions in your audio, like "uh" and "um" (default: false)
   --keyterm: list # Key term prompting can boost or suppress specialized terminology and brands. Only compatible with Nova-3
   --keywords: string # Keywords can boost or suppress specialized terminology and brands
   --language: string # The [BCP-47 language tag](https://tools.ietf.org/html/bcp47) that hints at the primary spoken language. Depending on the Model and API endpoint you choose only certain languages are available (default: en)
   --measurements: string@bool-completer # Spoken measurements will be converted to their corresponding abbreviations (default: false)
-  --model: string # AI model used to process submitted audio (default: base-general)
+  --model: string # AI model used to process submitted audio
   --multichannel: string@bool-completer # Transcribe each audio channel independently (default: false)
   --numerals: string@bool-completer # Numerals converts numbers from written format to numerical format (default: false)
   --paragraphs: string@bool-completer # Splits audio into paragraphs to improve transcript readability (default: false)
   --profanity-filter: string@bool-completer # Profanity Filter looks for recognized profanity and converts it to the nearest recognized non-profane word or removes it from the transcript completely (default: false)
   --punctuate: string@bool-completer # Add punctuation and capitalization to the transcript (default: false)
-  --redact: string # Redaction removes sensitive information from your transcripts (default: false)
+  --redact: string # Redaction removes sensitive information from your transcripts
   --replace: string # Search for terms or phrases in submitted audio and replaces them
   --search: string # Search for terms or phrases in submitted audio
   --smart-format: string@bool-completer # Apply formatting to transcript output. When set to true, additional formatting will be applied to transcripts to improve readability (default: false)
   --utterances: string@bool-completer # Segments speech into meaningful semantic units (default: false)
   --utt-split: float # Seconds to wait before detecting a pause between words in submitted audio (format: double, default: 0.8)
-  --version: string # Version of an AI model to use (default: latest)
+  --version: string # Version of an AI model to use
   --mip-opt-out: string@bool-completer # Opts out requests from the Deepgram Model Improvement Program. Refer to our Docs for pricing impacts before setting this to true. https://dpgr.am/deepgram-mip (default: false)
   --Authorization: string # Use `Authorization: Token <API_KEY>` Example: `Authorization: Token 12345abcdef`
   --body-url: string # format: uri
@@ -464,14 +479,14 @@ export def "speak generate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --callback: string # URL to which we'll make the callback request
-  --callback-method: string # HTTP method by which the callback request will be made (default: POST)
+  --callback-method: string@callback-method-completer # HTTP method by which the callback request will be made (default: POST)
   --mip-opt-out: string@bool-completer # Opts out requests from the Deepgram Model Improvement Program. Refer to our Docs for pricing impacts before setting this to true. https://dpgr.am/deepgram-mip (default: false)
   --tag: string # Label your requests for the purpose of identification during usage reporting
-  --bit-rate: string # The bitrate of the audio in bits per second. Choose from predefined ranges or specific values based on the encoding type. (default: 48000)
-  --container: string # Container specifies the file format wrapper for the output audio. The available options depend on the encoding type. (default: wav)
-  --encoding: string # Encoding allows you to specify the expected encoding of your audio output (default: mp3)
-  --model: string # AI model used to process submitted text (default: aura-asteria-en)
-  --sample-rate: string # Sample Rate specifies the sample rate for the output audio. Based on the encoding, different sample rates are supported. For some encodings, the sample rate is not configurable (default: 24000)
+  --bit-rate: string # The bitrate of the audio in bits per second. Choose from predefined ranges or specific values based on the encoding type.
+  --container: string # Container specifies the file format wrapper for the output audio. The available options depend on the encoding type.
+  --encoding: string # Encoding allows you to specify the expected encoding of your audio output
+  --model: string@model-completer # AI model used to process submitted text (default: aura-asteria-en)
+  --sample-rate: string # Sample Rate specifies the sample rate for the output audio. Based on the encoding, different sample rates are supported. For some encodings, the sample rate is not configurable
   --speed: float # Speaking rate multiplier that adjusts the pace of generated speech while preserving natural prosody and voice quality. Not yet supported in all languages. (format: double, default: 1)
   --Authorization: string # Use `Authorization: Token <API_KEY>` Example: `Authorization: Token 12345abcdef`
   text: string # The text content to be converted to speech
@@ -503,16 +518,16 @@ export def "read analyze" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --callback: string # URL to which we'll make the callback request
-  --callback-method: string # HTTP method by which the callback request will be made (default: POST)
+  --callback-method: string@callback-method-completer # HTTP method by which the callback request will be made (default: POST)
   --sentiment: string@bool-completer # Recognizes the sentiment throughout a transcript or text (default: false)
   --summarize: string # Summarize content. For Listen API, supports string version option. For Read API, accepts boolean only.
   --tag: string # Label your requests for the purpose of identification during usage reporting
   --topics: string@bool-completer # Detect topics throughout a transcript or text (default: false)
   --custom-topic: string # Custom topics you want the model to detect within your input audio or text if present Submit up to `100`.
-  --custom-topic-mode: string # Sets how the model will interpret strings submitted to the `custom_topic` param. When `strict`, the model will only return topics submitted using the `custom_topic` param. When `extended`, the model will return its own detected topics in addition to those submitted using the `custom_topic` param (default: extended)
+  --custom-topic-mode: string@custom-topic-mode-completer # Sets how the model will interpret strings submitted to the `custom_topic` param. When `strict`, the model will only return topics submitted using the `custom_topic` param. When `extended`, the model will return its own detected topics in addition to those submitted using the `custom_topic` param (default: extended)
   --intents: string@bool-completer # Recognizes speaker intent throughout a transcript or text (default: false)
   --custom-intent: string # Custom intents you want the model to detect within your input audio if present
-  --custom-intent-mode: string # Sets how the model will interpret intents submitted to the `custom_intent` param. When `strict`, the model will only return intents submitted using the `custom_intent` param. When `extended`, the model will return its own detected intents in the `custom_intent` param. (default: extended)
+  --custom-intent-mode: string@custom-intent-mode-completer # Sets how the model will interpret intents submitted to the `custom_intent` param. When `strict`, the model will only return intents submitted using the `custom_intent` param. When `extended`, the model will return its own detected intents in the `custom_intent` param. (default: extended)
   --language: string # The [BCP-47 language tag](https://tools.ietf.org/html/bcp47) that hints at the primary spoken language. Depending on the Model and API endpoint you choose only certain languages are available (default: en)
   --Authorization: string # Use `Authorization: Token <API_KEY>` Example: `Authorization: Token 12345abcdef`
   --body-url: string # A URL pointing to the text source (format: uri)
@@ -780,7 +795,7 @@ export def "projects-keys list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string # Only return keys with a specific status
+  --status: string@status-completer # Only return keys with a specific status
   --Authorization: string # Use `Authorization: Token <API_KEY>` Example: `Authorization: Token 12345abcdef`
 ]: nothing -> record<api_keys: table<member: record, api_key: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1081,10 +1096,10 @@ export def "projects-requests list" [
   --page: float # Navigate and return the results to retrieve specific portions of information of the response (format: double)
   --accessor: string # Filter for requests where a specific accessor was used
   --request-id: string # Filter for a specific request id
-  --deployment: string # Filter for requests where a specific deployment was used
-  --endpoint: string # Filter for requests where a specific endpoint was used
-  --method: string # Filter for requests where a specific method was used
-  --status: string # Filter for requests that succeeded (status code < 300) or failed (status code >=400)
+  --deployment: string@deployment-completer # Filter for requests where a specific deployment was used
+  --endpoint: string@endpoint-completer # Filter for requests where a specific endpoint was used
+  --method: string@method-completer # Filter for requests where a specific method was used
+  --status: string@status-completer-1 # Filter for requests that succeeded (status code < 300) or failed (status code >=400)
   --Authorization: string # Use `Authorization: Token <API_KEY>` Example: `Authorization: Token 12345abcdef`
 ]: nothing -> record<page: float, limit: float, requests: table<request_id: string, project_uuid: string, created: string, path: string, api_key_id: string, response: record, code: float, deployment: string, callback: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1148,13 +1163,13 @@ export def "projects-usage get" [
   --custom-intent: string@bool-completer # Filter for requests where custom intent was used
   --custom-topic-mode: string@bool-completer # Filter for requests where custom topic mode was used
   --custom-topic: string@bool-completer # Filter for requests where custom topic was used
-  --deployment: string # Filter for requests where a specific deployment was used
+  --deployment: string@deployment-completer # Filter for requests where a specific deployment was used
   --detect-entities: string@bool-completer # Filter for requests where detect entities was used
   --detect-language: string@bool-completer # Filter for requests where detect language was used
   --diarize: string@bool-completer # Filter for requests where diarize was used
   --dictation: string@bool-completer # Filter for requests where dictation was used
   --encoding: string@bool-completer # Filter for requests where encoding was used
-  --endpoint: string # Filter for requests where a specific endpoint was used
+  --endpoint: string@endpoint-completer # Filter for requests where a specific endpoint was used
   --extra: string@bool-completer # Filter for requests where extra was used
   --filler-words: string@bool-completer # Filter for requests where filler words was used
   --intents: string@bool-completer # Filter for requests where intents was used
@@ -1162,7 +1177,7 @@ export def "projects-usage get" [
   --keywords: string@bool-completer # Filter for requests where keywords was used
   --language: string@bool-completer # Filter for requests where language was used
   --measurements: string@bool-completer # Filter for requests where measurements were used
-  --method: string # Filter for requests where a specific method was used
+  --method: string@method-completer # Filter for requests where a specific method was used
   --model: string # Filter for requests where a specific model uuid was used
   --multichannel: string@bool-completer # Filter for requests where multichannel was used
   --numerals: string@bool-completer # Filter for requests where numerals were used
@@ -1237,7 +1252,7 @@ export def "projects-usage-breakdown get" [
   --allow-errors(-e) # Return full response without error handling
   --start: string # Start date of the requested date range. Format accepted is YYYY-MM-DD (format: date)
   --end: string # End date of the requested date range. Format accepted is YYYY-MM-DD (format: date)
-  --grouping: string # Common usage grouping parameters
+  --grouping: string@grouping-completer # Common usage grouping parameters
   --accessor: string # Filter for requests where a specific accessor was used
   --alternatives: string@bool-completer # Filter for requests where alternatives were used
   --callback-method: string@bool-completer # Filter for requests where callback method was used
@@ -1247,13 +1262,13 @@ export def "projects-usage-breakdown get" [
   --custom-intent: string@bool-completer # Filter for requests where custom intent was used
   --custom-topic-mode: string@bool-completer # Filter for requests where custom topic mode was used
   --custom-topic: string@bool-completer # Filter for requests where custom topic was used
-  --deployment: string # Filter for requests where a specific deployment was used
+  --deployment: string@deployment-completer # Filter for requests where a specific deployment was used
   --detect-entities: string@bool-completer # Filter for requests where detect entities was used
   --detect-language: string@bool-completer # Filter for requests where detect language was used
   --diarize: string@bool-completer # Filter for requests where diarize was used
   --dictation: string@bool-completer # Filter for requests where dictation was used
   --encoding: string@bool-completer # Filter for requests where encoding was used
-  --endpoint: string # Filter for requests where a specific endpoint was used
+  --endpoint: string@endpoint-completer # Filter for requests where a specific endpoint was used
   --extra: string@bool-completer # Filter for requests where extra was used
   --filler-words: string@bool-completer # Filter for requests where filler words was used
   --intents: string@bool-completer # Filter for requests where intents was used
@@ -1261,7 +1276,7 @@ export def "projects-usage-breakdown get" [
   --keywords: string@bool-completer # Filter for requests where keywords was used
   --language: string@bool-completer # Filter for requests where language was used
   --measurements: string@bool-completer # Filter for requests where measurements were used
-  --method: string # Filter for requests where a specific method was used
+  --method: string@method-completer # Filter for requests where a specific method was used
   --model: string # Filter for requests where a specific model uuid was used
   --multichannel: string@bool-completer # Filter for requests where multichannel was used
   --numerals: string@bool-completer # Filter for requests where numerals were used
@@ -1360,7 +1375,7 @@ export def "projects-billing-breakdown list" [
   --start: string # Start date of the requested date range. Format accepted is YYYY-MM-DD (format: date)
   --end: string # End date of the requested date range. Format accepted is YYYY-MM-DD (format: date)
   --accessor: string # Filter for requests where a specific accessor was used
-  --deployment: string # Filter for requests where a specific deployment was used
+  --deployment: string@deployment-completer # Filter for requests where a specific deployment was used
   --tag: string # Filter for requests where a specific tag was used
   --line-item: string # Filter requests by line item (e.g. streaming::nova-3)
   --grouping: list # Group billing breakdown by one or more dimensions (accessor, deployment, line_item, tags)
@@ -1471,7 +1486,7 @@ export def "projects-self-hosted-distribution-credentials create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --scopes: list # List of permission scopes for the credentials (default: [self-hosted:products])
-  --provider: string # The provider of the distribution service (default: quay)
+  --provider: string@provider-completer # The provider of the distribution service (default: quay)
   --Authorization: string # Use `Authorization: Token <API_KEY>` Example: `Authorization: Token 12345abcdef`
   --comment: string # Optional comment about the credentials
 ]: any -> record<member: record<member_id: string, email: string>, distribution_credentials: record<distribution_credentials_id: string, provider: string, comment: string, scopes: list<string>, created: string>> {

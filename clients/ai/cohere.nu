@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -72,9 +73,13 @@ def input-type-completer [] { ["classification" "clustering" "image" "search_doc
 def truncate-completer [] { ["END" "NONE" "START"] }
 def truncate-completer-1 [] { ["END" "START"] }
 def status-completer [] { ["BATCH_STATUS_CANCELED" "BATCH_STATUS_CANCELING" "BATCH_STATUS_COMPLETED" "BATCH_STATUS_FAILED" "BATCH_STATUS_IN_PROGRESS" "BATCH_STATUS_QUEUED" "BATCH_STATUS_UNSPECIFIED"] }
+def type-completer [] { ["batch-chat-input" "batch-chat-v2-input" "batch-embed-v2-input" "batch-openai-chat-input" "chat-finetune-input" "cluster-outliers" "cluster-result" "embed-input" "embed-result" "multi-label-classification-finetune-input" "reranker-finetune-input" "single-label-classification-finetune-input"] }
+def validationStatus-completer [] { ["failed" "processing" "queued" "skipped" "unknown" "validated"] }
+def endpoint-completer [] { ["chat" "classify" "embed" "generate" "rate" "rerank" "summarize"] }
 def prompt-truncation-completer [] { ["AUTO" "AUTO_PRESERVE_ORDER" "OFF"] }
 def citation-quality-completer [] { ["ACCURATE" "DISABLED" "ENABLED" "FAST" "OFF"] }
 def safety-mode-completer-1 [] { ["CONTEXTUAL" "NONE" "STRICT"] }
+def Accepts-completer [] { ["text/event-stream"] }
 def status-completer-1 [] { ["STATUS_DELETED" "STATUS_DEPLOYING_API" "STATUS_FAILED" "STATUS_FINETUNING" "STATUS_PAUSED" "STATUS_QUEUED" "STATUS_READY" "STATUS_TEMPORARILY_OFFLINE" "STATUS_UNSPECIFIED"] }
 def return-likelihoods-completer [] { ["ALL" "GENERATION" "NONE"] }
 def length-completer [] { ["long" "medium" "short"] }
@@ -509,7 +514,7 @@ export def "datasets create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string # The name of the uploaded dataset.
-  --type: string # The dataset type, which is used to validate the data. The only valid type is `embed-input` used in conjunction with the Embed Jobs API.
+  --type: string@type-completer # The dataset type, which is used to validate the data. The only valid type is `embed-input` used in conjunction with the Embed Jobs API.
   --keep-original-file: string@bool-completer # Indicates if the original file should be stored.
   --skip-malformed-input: string@bool-completer # Indicates whether rows with malformed input should be dropped (instead of failing the validation check). Dropped rows will be returned in the warnings field.
   --keep-fields: list # List of names of fields that will be persisted in the Dataset. By default the Dataset will retain only the required fields indicated in the [schema for the corresponding Dataset type](https://docs.cohere.com/docs/datasets#dataset-types). For example, datasets of type `embed-input` will drop all fields other than the required `text` field. If any of the fields in `keep_fields` are missing from the uploaded file, Dataset validation will fail.
@@ -552,7 +557,7 @@ export def "datasets list" [
   --after: string # optional filter after a date (format: date-time)
   --limit: float # optional limit to number of results (format: double)
   --offset: float # optional offset to start of results (format: double)
-  --validationStatus: string # optional filter by validation status
+  --validationStatus: string@validationStatus-completer # optional filter by validation status
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
 ]: nothing -> record<datasets: table<id: string, name: string, created_at: string, updated_at: string, dataset_type: string, validation_status: string, validation_error: string, schema: string, required_fields: list, preserve_fields: list, dataset_parts: list, validation_warnings: list, parse_info: record, metrics: record>> {
@@ -744,7 +749,7 @@ export def "models list" [
   --allow-errors(-e) # Return full response without error handling
   --page-size: float # Maximum number of models to include in a page Defaults to `20`, min value of `1`, max value of `1000`. (format: double)
   --page-token: string # Page token provided in the `next_page_token` field of a previous response.
-  --endpoint: string # When provided, filters the list of models to only those that are compatible with the specified endpoint.
+  --endpoint: string@endpoint-completer # When provided, filters the list of models to only those that are compatible with the specified endpoint.
   --default-only: string@bool-completer # When provided, filters the list of models to only the default model to the endpoint. This parameter is only valid when `endpoint` is provided.
   --Authorization: string # Bearer authentication
 ]: nothing -> record<models: table<name: string, is_deprecated: bool, endpoints: list, finetuned: bool, context_length: float, tokenizer_url: string, default_endpoints: list, features: list, sampling_defaults: record>, next_page_token: string> {
@@ -776,7 +781,7 @@ export def "chat chat-stream-1" [
   --allow-errors(-e) # Return full response without error handling
   --Authorization: string # Bearer authentication
   --X-Client-Name: string # The name of the project that is making the request.
-  --Accepts: string # Pass text/event-stream to receive the streamed response as server-sent events. The default is `\n` delimited events.
+  --Accepts: string@Accepts-completer # Pass text/event-stream to receive the streamed response as server-sent events. The default is `\n` delimited events.
   message: string # Text input for the model to respond to.  Compatible Deployments: Cohere Platform, Azure, AWS Sagemaker/Bedrock, Private Deployments
   --model: string # The name of a compatible [Cohere model](https://docs.cohere.com/docs/models) or the ID of a [fine-tuned](https://docs.cohere.com/docs/chat-fine-tuning) model.  Compatible Deployments: Cohere Platform, Private Deployments
   --stream: string@bool-completer # Defaults to `false`.  When `true`, the response will be a JSON stream of events. The final event will contain the complete response, and will have an `event_type` of `"stream-end"`.  Streaming is beneficial for user interfaces that render the contents of the response piece by piece, as it gets generated.  Compatible Deployments: Cohere Platform, Azure, AWS Sagemaker/Bedrock, Private Deployments
