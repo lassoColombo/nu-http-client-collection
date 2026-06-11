@@ -5712,7 +5712,7 @@ export def "repos-ed25519 list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<active: bool, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string> {
+]: nothing -> record<active: bool, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string, public_key_wire: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/ed25519/")
@@ -5737,7 +5737,7 @@ export def "repos-ed25519 create" [
   --allow-errors(-e) # Return full response without error handling
   --ed25519-passphrase: string # The Ed25519 passphrase used for signing.
   ed25519_private_key: string # The Ed25519 private key.
-]: any -> record<active: bool, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string> {
+]: any -> record<active: bool, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string, public_key_wire: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -5763,7 +5763,7 @@ export def "repos-ed25519-regenerate regenerate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<active: bool, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string> {
+]: nothing -> record<active: bool, created_at: string, default: bool, fingerprint: string, fingerprint_short: string, public_key: string, public_key_wire: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/repos/($owner)/($identifier)/ed25519/regenerate/")

@@ -1765,6 +1765,52 @@ export def "repository-notification resetRepositoryNotificationFailures" [
   do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
+# Deletes the specified notification.
+#
+# DELETE /api/v1/repository/{repository}/notification/{uuid}
+# operationId: deleteRepoNotification
+export def "repository-notification delete" [
+  uuid: string
+  repository: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/repository/($repository)/notification/($uuid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Get information for the specified notification.
+#
+# GET /api/v1/repository/{repository}/notification/{uuid}
+# operationId: getRepoNotification
+export def "repository-notification get" [
+  uuid: string
+  repository: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/repository/($repository)/notification/($uuid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
 # Get information for the specified notification.
 #
 # GET /api/v1/repository/{repository}/notification/{uuid}
@@ -2243,10 +2289,11 @@ export def "organization-robots-regenerate regenerateOrgRobotToken" [
 
 # Create or update federation configuration for the user's robot.
 #
-# POST /api/v1/user/robots/{robot_shortname}/federation
-# operationId: createUserRobotFederation
-export def "user-robots-federation createUserRobotFederation" [
+# POST /api/v1/organization/{orgname}/robots/{robot_shortname}/federation
+# operationId: createOrgRobotFederation
+export def "organization-robots-federation createOrgRobotFederation" [
   robot_shortname: string
+  orgname: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2259,33 +2306,11 @@ export def "user-robots-federation createUserRobotFederation" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/user/robots/($robot_shortname)/federation")
+  let full_url = (build-url $base $"/api/v1/organization/($orgname)/robots/($robot_shortname)/federation")
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
-}
-
-# Returns the federation configuration for the user's robot.
-#
-# GET /api/v1/user/robots/{robot_shortname}/federation
-# operationId: getUserRobotFederation
-export def "user-robots-federation get" [
-  robot_shortname: string
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/user/robots/($robot_shortname)/federation")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
 # Delete federation configuration for the user's robot.
@@ -2308,6 +2333,29 @@ export def "user-robots-federation delete" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Returns the federation configuration for the user's robot.
+#
+# GET /api/v1/organization/{orgname}/robots/{robot_shortname}/federation
+# operationId: getOrgRobotFederation
+export def "organization-robots-federation get" [
+  robot_shortname: string
+  orgname: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organization/($orgname)/robots/($robot_shortname)/federation")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
 # Create or update federation configuration for the organization's robot.
@@ -2336,29 +2384,6 @@ export def "organization-robots-federation createOrgRobotFederation" [
   do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
 }
 
-# Returns the federation configuration for the organization's robot.
-#
-# GET /api/v1/organization/{orgname}/robots/{robot_shortname}/federation
-# operationId: getOrgRobotFederation
-export def "organization-robots-federation get" [
-  robot_shortname: string
-  orgname: string
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/v1/organization/($orgname)/robots/($robot_shortname)/federation")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
 # Delete federation configuration for the organization's robot.
 #
 # DELETE /api/v1/organization/{orgname}/robots/{robot_shortname}/federation
@@ -2380,6 +2405,29 @@ export def "organization-robots-federation delete" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Returns the federation configuration for the organization's robot.
+#
+# GET /api/v1/organization/{orgname}/robots/{robot_shortname}/federation
+# operationId: getOrgRobotFederation
+export def "organization-robots-federation get" [
+  robot_shortname: string
+  orgname: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v1/organization/($orgname)/robots/($robot_shortname)/federation")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
 # Get a list of entities that match the specified prefix.

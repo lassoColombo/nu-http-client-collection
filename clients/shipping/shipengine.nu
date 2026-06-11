@@ -1182,7 +1182,7 @@ export def "labels labels" [
   --label-status: string # Only return labels that are currently in the specified status
   --service-code: string # Only return labels for a specific [carrier service](https://www.shipengine.com/docs/shipping/use-a-carrier-service/) (e.g. usps_first_class_mail)
   --carrier-id: string # Only return labels for a specific [carrier account](https://www.shipengine.com/docs/carriers/setup/)
-  --tracking-number: string # Only return labels with a specific tracking number (e.g. "9405511899223197428490")
+  --tracking-number: string # Only return labels with a specific tracking number (e.g. 9405511899223197428490)
   --batch-id: string # Only return labels that were created in a specific [batch](https://www.shipengine.com/docs/labels/bulk/)
   --rate-id: string # Rate ID
   --shipment-id: string # Shipment ID
@@ -2476,7 +2476,7 @@ export def "tracking log" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --carrier-code: string # A [shipping carrier](https://www.shipengine.com/docs/carriers/setup/), such as `fedex`, `dhl_express`, `stamps_com`, etc.  (e.g. stamps_com)
-  --tracking-number: string # The tracking number associated with a shipment (e.g. "9405511899223197428490")
+  --tracking-number: string # The tracking number associated with a shipment (e.g. 9405511899223197428490)
   --carrier-id: string # Carrier ID
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -2502,7 +2502,7 @@ export def "tracking-start tracking" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --carrier-code: string # A [shipping carrier](https://www.shipengine.com/docs/carriers/setup/), such as `fedex`, `dhl_express`, `stamps_com`, etc.  (e.g. stamps_com)
-  --tracking-number: string # The tracking number associated with a shipment (e.g. "9405511899223197428490")
+  --tracking-number: string # The tracking number associated with a shipment (e.g. 9405511899223197428490)
   --carrier-id: string # Carrier ID
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -2528,7 +2528,7 @@ export def "tracking-stop tracking" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --carrier-code: string # A [shipping carrier](https://www.shipengine.com/docs/carriers/setup/), such as `fedex`, `dhl_express`, `stamps_com`, etc.  (e.g. stamps_com)
-  --tracking-number: string # The tracking number associated with a shipment (e.g. "9405511899223197428490")
+  --tracking-number: string # The tracking number associated with a shipment (e.g. 9405511899223197428490)
   --carrier-id: string # Carrier ID
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))

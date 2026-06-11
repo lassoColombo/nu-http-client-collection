@@ -13,15 +13,21 @@ on:
         required: false
         default: "main"
         type: string
+      force:
+        description: "Regenerate clients even if their output file already exists."
+        required: false
+        default: true
+        type: boolean
   push:
     branches: [main]
     paths:
       - "clients.yaml"
       - "scripts/generate.nu"
+      - "scripts/diff-clients.nu"
       - ".github/workflows/generate.yml"
 
 concurrency:
-  group: generate-${{ github.event.inputs.client || 'all' }}
+  group: generate-${{ github.event.inputs.client || github.event_name }}
   cancel-in-progress: false
 
 permissions:
@@ -31,11 +37,17 @@ jobs:
   generate:
     runs-on: ubuntu-latest
     env:
-      CLIENT: ${{ github.event.inputs.client || 'all' }}
+      EVENT_NAME: ${{ github.event_name }}
+      DISPATCH_CLIENT: ${{ github.event.inputs.client || 'all' }}
+      DISPATCH_FORCE: ${{ github.event.inputs.force || 'true' }}
       GENERATOR_REF: ${{ github.event.inputs.generator_ref || 'main' }}
+      BEFORE: ${{ github.event.before }}
+      AFTER: ${{ github.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Nushell
         uses: hustcer/setup-nu@v3
@@ -48,7 +60,54 @@ jobs:
             https://github.com/lassoColombo/nu-http-client-generator.git _generator
 
       - name: Generate clients
-        run: nu scripts/generate.nu "$CLIENT"
+        id: gen
+        run: |
+          set -e
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "scope=$DISPATCH_CLIENT" >> "$GITHUB_OUTPUT"
+            force_flag=""
+            if [ "$DISPATCH_FORCE" = "true" ]; then
+              force_flag="--force"
+            fi
+            nu scripts/generate.nu "$DISPATCH_CLIENT" $force_flag
+            exit 0
+          fi
+
+          # Push event — regenerate only entries that changed in clients.yaml.
+          out=$(nu scripts/diff-clients.nu "$BEFORE" "$AFTER")
+          regen=$(printf '%s\n' "$out" | sed -n 's/^regen: //p')
+          delete=$(printf '%s\n' "$out" | sed -n 's/^delete: //p')
+
+          for p in $delete; do
+            echo "Removing $p"
+            rm -f "$p"
+          done
+
+          if [ -z "$regen" ] && [ -z "$delete" ]; then
+            echo "No client entries changed."
+            echo "scope=none" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -z "$regen" ]; then
+            # Only deletions — still refresh CLIENTS.md.
+            nu scripts/generate.nu --list-only
+            echo "scope=deletions" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Regenerating: $regen"
+          echo "scope=$regen" >> "$GITHUB_OUTPUT"
+          failed=""
+          for n in $regen; do
+            if ! nu scripts/generate.nu "$n" --force; then
+              failed="$failed $n"
+            fi
+          done
+          if [ -n "$failed" ]; then
+            echo "Failed to generate:$failed" >&2
+            exit 1
+          fi
 
       - name: Commit & push
         # Always run, even if some clients failed to generate — the script
@@ -58,15 +117,29 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add clients/ CLIENTS.md
+          git add -A clients/ CLIENTS.md
           if git diff --cached --quiet; then
             echo "No changes — nothing to commit."
             exit 0
           fi
-          if [ "$CLIENT" = "" ] || [ "$CLIENT" = "all" ]; then
-            msg="chore(clients): regenerate all"
+          scope="${{ steps.gen.outputs.scope }}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$scope" = "" ] || [ "$scope" = "all" ]; then
+              msg="chore(clients): regenerate all"
+            else
+              msg="chore(clients): regenerate ${scope}"
+            fi
           else
-            msg="chore(clients): regenerate ${CLIENT}"
+            if [ "$scope" = "deletions" ]; then
+              msg="chore(clients): apply registry deletions"
+            else
+              count=$(printf '%s\n' $scope | wc -w | tr -d ' ')
+              if [ "$count" = "1" ]; then
+                msg="chore(clients): regenerate ${scope}"
+              else
+                msg="chore(clients): regenerate ${count} clients"$'\n\n'"${scope// /$'\n'}"
+              fi
+            fi
           fi
           git commit -m "$msg"
           git push

@@ -260,7 +260,7 @@ export def "0-organizations-config-integrations Get-Integration-Provider-Informa
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --providerKey: string # Specific integration provider to filter by such as `slack`. See our [Integrations Documentation](/product/integrations/) for an updated list of providers.
-]: nothing -> record<providers: table<key: string, slug: string, name: string, metadata: any, canAdd: bool, canDisable: bool, features: list, setupDialog: record>> {
+]: nothing -> record<providers: table<key: string, slug: string, name: string, metadata: any, canAdd: bool, canDisable: bool, features: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "providerKey" $providerKey "scalar")] | flatten | str join "&"

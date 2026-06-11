@@ -1621,7 +1621,7 @@ export def "tracks CreateTrack" [
   --SHIPPO-API-VERSION: string # Optional string used to pick a non-default API version to use. See our <a href="https://docs.goshippo.com/docs/api_concepts/apiversioning/">API version</a> guide. (e.g. 2018-02-08)
   carrier: string # Name of the carrier of the shipment to track. (e.g. usps)
   --metadata: string # A string of up to 100 characters that can be filled with any additional information you want to attach to the object. (e.g. Order 000123)
-  tracking_number: string # Tracking number to track. (e.g. "9205590164917312751089")
+  tracking_number: string # Tracking number to track. (e.g. 9205590164917312751089)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

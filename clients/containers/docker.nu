@@ -1,8 +1,8 @@
-# Auto-generated client for Docker Engine API v1.54
+# Auto-generated client for Docker Engine API v1.55
 # Source: https://raw.githubusercontent.com/moby/moby/master/api/swagger.yaml
 # Auth: --token flag or $env.DOCKER_ENGINE_API_TOKEN
 
-const BASE_URL = "http://localhost/v1.54"
+const BASE_URL = "http://localhost/v1.55"
 const DEFAULT_AUTH = "bearer"
 
 # Build auth: returns {headers: record, query: string}
@@ -60,7 +60,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def bool-completer [] { ["'true'" "'false'"] }
-def base-url-completer [] { ["http://localhost/v1.54" "https://localhost/v1.54"] }
+def base-url-completer [] { ["http://localhost/v1.55" "https://localhost/v1.55"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters

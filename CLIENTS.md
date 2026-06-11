@@ -14,6 +14,10 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [google-doubleclick-search](clients/advertising/google-doubleclick-search.nu)           | openapi | <https://api.apis.guru/v2/specs/googleapis.com/doubleclicksearch/v2/openapi.json>       |
 | [google-search-ads-360](clients/advertising/google-search-ads-360.nu)                   | openapi | <https://api.apis.guru/v2/specs/googleapis.com/searchads360/v0/openapi.json>            |
 | [nativeads](clients/advertising/nativeads.nu)                                           | openapi | <https://api.apis.guru/v2/specs/nativeads.com/1.0.0/swagger.json>                       |
+| [pinterest-ads](clients/advertising/pinterest-ads.nu)                                   | openapi | <https://raw.githubusercontent.com/pinterest/api-description/main/v5/openapi.yaml>      |
+| [criteo-marketing-solutions](clients/advertising/criteo-marketing-solutions.nu)         | openapi | <https://api.criteo.com/2023-10/marketingsolutions/open-api-specifications.json>        |
+| [criteo-retail-media](clients/advertising/criteo-retail-media.nu)                       | openapi | <https://api.criteo.com/2023-10/retailmedia/open-api-specifications.json>               |
+| [postmark-account](clients/advertising/postmark-account.nu)                             | openapi | <https://api.apis.guru/v2/specs/postmarkapp.com/account/0.9.0/swagger.json>             |
 
 ## ai
 
@@ -62,6 +66,16 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [mangadex](clients/anime/mangadex.nu)             | openapi | <https://api.mangadex.org/docs/static/api.yaml>                                               |
 | [animethemes](clients/anime/animethemes.nu)       | graphql | <https://graphql.animethemes.moe>                                                             |
 
+## arr
+
+| Client                              | Type    | Source                                                                                         |
+| ----------------------------------- | ------- | ---------------------------------------------------------------------------------------------- |
+| [sonarr](clients/arr/sonarr.nu)     | openapi | <https://raw.githubusercontent.com/Sonarr/Sonarr/develop/src/Sonarr.Api.V3/openapi.json>       |
+| [radarr](clients/arr/radarr.nu)     | openapi | <https://raw.githubusercontent.com/Radarr/Radarr/develop/src/Radarr.Api.V3/openapi.json>       |
+| [prowlarr](clients/arr/prowlarr.nu) | openapi | <https://raw.githubusercontent.com/Prowlarr/Prowlarr/develop/src/Prowlarr.Api.V1/openapi.json> |
+| [readarr](clients/arr/readarr.nu)   | openapi | <https://raw.githubusercontent.com/Readarr/Readarr/develop/src/Readarr.Api.V1/openapi.json>    |
+| [whisparr](clients/arr/whisparr.nu) | openapi | <https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/Whisparr.Api.V3/openapi.json> |
+
 ## billing
 
 | Client                                                                                            | Type    | Source                                                                                       |
@@ -78,16 +92,20 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## calendar
 
-| Client                                                                   | Type    | Source                                                                                                       |
-| ------------------------------------------------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------ |
-| [google-calendar](clients/calendar/google-calendar.nu)                   | openapi | <https://api.apis.guru/v2/specs/googleapis.com/calendar/v3/openapi.json>                                     |
-| [onsched-consumer](clients/calendar/onsched-consumer.nu)                 | openapi | <https://api.apis.guru/v2/specs/onsched.com/consumer/v1/openapi.json>                                        |
-| [onsched-setup](clients/calendar/onsched-setup.nu)                       | openapi | <https://api.apis.guru/v2/specs/onsched.com/setup/v1/openapi.json>                                           |
-| [onsched-utility](clients/calendar/onsched-utility.nu)                   | openapi | <https://api.apis.guru/v2/specs/onsched.com/utility/v1/openapi.json>                                         |
-| [hetras-booking](clients/calendar/hetras-booking.nu)                     | openapi | <https://api.apis.guru/v2/specs/hetras-certification.net/booking/v0/swagger.json>                            |
-| [gotomeeting](clients/calendar/gotomeeting.nu)                           | openapi | <https://api.apis.guru/v2/specs/citrixonline.com/gotomeeting/1.0.0/swagger.json>                             |
-| [microsoft-graph-calendar](clients/calendar/microsoft-graph-calendar.nu) | openapi | <https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Calendar.yml> |
-| [microsoft-graph-bookings](clients/calendar/microsoft-graph-bookings.nu) | openapi | <https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Bookings.yml> |
+| Client                                                                   | Type    | Source                                                                                                                       |
+| ------------------------------------------------------------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| [google-calendar](clients/calendar/google-calendar.nu)                   | openapi | <https://api.apis.guru/v2/specs/googleapis.com/calendar/v3/openapi.json>                                                     |
+| [onsched-consumer](clients/calendar/onsched-consumer.nu)                 | openapi | <https://api.apis.guru/v2/specs/onsched.com/consumer/v1/openapi.json>                                                        |
+| [onsched-setup](clients/calendar/onsched-setup.nu)                       | openapi | <https://api.apis.guru/v2/specs/onsched.com/setup/v1/openapi.json>                                                           |
+| [onsched-utility](clients/calendar/onsched-utility.nu)                   | openapi | <https://api.apis.guru/v2/specs/onsched.com/utility/v1/openapi.json>                                                         |
+| [hetras-booking](clients/calendar/hetras-booking.nu)                     | openapi | <https://api.apis.guru/v2/specs/hetras-certification.net/booking/v0/swagger.json>                                            |
+| [gotomeeting](clients/calendar/gotomeeting.nu)                           | openapi | <https://api.apis.guru/v2/specs/citrixonline.com/gotomeeting/1.0.0/swagger.json>                                             |
+| [microsoft-graph-calendar](clients/calendar/microsoft-graph-calendar.nu) | openapi | <https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Calendar.yml>                 |
+| [microsoft-graph-bookings](clients/calendar/microsoft-graph-bookings.nu) | openapi | <https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Bookings.yml>                 |
+| [calendly](clients/calendar/calendly.nu)                                 | openapi | <https://raw.githubusercontent.com/jentic/jentic-public-apis/main/apis/openapi/calendly.com/main/2.0/openapi.json>           |
+| [cal-com-v2](clients/calendar/cal-com-v2.nu)                             | openapi | <https://raw.githubusercontent.com/calcom/cal.com/main/docs/api-reference/v2/openapi.json>                                   |
+| [nylas-v3](clients/calendar/nylas-v3.nu)                                 | openapi | <https://developer.nylas.com/_spec-files/v3-ecc.yaml>                                                                        |
+| [acuity-scheduling](clients/calendar/acuity-scheduling.nu)               | openapi | <https://raw.githubusercontent.com/jentic/jentic-public-apis/main/apis/openapi/acuityscheduling.com/main/1.0.0/openapi.json> |
 
 ## cdn
 
@@ -239,16 +257,23 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## crm
 
-| Client                                                    | Type    | Source                                                                        |
-| --------------------------------------------------------- | ------- | ----------------------------------------------------------------------------- |
-| [hubspot-crm](clients/crm/hubspot-crm.nu)                 | openapi | <https://api.apis.guru/v2/specs/hubapi.com/crm/v3/openapi.json>               |
-| [apideck-crm](clients/crm/apideck-crm.nu)                 | openapi | <https://api.apis.guru/v2/specs/apideck.com/crm/9.3.0/openapi.json>           |
-| [data2crm](clients/crm/data2crm.nu)                       | openapi | <https://api.apis.guru/v2/specs/data2crm.com/1/swagger.json>                  |
-| [salesforce-einstein](clients/crm/salesforce-einstein.nu) | openapi | <https://api.apis.guru/v2/specs/salesforce.local/einstein/2.0.1/openapi.json> |
-| [pipedrive](clients/crm/pipedrive.nu)                     | openapi | <https://developers.pipedrive.com/docs/api/v1/openapi.yaml>                   |
-| [attio](clients/crm/attio.nu)                             | openapi | <https://api.attio.com/openapi/api>                                           |
-| [close-com](clients/crm/close-com.nu)                     | openapi | <https://developer.close.com/openapi.json>                                    |
-| [streak](clients/crm/streak.nu)                           | openapi | <https://www.streak.com/api/openapi.json>                                     |
+| Client                                                    | Type    | Source                                                                                     |
+| --------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------ |
+| [hubspot-crm](clients/crm/hubspot-crm.nu)                 | openapi | <https://api.apis.guru/v2/specs/hubapi.com/crm/v3/openapi.json>                            |
+| [apideck-crm](clients/crm/apideck-crm.nu)                 | openapi | <https://api.apis.guru/v2/specs/apideck.com/crm/9.3.0/openapi.json>                        |
+| [data2crm](clients/crm/data2crm.nu)                       | openapi | <https://api.apis.guru/v2/specs/data2crm.com/1/swagger.json>                               |
+| [salesforce-einstein](clients/crm/salesforce-einstein.nu) | openapi | <https://api.apis.guru/v2/specs/salesforce.local/einstein/2.0.1/openapi.json>              |
+| [pipedrive](clients/crm/pipedrive.nu)                     | openapi | <https://developers.pipedrive.com/docs/api/v1/openapi.yaml>                                |
+| [attio](clients/crm/attio.nu)                             | openapi | <https://api.attio.com/openapi/api>                                                        |
+| [close-com](clients/crm/close-com.nu)                     | openapi | <https://developer.close.com/openapi.json>                                                 |
+| [streak](clients/crm/streak.nu)                           | openapi | <https://www.streak.com/api/openapi.json>                                                  |
+| [zoho-crm-records](clients/crm/zoho-crm-records.nu)       | openapi | <https://raw.githubusercontent.com/zoho/crm-oas/main/v8.0/record.json>                     |
+| [zoho-crm-modules](clients/crm/zoho-crm-modules.nu)       | openapi | <https://raw.githubusercontent.com/zoho/crm-oas/main/v8.0/modules.json>                    |
+| [zoho-crm-users](clients/crm/zoho-crm-users.nu)           | openapi | <https://raw.githubusercontent.com/zoho/crm-oas/main/v8.0/users.json>                      |
+| [zoho-crm-fields](clients/crm/zoho-crm-fields.nu)         | openapi | <https://raw.githubusercontent.com/zoho/crm-oas/main/v8.0/fields.json>                     |
+| [salesloft](clients/crm/salesloft.nu)                     | openapi | <https://api.apis.guru/v2/specs/salesloft.com/v2/openapi.json>                             |
+| [outreach](clients/crm/outreach.nu)                       | openapi | <https://api.outreach.io/api/v2/schema/openapi.json>                                       |
+| [suitecrm](clients/crm/suitecrm.nu)                       | openapi | <https://raw.githubusercontent.com/SuiteCRM/SuiteCRM/master/Api/docs/swagger/swagger.json> |
 
 ## data-pipeline
 
@@ -285,16 +310,22 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## email
 
-| Client                                    | Type    | Source                                                                                          |
-| ----------------------------------------- | ------- | ----------------------------------------------------------------------------------------------- |
-| [sendgrid](clients/email/sendgrid.nu)     | openapi | <https://api.apis.guru/v2/specs/sendgrid.com/1.0.0/openapi.json>                                |
-| [postmark](clients/email/postmark.nu)     | openapi | <https://api.apis.guru/v2/specs/postmarkapp.com/server/1.0.0/swagger.json>                      |
-| [mandrill](clients/email/mandrill.nu)     | openapi | <https://api.apis.guru/v2/specs/mandrillapp.com/1.0/swagger.json>                               |
-| [resend](clients/email/resend.nu)         | openapi | <https://raw.githubusercontent.com/resend/resend-openapi/main/resend.yaml>                      |
-| [mailgun](clients/email/mailgun.nu)       | openapi | <https://documentation.mailgun.com/_spec/docs/mailgun/api-reference/send/mailgun.yaml?download> |
-| [brevo](clients/email/brevo.nu)           | openapi | <https://raw.githubusercontent.com/xdev-software/brevo-java-client/develop/openapi/openapi.yml> |
-| [mailersend](clients/email/mailersend.nu) | openapi | <https://api.swaggerhub.com/apis/MailerSend/mailersend-api/1.0.0-oas3.1>                        |
-| [loops](clients/email/loops.nu)           | openapi | <https://app.loops.so/openapi.json>                                                             |
+| Client                                        | Type    | Source                                                                                             |
+| --------------------------------------------- | ------- | -------------------------------------------------------------------------------------------------- |
+| [sendgrid](clients/email/sendgrid.nu)         | openapi | <https://api.apis.guru/v2/specs/sendgrid.com/1.0.0/openapi.json>                                   |
+| [postmark](clients/email/postmark.nu)         | openapi | <https://api.apis.guru/v2/specs/postmarkapp.com/server/1.0.0/swagger.json>                         |
+| [mandrill](clients/email/mandrill.nu)         | openapi | <https://api.apis.guru/v2/specs/mandrillapp.com/1.0/swagger.json>                                  |
+| [resend](clients/email/resend.nu)             | openapi | <https://raw.githubusercontent.com/resend/resend-openapi/main/resend.yaml>                         |
+| [mailgun](clients/email/mailgun.nu)           | openapi | <https://documentation.mailgun.com/_spec/docs/mailgun/api-reference/send/mailgun.yaml?download>    |
+| [brevo](clients/email/brevo.nu)               | openapi | <https://raw.githubusercontent.com/xdev-software/brevo-java-client/develop/openapi/openapi.yml>    |
+| [mailersend](clients/email/mailersend.nu)     | openapi | <https://api.swaggerhub.com/apis/MailerSend/mailersend-api/1.0.0-oas3.1>                           |
+| [loops](clients/email/loops.nu)               | openapi | <https://app.loops.so/openapi.json>                                                                |
+| [aws-ses](clients/email/aws-ses.nu)           | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/email/2010-12-01/openapi.json>                       |
+| [gmail](clients/email/gmail.nu)               | openapi | <https://api.apis.guru/v2/specs/googleapis.com/gmail/v1/openapi.json>                              |
+| [mailtrap](clients/email/mailtrap.nu)         | openapi | <https://raw.githubusercontent.com/mailtrap/mailtrap-openapi/main/specs/email-sending.openapi.yml> |
+| [elasticemail](clients/email/elasticemail.nu) | openapi | <https://raw.githubusercontent.com/elasticemail/elasticemail-go/master/api/openapi.yaml>           |
+| [buttondown](clients/email/buttondown.nu)     | openapi | <https://raw.githubusercontent.com/buttondown/openapi/main/openapi.json>                           |
+| [mailscript](clients/email/mailscript.nu)     | openapi | <https://api.apis.guru/v2/specs/mailscript.com/0.4.0/openapi.json>                                 |
 
 ## error-tracking
 
@@ -312,16 +343,21 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## feature-flags
 
-| Client                                                | Type    | Source                                                                                               |
-| ----------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------- |
-| [launchdarkly](clients/feature-flags/launchdarkly.nu) | openapi | <https://api.apis.guru/v2/specs/launchdarkly.com/5.3.0/swagger.json>                                 |
-| [configcat](clients/feature-flags/configcat.nu)       | openapi | <https://api.apis.guru/v2/specs/configcat.com/v1/openapi.json>                                       |
-| [flagsmith](clients/feature-flags/flagsmith.nu)       | openapi | <https://api.flagsmith.com/api/v1/swagger.json>                                                      |
-| [unleash](clients/feature-flags/unleash.nu)           | openapi | <https://docs.getunleash.io/api/openapi.json>                                                        |
-| [statsig](clients/feature-flags/statsig.nu)           | openapi | <https://docs.statsig.com/openapi.json>                                                              |
-| [devcycle](clients/feature-flags/devcycle.nu)         | openapi | <https://api.devcycle.com/openapi.json>                                                              |
-| [growthbook](clients/feature-flags/growthbook.nu)     | openapi | <https://raw.githubusercontent.com/growthbook/growthbook/main/packages/back-end/generated/spec.yaml> |
-| [optimizely](clients/feature-flags/optimizely.nu)     | openapi | <https://api.optimizely.com/swagger.json>                                                            |
+| Client                                                          | Type    | Source                                                                                                   |
+| --------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------- |
+| [launchdarkly](clients/feature-flags/launchdarkly.nu)           | openapi | <https://api.apis.guru/v2/specs/launchdarkly.com/5.3.0/swagger.json>                                     |
+| [configcat](clients/feature-flags/configcat.nu)                 | openapi | <https://api.apis.guru/v2/specs/configcat.com/v1/openapi.json>                                           |
+| [flagsmith](clients/feature-flags/flagsmith.nu)                 | openapi | <https://api.flagsmith.com/api/v1/swagger.json>                                                          |
+| [unleash](clients/feature-flags/unleash.nu)                     | openapi | <https://docs.getunleash.io/api/openapi.json>                                                            |
+| [statsig](clients/feature-flags/statsig.nu)                     | openapi | <https://docs.statsig.com/openapi.json>                                                                  |
+| [devcycle](clients/feature-flags/devcycle.nu)                   | openapi | <https://api.devcycle.com/openapi.json>                                                                  |
+| [growthbook](clients/feature-flags/growthbook.nu)               | openapi | <https://raw.githubusercontent.com/growthbook/growthbook/main/packages/back-end/generated/spec.yaml>     |
+| [optimizely](clients/feature-flags/optimizely.nu)               | openapi | <https://api.optimizely.com/swagger.json>                                                                |
+| [featurehub](clients/feature-flags/featurehub.nu)               | openapi | <https://raw.githubusercontent.com/featurehub-io/featurehub/master/backend/mr-api/mr-api.yaml>           |
+| [openfeature-ofrep](clients/feature-flags/openfeature-ofrep.nu) | openapi | <https://raw.githubusercontent.com/open-feature/protocol/main/service/openapi.yaml>                      |
+| [harness-ff](clients/feature-flags/harness-ff.nu)               | openapi | <https://raw.githubusercontent.com/harness/ff-php-server-sdk/main/api.yaml>                              |
+| [flipt](clients/feature-flags/flipt.nu)                         | openapi | <https://raw.githubusercontent.com/flipt-io/flipt/main/openapi.yaml>                                     |
+| [go-feature-flag](clients/feature-flags/go-feature-flag.nu)     | openapi | <https://raw.githubusercontent.com/thomaspoignant/go-feature-flag/main/cmd/relayproxy/docs/swagger.json> |
 
 ## finance
 
@@ -608,29 +644,41 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## music
 
-| Client                                      | Type    | Source                                                                                       |
-| ------------------------------------------- | ------- | -------------------------------------------------------------------------------------------- |
-| [spotify](clients/music/spotify.nu)         | openapi | <https://raw.githubusercontent.com/sonallux/spotify-web-api/main/fixed-spotify-open-api.yml> |
-| [soundcloud](clients/music/soundcloud.nu)   | openapi | <https://api.apis.guru/v2/specs/soundcloud.com/1.0.0/openapi.json>                           |
-| [tidal](clients/music/tidal.nu)             | openapi | <https://tidal-music.github.io/tidal-api-reference/tidal-api-oas.json>                       |
-| [setlistfm](clients/music/setlistfm.nu)     | openapi | <https://api.apis.guru/v2/specs/setlist.fm/1.0/swagger.json>                                 |
-| [spinitron](clients/music/spinitron.nu)     | openapi | <https://api.apis.guru/v2/specs/spinitron.com/1.0.0/openapi.json>                            |
-| [discogs](clients/music/discogs.nu)         | openapi | <https://raw.githubusercontent.com/wyattowalsh/discogs-api-spec/main/discogs.json>           |
-| [apple-music](clients/music/apple-music.nu) | openapi | <https://raw.githubusercontent.com/schroedan/apple-music-api/main/openapi.yaml>              |
-| [bandsintown](clients/music/bandsintown.nu) | openapi | <https://api.apis.guru/v2/specs/bandsintown.com/3.0.0/swagger.json>                          |
+| Client                                      | Type    | Source                                                                                        |
+| ------------------------------------------- | ------- | --------------------------------------------------------------------------------------------- |
+| [spotify](clients/music/spotify.nu)         | openapi | <https://raw.githubusercontent.com/sonallux/spotify-web-api/main/fixed-spotify-open-api.yml>  |
+| [soundcloud](clients/music/soundcloud.nu)   | openapi | <https://api.apis.guru/v2/specs/soundcloud.com/1.0.0/openapi.json>                            |
+| [tidal](clients/music/tidal.nu)             | openapi | <https://tidal-music.github.io/tidal-api-reference/tidal-api-oas.json>                        |
+| [setlistfm](clients/music/setlistfm.nu)     | openapi | <https://api.apis.guru/v2/specs/setlist.fm/1.0/swagger.json>                                  |
+| [spinitron](clients/music/spinitron.nu)     | openapi | <https://api.apis.guru/v2/specs/spinitron.com/1.0.0/openapi.json>                             |
+| [discogs](clients/music/discogs.nu)         | openapi | <https://raw.githubusercontent.com/wyattowalsh/discogs-api-spec/main/discogs.json>            |
+| [apple-music](clients/music/apple-music.nu) | openapi | <https://raw.githubusercontent.com/schroedan/apple-music-api/main/openapi.yaml>               |
+| [bandsintown](clients/music/bandsintown.nu) | openapi | <https://api.apis.guru/v2/specs/bandsintown.com/3.0.0/swagger.json>                           |
+| [freesound](clients/music/freesound.nu)     | openapi | <https://api.apis.guru/v2/specs/freesound.org/2.0.0/swagger.json>                             |
+| [musixmatch](clients/music/musixmatch.nu)   | openapi | <https://api.apis.guru/v2/specs/musixmatch.com/1.1.0/swagger.json>                            |
+| [audius](clients/music/audius.nu)           | openapi | <https://raw.githubusercontent.com/AudiusProject/api-docs/master/swagger/swagger.json>        |
+| [sonos](clients/music/sonos.nu)             | openapi | <https://raw.githubusercontent.com/antxxxx/sonos-swagger-api/master/api/swagger/swagger.yaml> |
+| [lidarr](clients/music/lidarr.nu)           | openapi | <https://raw.githubusercontent.com/Lidarr/Lidarr/develop/src/Lidarr.Api.V1/openapi.json>      |
+| [jellyfin](clients/music/jellyfin.nu)       | openapi | <https://api.jellyfin.org/openapi/jellyfin-openapi-stable.json>                               |
 
 ## news
 
-| Client                                                           | Type    | Source                                                                                       |
-| ---------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------- |
-| [nytimes-top-stories](clients/news/nytimes-top-stories.nu)       | openapi | <https://api.apis.guru/v2/specs/nytimes.com/top_stories/2.0.0/openapi.json>                  |
-| [nytimes-books](clients/news/nytimes-books.nu)                   | openapi | <https://api.apis.guru/v2/specs/nytimes.com/books_api/3.0.0/openapi.json>                    |
-| [nytimes-article-search](clients/news/nytimes-article-search.nu) | openapi | <https://api.apis.guru/v2/specs/nytimes.com/article_search/1.0.0/openapi.json>               |
-| [nytimes-archive](clients/news/nytimes-archive.nu)               | openapi | <https://api.apis.guru/v2/specs/nytimes.com/archive/1.0.0/openapi.json>                      |
-| [nytimes-most-popular](clients/news/nytimes-most-popular.nu)     | openapi | <https://api.apis.guru/v2/specs/nytimes.com/most_popular_api/2.0.0/openapi.json>             |
-| [nytimes-timeswire](clients/news/nytimes-timeswire.nu)           | openapi | <https://api.apis.guru/v2/specs/nytimes.com/timeswire/3.0.0/openapi.json>                    |
-| [newsdata-io](clients/news/newsdata-io.nu)                       | openapi | <https://newsdata.io/openapi.json>                                                           |
-| [bing-news-search](clients/news/bing-news-search.nu)             | openapi | <https://api.apis.guru/v2/specs/microsoft.com/cognitiveservices-NewsSearch/1.0/swagger.json> |
+| Client                                                           | Type    | Source                                                                                              |
+| ---------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------- |
+| [nytimes-top-stories](clients/news/nytimes-top-stories.nu)       | openapi | <https://api.apis.guru/v2/specs/nytimes.com/top_stories/2.0.0/openapi.json>                         |
+| [nytimes-books](clients/news/nytimes-books.nu)                   | openapi | <https://api.apis.guru/v2/specs/nytimes.com/books_api/3.0.0/openapi.json>                           |
+| [nytimes-article-search](clients/news/nytimes-article-search.nu) | openapi | <https://api.apis.guru/v2/specs/nytimes.com/article_search/1.0.0/openapi.json>                      |
+| [nytimes-archive](clients/news/nytimes-archive.nu)               | openapi | <https://api.apis.guru/v2/specs/nytimes.com/archive/1.0.0/openapi.json>                             |
+| [nytimes-most-popular](clients/news/nytimes-most-popular.nu)     | openapi | <https://api.apis.guru/v2/specs/nytimes.com/most_popular_api/2.0.0/openapi.json>                    |
+| [nytimes-timeswire](clients/news/nytimes-timeswire.nu)           | openapi | <https://api.apis.guru/v2/specs/nytimes.com/timeswire/3.0.0/openapi.json>                           |
+| [newsdata-io](clients/news/newsdata-io.nu)                       | openapi | <https://newsdata.io/openapi.json>                                                                  |
+| [bing-news-search](clients/news/bing-news-search.nu)             | openapi | <https://api.apis.guru/v2/specs/microsoft.com/cognitiveservices-NewsSearch/1.0/swagger.json>        |
+| [worldnewsapi](clients/news/worldnewsapi.nu)                     | openapi | <https://raw.githubusercontent.com/ddsky/world-news-api-clients/main/world-news-api-openapi-3.json> |
+| [gdelt-cloud](clients/news/gdelt-cloud.nu)                       | openapi | <https://docs.gdeltcloud.com/api-reference/openapi-v2.json>                                         |
+| [hacker-news](clients/news/hacker-news.nu)                       | openapi | <https://gist.githubusercontent.com/wing328/44a6cb6c899feda4c2bd44747e9dcbc8/raw>                   |
+| [sportsdata-nfl-news](clients/news/sportsdata-nfl-news.nu)       | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nfl-v3-rotoballer-premium-news/1.0/openapi.json>      |
+| [sportsdata-nba-news](clients/news/sportsdata-nba-news.nu)       | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nba-v3-rotoballer-premium-news/1.0/openapi.json>      |
+| [sportsdata-mlb-news](clients/news/sportsdata-mlb-news.nu)       | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/mlb-v3-rotoballer-premium-news/1.0/openapi.json>      |
 
 ## payments
 
@@ -667,6 +715,10 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [atlassian-compass](clients/project-mgmt/atlassian-compass.nu)             | openapi | <https://developer.atlassian.com/cloud/compass/swagger.v3.json>                                             |
 | [microsoft-planner](clients/project-mgmt/microsoft-planner.nu)             | openapi | <https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Planner.yml> |
 | [google-tasks](clients/project-mgmt/google-tasks.nu)                       | openapi | <https://api.apis.guru/v2/specs/googleapis.com/tasks/v1/openapi.json>                                       |
+| [basecamp](clients/project-mgmt/basecamp.nu)                               | openapi | <https://raw.githubusercontent.com/basecamp/basecamp-sdk/main/openapi.json>                                 |
+| [openproject](clients/project-mgmt/openproject.nu)                         | openapi | <https://community.openproject.org/api/v3/spec.json>                                                        |
+| [wrike](clients/project-mgmt/wrike.nu)                                     | openapi | <https://developers.wrike.com/openapi/wrike_api_v4_ver154.yaml>                                             |
+| [toggl-track](clients/project-mgmt/toggl-track.nu)                         | openapi | <https://engineering.toggl.com/assets/files/api-d56ecbd7b19d9020283019e0581d80ca.json>                      |
 
 ## public-data
 
@@ -762,16 +814,22 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## search
 
-| Client                                           | Type    | Source                                                                                                                 |
-| ------------------------------------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------- |
-| [typesense](clients/search/typesense.nu)         | openapi | <https://raw.githubusercontent.com/typesense/typesense-api-spec/master/openapi.yml>                                    |
-| [algolia](clients/search/algolia.nu)             | openapi | <https://raw.githubusercontent.com/algolia/api-clients-automation/main/specs/bundled/search.yml>                       |
-| [elasticsearch](clients/search/elasticsearch.nu) | openapi | <https://raw.githubusercontent.com/elastic/elasticsearch-specification/main/output/openapi/elasticsearch-openapi.json> |
-| [opensearch](clients/search/opensearch.nu)       | openapi | <https://github.com/opensearch-project/opensearch-api-specification/releases/latest/download/opensearch-openapi.yaml>  |
-| [meilisearch](clients/search/meilisearch.nu)     | openapi | <https://raw.githubusercontent.com/meilisearch/specifications/main/open-api.yaml>                                      |
-| [qdrant](clients/search/qdrant.nu)               | openapi | <https://raw.githubusercontent.com/qdrant/qdrant/master/docs/redoc/master/openapi.json>                                |
-| [weaviate](clients/search/weaviate.nu)           | openapi | <https://raw.githubusercontent.com/weaviate/weaviate/main/openapi-specs/schema.json>                                   |
-| [manticore](clients/search/manticore.nu)         | openapi | <https://raw.githubusercontent.com/manticoresoftware/manticoresearch-go/master/api/openapi.yaml>                       |
+| Client                                                     | Type    | Source                                                                                                                                            |
+| ---------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [typesense](clients/search/typesense.nu)                   | openapi | <https://raw.githubusercontent.com/typesense/typesense-api-spec/master/openapi.yml>                                                               |
+| [algolia](clients/search/algolia.nu)                       | openapi | <https://raw.githubusercontent.com/algolia/api-clients-automation/main/specs/bundled/search.yml>                                                  |
+| [elasticsearch](clients/search/elasticsearch.nu)           | openapi | <https://raw.githubusercontent.com/elastic/elasticsearch-specification/main/output/openapi/elasticsearch-openapi.json>                            |
+| [opensearch](clients/search/opensearch.nu)                 | openapi | <https://github.com/opensearch-project/opensearch-api-specification/releases/latest/download/opensearch-openapi.yaml>                             |
+| [meilisearch](clients/search/meilisearch.nu)               | openapi | <https://raw.githubusercontent.com/meilisearch/specifications/main/open-api.yaml>                                                                 |
+| [qdrant](clients/search/qdrant.nu)                         | openapi | <https://raw.githubusercontent.com/qdrant/qdrant/master/docs/redoc/master/openapi.json>                                                           |
+| [weaviate](clients/search/weaviate.nu)                     | openapi | <https://raw.githubusercontent.com/weaviate/weaviate/main/openapi-specs/schema.json>                                                              |
+| [manticore](clients/search/manticore.nu)                   | openapi | <https://raw.githubusercontent.com/manticoresoftware/manticoresearch-go/master/api/openapi.yaml>                                                  |
+| [kagi](clients/search/kagi.nu)                             | openapi | <https://kagi.com/api/docs/_spec/openapi.yaml>                                                                                                    |
+| [openserp](clients/search/openserp.nu)                     | openapi | <https://raw.githubusercontent.com/karust/openserp/main/docs/openapi.yaml>                                                                        |
+| [yext-answers](clients/search/yext-answers.nu)             | openapi | <https://raw.githubusercontent.com/yext/openapi/main/yaml/answersapi.yaml>                                                                        |
+| [coveo](clients/search/coveo.nu)                           | openapi | <https://raw.githubusercontent.com/watson-developer-cloud/assistant-toolkit/master/integrations/extensions/starter-kits/coveo/coveo.openapi.json> |
+| [elastic-app-search](clients/search/elastic-app-search.nu) | openapi | <https://raw.githubusercontent.com/elastic/app-search-php/master/resources/api/api-spec.yml>                                                      |
+| [swiftype](clients/search/swiftype.nu)                     | openapi | <https://raw.githubusercontent.com/swiftype/swiftype-site-search-php/master/resources/api/api-spec.yml>                                           |
 
 ## shipping
 
@@ -936,6 +994,12 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [jokes-one](clients/testing/jokes-one.nu)                                     | openapi | <https://api.apis.guru/v2/specs/jokes.one/1.1/swagger.json>                       |
 | [quotes-rest](clients/testing/quotes-rest.nu)                                 | openapi | <https://api.apis.guru/v2/specs/quotes.rest/3.1/openapi.json>                     |
 
+## torrent
+
+| Client                                        | Type    | Source                                                                                                             |
+| --------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------ |
+| [qbittorrent](clients/torrent/qbittorrent.nu) | openapi | <https://raw.githubusercontent.com/qbittorrent-ecosystem/webui-api-openapi/master/specs/v2.8.3/build/openapi.yaml> |
+
 ## translation
 
 | Client                                                                        | Type    | Source                                                                                                                                                        |
@@ -954,16 +1018,21 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## vector-database
 
-| Client                                                                              | Type    | Source                                                                                                       |
-| ----------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------ |
-| [pinecone](clients/vector-database/pinecone.nu)                                     | openapi | <https://api.apis.guru/v2/specs/pinecone.io/20230401.1/openapi.json>                                         |
-| [pinecone-db-data](clients/vector-database/pinecone-db-data.nu)                     | openapi | <https://raw.githubusercontent.com/pinecone-io/pinecone-api/main/2026-04/db_data_2026-04.oas.yaml>           |
-| [pinecone-db-control](clients/vector-database/pinecone-db-control.nu)               | openapi | <https://raw.githubusercontent.com/pinecone-io/pinecone-api/main/2026-04/db_control_2026-04.oas.yaml>        |
-| [pinecone-inference](clients/vector-database/pinecone-inference.nu)                 | openapi | <https://raw.githubusercontent.com/pinecone-io/pinecone-api/main/2026-04/inference_2026-04.oas.yaml>         |
-| [pinecone-admin](clients/vector-database/pinecone-admin.nu)                         | openapi | <https://raw.githubusercontent.com/pinecone-io/pinecone-api/main/2026-04/admin_2026-04.oas.yaml>             |
-| [pinecone-assistant-control](clients/vector-database/pinecone-assistant-control.nu) | openapi | <https://raw.githubusercontent.com/pinecone-io/pinecone-api/main/2026-04/assistant_control_2026-04.oas.yaml> |
-| [pinecone-assistant-data](clients/vector-database/pinecone-assistant-data.nu)       | openapi | <https://raw.githubusercontent.com/pinecone-io/pinecone-api/main/2026-04/assistant_data_2026-04.oas.yaml>    |
-| [chroma](clients/vector-database/chroma.nu)                                         | openapi | <https://docs.trychroma.com/openapi.json>                                                                    |
+| Client                                                                              | Type    | Source                                                                                                                               |
+| ----------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| [pinecone](clients/vector-database/pinecone.nu)                                     | openapi | <https://api.apis.guru/v2/specs/pinecone.io/20230401.1/openapi.json>                                                                 |
+| [pinecone-db-data](clients/vector-database/pinecone-db-data.nu)                     | openapi | <https://raw.githubusercontent.com/pinecone-io/pinecone-api/main/2026-04/db_data_2026-04.oas.yaml>                                   |
+| [pinecone-db-control](clients/vector-database/pinecone-db-control.nu)               | openapi | <https://raw.githubusercontent.com/pinecone-io/pinecone-api/main/2026-04/db_control_2026-04.oas.yaml>                                |
+| [pinecone-inference](clients/vector-database/pinecone-inference.nu)                 | openapi | <https://raw.githubusercontent.com/pinecone-io/pinecone-api/main/2026-04/inference_2026-04.oas.yaml>                                 |
+| [pinecone-admin](clients/vector-database/pinecone-admin.nu)                         | openapi | <https://raw.githubusercontent.com/pinecone-io/pinecone-api/main/2026-04/admin_2026-04.oas.yaml>                                     |
+| [pinecone-assistant-control](clients/vector-database/pinecone-assistant-control.nu) | openapi | <https://raw.githubusercontent.com/pinecone-io/pinecone-api/main/2026-04/assistant_control_2026-04.oas.yaml>                         |
+| [pinecone-assistant-data](clients/vector-database/pinecone-assistant-data.nu)       | openapi | <https://raw.githubusercontent.com/pinecone-io/pinecone-api/main/2026-04/assistant_data_2026-04.oas.yaml>                            |
+| [chroma](clients/vector-database/chroma.nu)                                         | openapi | <https://docs.trychroma.com/openapi.json>                                                                                            |
+| [vectara](clients/vector-database/vectara.nu)                                       | openapi | <https://docs.vectara.com/vectara-oas-v2.yaml>                                                                                       |
+| [turbopuffer](clients/vector-database/turbopuffer.nu)                               | openapi | <https://raw.githubusercontent.com/turbopuffer/turbopuffer-openapi/next/openapi.yml>                                                 |
+| [milvus](clients/vector-database/milvus.nu)                                         | openapi | <https://raw.githubusercontent.com/milvus-io/web-content/master/API_Reference/milvus-restful/v2.4.x/Restful%20API%20v2.openapi.json> |
+| [mongodb-atlas-admin](clients/vector-database/mongodb-atlas-admin.nu)               | openapi | <https://raw.githubusercontent.com/mongodb/openapi/main/openapi/v2.yaml>                                                             |
+| [semadb](clients/vector-database/semadb.nu)                                         | openapi | <https://raw.githubusercontent.com/Semafind/semadb/main/httpapi/v2/openapi.yaml>                                                     |
 
 ## version-control
 

@@ -1,11 +1,15 @@
 #!/usr/bin/env nu
 
-# (Re)generate one or more clients listed in clients.yaml.
+# Generate one or more clients listed in clients.yaml.
+#
+# By default, only clients whose output file does not yet exist are generated.
+# Pass --force to regenerate regardless.
 #
 # Examples:
-#   nu scripts/generate.nu               # regenerate every client
-#   nu scripts/generate.nu all           # same as above
-#   nu scripts/generate.nu countries     # regenerate only the `countries` client
+#   nu scripts/generate.nu               # generate every missing client
+#   nu scripts/generate.nu --force       # regenerate every client
+#   nu scripts/generate.nu countries     # generate `countries` if missing
+#   nu scripts/generate.nu countries --force  # regenerate `countries`
 #
 # Clients are written to `<out-dir>/<category>/<name>.nu`. Names must be
 # unique across categories (validated at startup).
@@ -21,6 +25,7 @@ def main [
     --out-dir: path = "clients"              # where to write generated `.nu` files
     --list-file: path = "CLIENTS.md"         # markdown file listing the registry; fully overwritten
     --list-only                              # skip generation; only refresh the list file from `clients.yaml`
+    --force                                  # regenerate even if the output file already exists (default: skip existing)
 ] {
     if not ($config | path exists) {
         error make { msg: $"config file not found: ($config)" }
@@ -43,11 +48,25 @@ def main [
         error make { msg: $"generator not found at ($generator). Clone it with: git clone https://github.com/lassoColombo/nu-http-client-generator ($generator)" }
     }
 
-    let selected = (filter-clients $all_clients $client)
+    let matched = (filter-clients $all_clients $client)
     mkdir $out_dir
 
     let generator_path = ($generator | into string)
     let generator_name = ($generator | path basename)
+
+    let partitioned = if $force {
+        { selected: $matched, skipped: [] }
+    } else {
+        let with_path = ($matched | each {|c| $c | insert out_path ($out_dir | path join $c.category $"($c.name).nu") })
+        {
+            selected: ($with_path | where {|c| not ($c.out_path | path exists) })
+            skipped:  ($with_path | where {|c| $c.out_path | path exists })
+        }
+    }
+    let selected = $partitioned.selected
+    for s in $partitioned.skipped {
+        print $"  - ($s.category)/($s.name) \(exists; use --force to regenerate\)"
+    }
 
     print $"Generating ($selected | length) client\(s\) into ($out_dir)/ in parallel"
     let results = (

@@ -1,4 +1,4 @@
-# Auto-generated client for Clerk Backend API v2025-11-10
+# Auto-generated client for Clerk Backend API v2026-05-12
 # Source: https://raw.githubusercontent.com/clerk/openapi-specs/main/bapi/2026-05-12.yml
 # Auth: --token flag or $env.CLERK_BACKEND_API_TOKEN
 
@@ -3108,8 +3108,6 @@ export def "organizations UpdateOrganization" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --public-metadata: record # Metadata saved on the organization, that is visible to both your frontend and backend. (nullable)
-  --private-metadata: record # Metadata saved on the organization that is only visible to your backend. (nullable)
   --name: string # The new name of the organization. May not contain URLs or HTML. Max length: 256 (nullable)
   --slug: string # The new slug of the organization, which needs to be unique in the instance (nullable)
   --max-allowed-memberships: int # The maximum number of memberships allowed for this organization (nullable)
@@ -3121,7 +3119,7 @@ export def "organizations UpdateOrganization" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/organizations/($organization_id)")
-  let body = {public_metadata: $public_metadata, private_metadata: $private_metadata, name: $name, slug: $slug, max_allowed_memberships: $max_allowed_memberships, admin_delete_enabled: $admin_delete_enabled, created_at: $created_at, role_set_key: $role_set_key} | compact
+  let body = {name: $name, slug: $slug, max_allowed_memberships: $max_allowed_memberships, admin_delete_enabled: $admin_delete_enabled, created_at: $created_at, role_set_key: $role_set_key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3175,6 +3173,33 @@ export def "organizations-metadata MergeOrganizationMetadata" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+}
+
+# Replace metadata for an organization
+#
+# PUT /organizations/{organization_id}/metadata
+# operationId: ReplaceOrganizationMetadata
+export def "organizations-metadata ReplaceOrganizationMetadata" [
+  organization_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --public-metadata: record # Metadata saved on the organization, that is visible to both your frontend and backend. The existing value will be replaced entirely with the new object.
+  --private-metadata: record # Metadata saved on the organization that is only visible to your backend. The existing value will be replaced entirely with the new object.
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/organizations/($organization_id)/metadata")
+  let body = {public_metadata: $public_metadata, private_metadata: $private_metadata} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
 }
 
 # Upload a logo for the organization

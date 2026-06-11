@@ -23218,7 +23218,7 @@ export def "organizations-batch-exports-test get" [
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
-# Manage CIMD verification tokens for an organization.  A partner embeds the plaintext token in their CIMD metadata document under `posthog_verification_token`. When PostHog fetches the metadata, matching the token links the partner app to this organization and grants a higher default rate limit for account provisioning.  The plaintext value is only available on creation; we store a hash.
+# Manage CIMD verification tokens for an organization.  A partner embeds the plaintext token in their CIMD metadata document as `verification_token` inside the `com.posthog` object (the legacy top-level `posthog_verification_token` field still works as a fallback). When PostHog fetches the metadata, matching the token links the partner app to this organization and grants a higher default rate limit for account provisioning.  The plaintext value is only available on creation; we store a hash.
 #
 # GET /api/organizations/{organization_id}/cimd_verification_tokens/
 # operationId: cimd_verification_tokens_list
@@ -23243,7 +23243,7 @@ export def "organizations-cimd-verification-tokens list" [
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
-# Manage CIMD verification tokens for an organization.  A partner embeds the plaintext token in their CIMD metadata document under `posthog_verification_token`. When PostHog fetches the metadata, matching the token links the partner app to this organization and grants a higher default rate limit for account provisioning.  The plaintext value is only available on creation; we store a hash.
+# Manage CIMD verification tokens for an organization.  A partner embeds the plaintext token in their CIMD metadata document as `verification_token` inside the `com.posthog` object (the legacy top-level `posthog_verification_token` field still works as a fallback). When PostHog fetches the metadata, matching the token links the partner app to this organization and grants a higher default rate limit for account provisioning.  The plaintext value is only available on creation; we store a hash.
 #
 # POST /api/organizations/{organization_id}/cimd_verification_tokens/
 # operationId: cimd_verification_tokens_create
@@ -23269,7 +23269,7 @@ export def "organizations-cimd-verification-tokens create" [
   do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
 }
 
-# Manage CIMD verification tokens for an organization.  A partner embeds the plaintext token in their CIMD metadata document under `posthog_verification_token`. When PostHog fetches the metadata, matching the token links the partner app to this organization and grants a higher default rate limit for account provisioning.  The plaintext value is only available on creation; we store a hash.
+# Manage CIMD verification tokens for an organization.  A partner embeds the plaintext token in their CIMD metadata document as `verification_token` inside the `com.posthog` object (the legacy top-level `posthog_verification_token` field still works as a fallback). When PostHog fetches the metadata, matching the token links the partner app to this organization and grants a higher default rate limit for account provisioning.  The plaintext value is only available on creation; we store a hash.
 #
 # GET /api/organizations/{organization_id}/cimd_verification_tokens/{id}/
 # operationId: cimd_verification_tokens_retrieve
@@ -23292,7 +23292,7 @@ export def "organizations-cimd-verification-tokens get" [
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
-# Manage CIMD verification tokens for an organization.  A partner embeds the plaintext token in their CIMD metadata document under `posthog_verification_token`. When PostHog fetches the metadata, matching the token links the partner app to this organization and grants a higher default rate limit for account provisioning.  The plaintext value is only available on creation; we store a hash.
+# Manage CIMD verification tokens for an organization.  A partner embeds the plaintext token in their CIMD metadata document as `verification_token` inside the `com.posthog` object (the legacy top-level `posthog_verification_token` field still works as a fallback). When PostHog fetches the metadata, matching the token links the partner app to this organization and grants a higher default rate limit for account provisioning.  The plaintext value is only available on creation; we store a hash.
 #
 # DELETE /api/organizations/{organization_id}/cimd_verification_tokens/{id}/
 # operationId: cimd_verification_tokens_destroy
@@ -59970,7 +59970,7 @@ export def "users delete" [
   do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
-# Mark the user as having reviewed their existing credentials. Idempotent. Flips `requires_credential_review` to False so the post-login interstitial isn't shown again. Does not modify any credentials; the user revokes individual Personal API Keys via the existing PAT endpoints from the same screen.
+# Mark the user as having reviewed their existing credentials. Idempotent. Flips `requires_credential_review` to False so the post-login interstitial isn't shown again. Does not modify any credentials; the user revokes individual Personal API Keys and passkeys via their existing endpoints from the same screen.
 #
 # POST /api/users/{uuid}/credentials_review_complete/
 # operationId: users_credentials_review_complete_create

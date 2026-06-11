@@ -15128,7 +15128,7 @@ export def "s-observability-slos createSloOp" [
   --artifacts: record # Links to related assets for the SLO — shape: {dashboards?: list}
   budgetingMethod: string@budgetingMethod-completer # The budgeting method to use when computing the rollup data. (e.g. occurrences)
   description: string # A description for the SLO.
-  --groupBy: any # optional group by field or fields to use to generate an SLO per distinct value (e.g. [[service.name], service.name, [service.name, service.environment]])
+  --groupBy: any # optional group by field or fields to use to generate an SLO per distinct value (e.g. [service.name, service.name, service.name, service.environment])
   --id: string # A optional and unique identifier for the SLO. Must be between 8 and 36 chars (e.g. my-super-slo-id)
   indicator: any
   name: string # A name for the SLO.
@@ -15342,7 +15342,7 @@ export def "s-observability-slos updateSloOp" [
   --artifacts: record # Links to related assets for the SLO — shape: {dashboards?: list}
   --budgetingMethod: string@budgetingMethod-completer # The budgeting method to use when computing the rollup data. (e.g. occurrences)
   --description: string # A description for the SLO.
-  --groupBy: any # optional group by field or fields to use to generate an SLO per distinct value (e.g. [[service.name], service.name, [service.name, service.environment]])
+  --groupBy: any # optional group by field or fields to use to generate an SLO per distinct value (e.g. [service.name, service.name, service.name, service.environment])
   --indicator: any
   --name: string # A name for the SLO.
   --objective: record # Defines properties for the SLO objective — shape: {target: float, timesliceTarget?: float, timesliceWindow?: string}
