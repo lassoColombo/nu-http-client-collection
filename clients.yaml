@@ -221,11 +221,29 @@ clients:
     - name: alchemy-nft
       type: openapi
       source: https://raw.githubusercontent.com/alchemyplatform/docs-openapi-specs/main/nft/nfts.yaml
+    - name: alchemy-prices
+      type: openapi
+      source: https://raw.githubusercontent.com/alchemyplatform/docs-openapi-specs/main/prices/prices.yaml
+    - name: alchemy-notify
+      type: openapi
+      source: https://raw.githubusercontent.com/alchemyplatform/docs-openapi-specs/main/notify/notify.yaml
+    - name: alchemy-data
+      type: openapi
+      source: https://raw.githubusercontent.com/alchemyplatform/docs-openapi-specs/main/data/v1.yaml
+    - name: moralis
+      type: openapi
+      source: https://deep-index.moralis.io/api-docs-2.2/v2.2/swagger.json
 
   browser-automation:
     - name: browserless
       type: openapi
       source: https://docs.browserless.io/redocusaurus/plugin-redoc-0.yaml
+    - name: browserbase
+      type: openapi
+      source: https://storage.googleapis.com/stainless-sdk-openapi-specs/browserbase/browserbase-f39b852755134d01a440f7c37701f6c5397f43d13740d9ba08739cae488382a7.yml
+    - name: apify
+      type: openapi
+      source: https://api.apify.com/v2/openapi.json
 
   calendar:
     - name: google-calendar
@@ -467,6 +485,9 @@ clients:
     - name: miro
       type: openapi
       source: https://raw.githubusercontent.com/miroapp/api-clients/main/packages/generator/spec.json
+    - name: bluescape
+      type: openapi
+      source: https://api.apps.us.bluescape.com/v3/openapi.json
 
   commerce:
     - name: square
@@ -707,11 +728,38 @@ clients:
     - name: snowflake-account
       type: openapi
       source: https://raw.githubusercontent.com/snowflakedb/snowflake-rest-api-specs/main/specifications/account.yaml
+    - name: snowflake-database
+      type: openapi
+      source: https://raw.githubusercontent.com/snowflakedb/snowflake-rest-api-specs/main/specifications/database.yaml
+    - name: snowflake-warehouse
+      type: openapi
+      source: https://raw.githubusercontent.com/snowflakedb/snowflake-rest-api-specs/main/specifications/warehouse.yaml
+    - name: snowflake-sqlapi
+      type: openapi
+      source: https://raw.githubusercontent.com/snowflakedb/snowflake-rest-api-specs/main/specifications/sqlapi.yaml
+    - name: bigquery
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/bigquery/v2/openapi.json
 
   database:
     - name: neon
       type: openapi
       source: https://neon.com/api_spec/release/v2.json
+    - name: planetscale
+      type: openapi
+      source: https://api.planetscale.com/v1/openapi-spec
+    - name: supabase-mgmt
+      type: openapi
+      source: https://api.supabase.com/api/v1-json
+    - name: turso
+      type: openapi
+      source: https://raw.githubusercontent.com/tursodatabase/turso-docs/main/api-reference/openapi.json
+    - name: mongodb-atlas
+      type: openapi
+      source: https://raw.githubusercontent.com/mongodb/openapi/main/openapi/v2.json
+    - name: cockroachdb-cloud
+      type: openapi
+      source: https://cockroachlabs.cloud/assets/docs/api/latest/openapi.json
 
   dns:
     - name: aws-route53
@@ -1695,6 +1743,9 @@ clients:
     - name: onepassword-connect
       type: openapi
       source: https://raw.githubusercontent.com/1Password/connect/main/docs/openapi/spec.yaml
+    - name: onepassword-events-api
+      type: openapi
+      source: https://api.apis.guru/v2/specs/1password.com/events/1.0.0/openapi.json
 
   payments:
     - name: stripe
@@ -2742,6 +2793,9 @@ clients:
     - name: toggl-track
       type: openapi
       source: https://engineering.toggl.com/assets/files/api-d56ecbd7b19d9020283019e0581d80ca.json
+    - name: clockify
+      type: openapi
+      source: https://docs.clockify.me/openapi.json
 
   torrent:
     - name: qbittorrent
@@ -2784,8 +2838,14 @@ clients:
     - name: render
       type: openapi
       source: https://api-docs.render.com/openapi/render-public-api-1.json
+    - name: dokploy
+      type: openapi
+      source: https://docs.dokploy.com/openapi.json
 
   workflow-automation:
     - name: n8n
       type: openapi
       source: https://docs.n8n.io/api/v1/openapi.yml
+    - name: make
+      type: openapi
+      source: https://eu1.make.com/api/v2/openapi.json
