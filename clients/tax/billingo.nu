@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -66,8 +67,11 @@ def auth-scheme-completer [] { ["x-api-key"] }
 
 # Completers for enum parameters
 def currency-completer [] { ["AUD" "BGN" "BRL" "CAD" "CHF" "CNY" "CZK" "DKK" "EUR" "GBP" "HKD" "HRK" "HUF" "IDR" "ILS" "INR" "ISK" "JPY" "KRW" "LTL" "LVL" "MXN" "MYR" "NOK" "NZD" "PHP" "PLN" "RON" "RSD" "RUB" "SEK" "SGD" "THB" "TRY" "UAH" "USD" "ZAR"] }
-def language-completer [] { ["de" "en" "fr" "hr" "hu" "it" "ro" "sk"] }
+def from-completer [] { ["AUD" "BGN" "BRL" "CAD" "CHF" "CNY" "CZK" "DKK" "EUR" "GBP" "HKD" "HRK" "HUF" "IDR" "ILS" "INR" "ISK" "JPY" "KRW" "LTL" "LVL" "MXN" "MYR" "NOK" "NZD" "PHP" "PLN" "RON" "RSD" "RUB" "SEK" "SGD" "THB" "TRY" "UAH" "USD" "ZAR"] }
+def to-completer [] { ["AUD" "BGN" "BRL" "CAD" "CHF" "CNY" "CZK" "DKK" "EUR" "GBP" "HKD" "HRK" "HUF" "IDR" "ILS" "INR" "ISK" "JPY" "KRW" "LTL" "LVL" "MXN" "MYR" "NOK" "NZD" "PHP" "PLN" "RON" "RSD" "RUB" "SEK" "SGD" "THB" "TRY" "UAH" "USD" "ZAR"] }
 def payment-method-completer [] { ["aruhitel" "bankcard" "barion" "barter" "cash" "cash_on_delivery" "coupon" "elore_utalas" "ep_kartya" "kompenzacio" "levonas" "online_bankcard" "payoneer" "paypal" "paypal_utolag" "payu" "pick_pack_pont" "postai_csekk" "postautalvany" "skrill" "szep_card" "transferwise" "upwork" "utalvany" "valto" "wire_transfer"] }
+def payment-status-completer [] { ["expired" "none" "outstanding" "paid" "partially_paid"] }
+def language-completer [] { ["de" "en" "fr" "hr" "hu" "it" "ro" "sk"] }
 def type-completer [] { ["advance" "draft" "invoice" "proforma"] }
 def accept-completer [] { ["application/json" "application/pdf"] }
 def vat-completer [] { ["0%" "1%" "10%" "11%" "12%" "13%" "14%" "15%" "16%" "17%" "18%" "19%" "2%" "20%" "21%" "22%" "23%" "24%" "25%" "26%" "27%" "3%" "4%" "5%" "6%" "7%" "8%" "9%" "AAM" "AM" "EU" "EUK" "F.AFA" "FAD" "K.AFA" "MAA" "TAM" "ÁKK" "ÁTHK"] }
@@ -236,8 +240,8 @@ export def "currencies GetConversionRate" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-from: string
-  --qp-to: string
+  --qp-from: string@from-completer
+  --qp-to: string@to-completer
 ]: nothing -> record<conversation_rate: float, from_currency: string, to_currency: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -288,8 +292,8 @@ export def "documents ListDocument" [
   --per-page: int # default: 25
   --block-id: int # Filter documents by the identifier of your DocumentBlock.
   --partner-id: int # Filter documents by the identifier of your Partner.
-  --payment-method: string # Filter documents by PaymentMethod value. (e.g. cash)
-  --payment-status: string # Filter documents by PaymentStatus value. (e.g. paid)
+  --payment-method: string@payment-method-completer # Filter documents by PaymentMethod value. (e.g. cash)
+  --payment-status: string@payment-status-completer # Filter documents by PaymentStatus value. (e.g. paid)
   --start-date: string # Filter documents by date. (format: date, e.g. 2020-05-15)
   --end-date: string # Filter documents by date. (format: date, e.g. 2020-05-15)
   --start-number: int # Starting number of the document, should not contain year or any other formatting. Required if `start_year` given (e.g. 1)

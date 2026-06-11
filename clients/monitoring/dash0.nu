@@ -19,17 +19,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -71,9 +72,11 @@ def kind-completer-3 [] { ["Dash0NotificationChannel"] }
 def apiVersion-completer [] { ["monitoring.coreos.com/v1"] }
 def kind-completer-4 [] { ["PrometheusRule"] }
 def kind-completer-5 [] { ["Dash0Sampling"] }
+def signal-completer [] { ["logs" "spans"] }
 def kind-completer-6 [] { ["Dash0SignalToMetrics"] }
 def apiVersion-completer-1 [] { ["openslo/v1"] }
 def kind-completer-7 [] { ["SLO"] }
+def format-completer [] { ["json" "yaml"] }
 def accept-completer [] { ["application/json" "application/yaml"] }
 def apiVersion-completer-2 [] { ["v1alpha1"] }
 def kind-completer-8 [] { ["Dash0SpamFilter"] }
@@ -1586,7 +1589,7 @@ export def "signal-to-metrics list" [
   --offset: int # Number of items to skip. (default: 0)
   --originPrefix: string # Filter by origin prefix.
   --name: string # Case-insensitive substring search on the rule name.
-  --signal: string # Filter by signal type.
+  --signal: string@signal-completer # Filter by signal type.
   --enabled: string@bool-completer # Filter by enabled state.
 ]: nothing -> record<signalToMetrics: table<kind: string, metadata: record, spec: record>, hasMore: bool, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1825,7 +1828,7 @@ export def "slos get" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --dataset: string
-  --format: string # Return OpenSLO YAML instead of JSON. Equivalent to `Accept: application/yaml`.
+  --format: string@format-completer # Return OpenSLO YAML instead of JSON. Equivalent to `Accept: application/yaml`.
 ]: nothing -> record<apiVersion: string, kind: string, metadata: record<name: string, labels: record<dash0_com_id: string, dash0_com_origin: string, dash0_com_version: string, dash0_com_dataset: string, dash0_com_source: string>, annotations: record<dash0_com_created_at: string, dash0_com_updated_at: string, dash0_com_deleted_at: string, dash0_com_folder_path: string, dash0_com_sharing: string, dash0_com_enabled: string>>, spec: record<description: string, service: string, indicator: record<metadata: record, spec: record>, indicatorRef: string, timeWindow: list<record>, budgetingMethod: string, objectives: list<record>, alertPolicies: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

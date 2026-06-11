@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -65,11 +66,23 @@ def base-url-completer [] { ["https://connect.squareup.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def order-completer [] { ["ASC" "DESC"] }
 def action-completer [] { ["CANCEL" "COMPLETE" "REFUND"] }
 def sort-order-completer [] { ["ASC" "DESC"] }
 def archived-state-completer [] { ["ARCHIVED_STATE_ALL" "ARCHIVED_STATE_ARCHIVED" "ARCHIVED_STATE_NOT_ARCHIVED"] }
+def reference-type-completer [] { ["CASH_LOCAL" "FIRST_PARTY_INTEGRATION" "GIFT_CARD" "GIFT_CARD_MARKETPLACE" "INVOICE" "KIOSK" "LOCATION" "OAUTH_APPLICATION" "ONLINE_BOOKING_FLOW" "ONLINE_CHECKOUT" "ONLINE_SITE" "POINT_OF_SALE" "RECURRING_SUBSCRIPTION" "SQUARE_ASSISTANT" "UNKNOWN_TYPE"] }
+def status-completer [] { ["ACTIVE" "INACTIVE"] }
+def sort-field-completer [] { ["CREATED_AT" "DEFAULT"] }
+def product-type-completer [] { ["TERMINAL_API"] }
+def status-completer-1 [] { ["EXPIRED" "PAIRED" "UNKNOWN" "UNPAIRED"] }
+def states-completer [] { ["ACCEPTED" "EVIDENCE_REQUIRED" "INQUIRY_CLOSED" "INQUIRY_EVIDENCE_REQUIRED" "INQUIRY_PROCESSING" "LOST" "PROCESSING" "WON"] }
 def evidence-type-completer [] { ["AUTHORIZATION_DOCUMENTATION" "CANCELLATION_OR_REFUND_DOCUMENTATION" "CARDHOLDER_COMMUNICATION" "CARDHOLDER_INFORMATION" "DUPLICATE_CHARGE_DOCUMENTATION" "GENERIC_EVIDENCE" "ONLINE_OR_APP_ACCESS_LOG" "PRODUCT_OR_SERVICE_DESCRIPTION" "PROOF_OF_DELIVERY_DOCUMENTATION" "PURCHASE_ACKNOWLEDGEMENT" "REBUTTAL_EXPLANATION" "RECEIPT" "RELATED_TRANSACTION_DOCUMENTATION" "SERVICE_RECEIVED_DOCUMENTATION" "TRACKING_NUMBER"] }
 def scheduled-shift-notification-audience-completer [] { ["AFFECTED" "ALL" "NONE"] }
+def visibility-filter-completer [] { ["ALL" "READ" "READ_WRITE"] }
+def status-completer-2 [] { ["ACTIVE" "CANCELED" "ENDED" "SCHEDULED"] }
+def sort-field-completer-1 [] { ["CREATED_AT" "OFFLINE_CREATED_AT" "UPDATED_AT"] }
+def status-completer-3 [] { ["FAILED" "PAID" "SENT"] }
+def sort-field-completer-2 [] { ["CREATED_AT" "UPDATED_AT"] }
 def resume-change-timing-completer [] { ["END_OF_BILLING_CYCLE" "IMMEDIATE"] }
 
 # List all available API commands with their parameters
@@ -194,7 +207,7 @@ export def "orders V1ListOrders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --order: string # The order in which payments are listed in the response.
+  --order: string@order-completer # The order in which payments are listed in the response.
   --limit: int # The maximum number of payments to return in a single response. This value cannot exceed 200.
   --batch-token: string # A pagination cursor to retrieve the next set of results for your original query to the endpoint.
 ]: nothing -> table<errors: list<record>, id: string, buyer_email: string, recipient_name: string, recipient_phone_number: string, state: string, shipping_address: record<address_line_1: string, address_line_2: string, address_line_3: string, locality: string, sublocality: string, sublocality_2: string, sublocality_3: string, administrative_district_level_1: string, administrative_district_level_2: string, administrative_district_level_3: string, postal_code: string, country: string, first_name: string, last_name: string>, subtotal_money: record<amount: int, currency_code: string>, total_shipping_money: record<amount: int, currency_code: string>, total_tax_money: record<amount: int, currency_code: string>, total_price_money: record<amount: int, currency_code: string>, total_discount_money: record<amount: int, currency_code: string>, created_at: string, updated_at: string, expires_at: string, payment_id: string, buyer_note: string, completed_note: string, refunded_note: string, canceled_note: string, tender: record<id: string, type: string, name: string, employee_id: string, receipt_url: string, card_brand: string, pan_suffix: string, entry_method: string, payment_note: string, total_money: record, tendered_money: record, tendered_at: string, settled_at: string, change_back_money: record, refunded_money: record, is_exchange: bool>, order_history: list<record>, promo_code: string, btc_receive_address: string, btc_price_satoshi: float> {
@@ -1028,7 +1041,7 @@ export def "cards ListCards" [
   --customer-id: string # Limit results to cards associated with the customer supplied. By default, all cards owned by the merchant are returned.
   --include-disabled: string@bool-completer # Includes disabled cards. By default, all enabled cards owned by the merchant are returned. (default: false)
   --reference-id: string # Limit results to cards associated with the reference_id supplied.
-  --sort-order: string # Sorts the returned list by when the card was created with the specified order. This field defaults to ASC.
+  --sort-order: string@sort-order-completer # Sorts the returned list by when the card was created with the specified order. This field defaults to ASC.
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, cards: table<id: string, card_brand: string, last_4: string, exp_month: int, exp_year: int, cardholder_name: string, billing_address: record, fingerprint: string, customer_id: string, merchant_id: string, reference_id: string, enabled: bool, card_type: string, prepaid_type: string, bin: string, created_at: string, disabled_at: string, version: int, card_co_brand: string, issuer_alert: string, issuer_alert_at: string, hsa_fsa: bool>, cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1125,7 +1138,7 @@ export def "cash-drawers-shifts ListCashDrawerShifts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --location-id: string # The ID of the location to query for a list of cash drawer shifts.
-  --sort-order: string # The order in which cash drawer shifts are listed in the response, based on their opened_at field. Default value: ASC
+  --sort-order: string@sort-order-completer # The order in which cash drawer shifts are listed in the response, based on their opened_at field. Default value: ASC
   --begin-time: string # The inclusive start time of the query on opened_at, in ISO 8601 format.
   --end-time: string # The exclusive end date of the query on opened_at, in ISO 8601 format.
   --limit: int # Number of cash drawer shift events in a page of results (200 by default, 1000 max).
@@ -1581,9 +1594,9 @@ export def "channels ListChannels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --reference-type: string # Type of reference associated to channel
+  --reference-type: string@reference-type-completer # Type of reference associated to channel
   --reference-id: string # id of reference associated to channel
-  --status: string # Status of channel
+  --status: string@status-completer # Status of channel
   --cursor: string # Cursor to fetch the next result
   --limit: int # Maximum number of results to return. When not provided the returned results will be cap at 100 channels.
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, channels: table<id: string, merchant_id: string, name: string, version: int, reference: record, status: string, created_at: string, updated_at: string>, cursor: string> {
@@ -1657,8 +1670,8 @@ export def "customers ListCustomers" [
   --allow-errors(-e) # Return full response without error handling
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this cursor to retrieve the next set of results for your original query.  For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --limit: int # The maximum number of results to return in a single page. This limit is advisory. The response might contain more or fewer results. If the specified limit is less than 1 or greater than 100, Square returns a `400 VALUE_TOO_LOW` or `400 VALUE_TOO_HIGH` error. The default value is 100.  For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
-  --sort-field: string # Indicates how customers should be sorted.  The default value is `DEFAULT`.
-  --sort-order: string # Indicates whether customers should be sorted in ascending (`ASC`) or descending (`DESC`) order.  The default value is `ASC`.
+  --sort-field: string@sort-field-completer # Indicates how customers should be sorted.  The default value is `DEFAULT`.
+  --sort-order: string@sort-order-completer # Indicates whether customers should be sorted in ascending (`ASC`) or descending (`DESC`) order.  The default value is `ASC`.
   --count: string@bool-completer # Indicates whether to return the total count of customers in the `count` field of the response.  The default value is `false`. (default: false)
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, customers: table<id: string, created_at: string, updated_at: string, given_name: string, family_name: string, nickname: string, company_name: string, email_address: string, address: record, phone_number: string, birthday: string, reference_id: string, note: string, preferences: record, creation_source: string, group_ids: list, segment_ids: list, version: int, tax_ids: record>, cursor: string, count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2460,7 +2473,7 @@ export def "devices ListDevices" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this cursor to retrieve the next set of results for the original query. See [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination) for more information.
-  --sort-order: string # The order in which results are listed. - `ASC` - Oldest to newest. - `DESC` - Newest to oldest (default).
+  --sort-order: string@sort-order-completer # The order in which results are listed. - `ASC` - Oldest to newest. - `DESC` - Newest to oldest (default).
   --limit: int # The number of results to return in a single page.
   --location-id: string # If present, only returns devices at the target location.
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, devices: table<id: string, attributes: record, components: list, status: record>, cursor: string> {
@@ -2487,8 +2500,8 @@ export def "devices-codes ListDeviceCodes" [
   --allow-errors(-e) # Return full response without error handling
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this to retrieve the next set of results for your original query.  See [Paginating results](https://developer.squareup.com/docs/working-with-apis/pagination) for more information.
   --location-id: string # If specified, only returns DeviceCodes of the specified location. Returns DeviceCodes of all locations if empty.
-  --product-type: string # If specified, only returns DeviceCodes targeting the specified product type. Returns DeviceCodes of all product types if empty.
-  --status: string # If specified, returns DeviceCodes with the specified statuses. Returns DeviceCodes of status `PAIRED` and `UNPAIRED` if empty.
+  --product-type: string@product-type-completer # If specified, only returns DeviceCodes targeting the specified product type. Returns DeviceCodes of all product types if empty.
+  --status: string@status-completer-1 # If specified, returns DeviceCodes with the specified statuses. Returns DeviceCodes of status `PAIRED` and `UNPAIRED` if empty.
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, device_codes: table<id: string, name: string, code: string, device_id: string, product_type: string, location_id: string, status: string, pair_by: string, created_at: string, status_changed_at: string, paired_at: string>, cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2583,7 +2596,7 @@ export def "disputes ListDisputes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this cursor to retrieve the next set of results for the original query. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
-  --states: string # The dispute states used to filter the result. If not specified, the endpoint returns all disputes.
+  --states: string@states-completer # The dispute states used to filter the result. If not specified, the endpoint returns all disputes.
   --location-id: string # The ID of the location for which to return a list of disputes. If not specified, the endpoint returns disputes associated with all locations.
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, disputes: table<dispute_id: string, id: string, amount_money: record, reason: string, state: string, due_at: string, disputed_payment: record, evidence_ids: list, card_brand: string, created_at: string, updated_at: string, brand_dispute_id: string, reported_date: string, reported_at: string, version: int, location_id: string>, cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2802,7 +2815,7 @@ export def "employees ListEmployees" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --location-id: string
-  --status: string # Specifies the EmployeeStatus to filter the employee by.
+  --status: string@status-completer # Specifies the EmployeeStatus to filter the employee by.
   --limit: int # The number of employees to be returned on each page.
   --cursor: string # The token required to retrieve the specified page of results.
 ]: nothing -> record<employees: table<id: string, first_name: string, last_name: string, email: string, phone_number: string, location_ids: list, status: string, is_owner: bool, created_at: string, updated_at: string>, cursor: string, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -4530,7 +4543,7 @@ export def "locations-custom-attribute-definitions ListLocationCustomAttributeDe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --visibility-filter: string # Filters the `CustomAttributeDefinition` results by their `visibility` values.
+  --visibility-filter: string@visibility-filter-completer # Filters the `CustomAttributeDefinition` results by their `visibility` values.
   --limit: int # The maximum number of results to return in a single paged response. This limit is advisory. The response might contain more or fewer results. The minimum value is 1 and the maximum value is 100. The default value is 20. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --cursor: string # The cursor returned in the paged response from the previous call to this endpoint. Provide this cursor to retrieve the next page of results for your original request. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
 ]: nothing -> record<custom_attribute_definitions: table<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, cursor: string, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -4795,7 +4808,7 @@ export def "locations-custom-attributes ListLocationCustomAttributes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --visibility-filter: string # Filters the `CustomAttributeDefinition` results by their `visibility` values.
+  --visibility-filter: string@visibility-filter-completer # Filters the `CustomAttributeDefinition` results by their `visibility` values.
   --limit: int # The maximum number of results to return in a single paged response. This limit is advisory. The response might contain more or fewer results. The minimum value is 1 and the maximum value is 100. The default value is 20. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --cursor: string # The cursor returned in the paged response from the previous call to this endpoint. Provide this cursor to retrieve the next page of results for your original request. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --with-definitions: string@bool-completer # Indicates whether to return the [custom attribute definition](entity:CustomAttributeDefinition) in the `definition` field of each custom attribute. Set this parameter to `true` to get the name and description of each custom attribute, information about the data type, or other definition details. The default value is `false`. (default: false)
@@ -4904,7 +4917,7 @@ export def "locations-transactions ListTransactions" [
   --allow-errors(-e) # Return full response without error handling
   --begin-time: string # The beginning of the requested reporting period, in RFC 3339 format.  See [Date ranges](https://developer.squareup.com/docs/build-basics/working-with-dates) for details on date inclusivity/exclusivity.  Default value: The current time minus one year.
   --end-time: string # The end of the requested reporting period, in RFC 3339 format.  See [Date ranges](https://developer.squareup.com/docs/build-basics/working-with-dates) for details on date inclusivity/exclusivity.  Default value: The current time.
-  --sort-order: string # The order in which results are listed in the response (`ASC` for oldest first, `DESC` for newest first).  Default value: `DESC`
+  --sort-order: string@sort-order-completer # The order in which results are listed in the response (`ASC` for oldest first, `DESC` for newest first).  Default value: `DESC`
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this to retrieve the next set of results for your original query.  See [Paginating results](https://developer.squareup.com/docs/working-with-apis/pagination) for more information.
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, transactions: table<id: string, location_id: string, created_at: string, tenders: list, refunds: list, reference_id: string, product: string, client_id: string, shipping_address: record, order_id: string>, cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5241,7 +5254,7 @@ export def "loyalty-programs-promotions ListLoyaltyPromotions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string # The status to filter the results by. If a status is provided, only loyalty promotions with the specified status are returned. Otherwise, all loyalty promotions associated with the loyalty program are returned.
+  --status: string@status-completer-2 # The status to filter the results by. If a status is provided, only loyalty promotions with the specified status are returned. Otherwise, all loyalty promotions associated with the loyalty program are returned.
   --cursor: string # The cursor returned in the paged response from the previous call to this endpoint. Provide this cursor to retrieve the next page of results for your original request. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --limit: int # The maximum number of results to return in a single paged response. The minimum value is 1 and the maximum value is 30. The default value is 30. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, loyalty_promotions: table<id: string, name: string, incentive: record, available_time: record, trigger_limit: record, status: string, created_at: string, canceled_at: string, updated_at: string, loyalty_program_id: string, minimum_spend_amount_money: record, qualifying_item_variation_ids: list, qualifying_category_ids: list>, cursor: string> {
@@ -5489,7 +5502,7 @@ export def "merchants-custom-attribute-definitions ListMerchantCustomAttributeDe
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --visibility-filter: string # Filters the `CustomAttributeDefinition` results by their `visibility` values.
+  --visibility-filter: string@visibility-filter-completer # Filters the `CustomAttributeDefinition` results by their `visibility` values.
   --limit: int # The maximum number of results to return in a single paged response. This limit is advisory. The response might contain more or fewer results. The minimum value is 1 and the maximum value is 100. The default value is 20. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --cursor: string # The cursor returned in the paged response from the previous call to this endpoint. Provide this cursor to retrieve the next page of results for your original request. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
 ]: nothing -> record<custom_attribute_definitions: table<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, cursor: string, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -5688,7 +5701,7 @@ export def "merchants-custom-attributes ListMerchantCustomAttributes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --visibility-filter: string # Filters the `CustomAttributeDefinition` results by their `visibility` values.
+  --visibility-filter: string@visibility-filter-completer # Filters the `CustomAttributeDefinition` results by their `visibility` values.
   --limit: int # The maximum number of results to return in a single paged response. This limit is advisory. The response might contain more or fewer results. The minimum value is 1 and the maximum value is 100. The default value is 20. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --cursor: string # The cursor returned in the paged response from the previous call to this endpoint. Provide this cursor to retrieve the next page of results for your original request. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --with-definitions: string@bool-completer # Indicates whether to return the [custom attribute definition](entity:CustomAttributeDefinition) in the `definition` field of each custom attribute. Set this parameter to `true` to get the name and description of each custom attribute, information about the data type, or other definition details. The default value is `false`. (default: false)
@@ -6126,7 +6139,7 @@ export def "orders-custom-attribute-definitions ListOrderCustomAttributeDefiniti
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --visibility-filter: string # Requests that all of the custom attributes be returned, or only those that are read-only or read-write.
+  --visibility-filter: string@visibility-filter-completer # Requests that all of the custom attributes be returned, or only those that are read-only or read-write.
   --cursor: string # The cursor returned in the paged response from the previous call to this endpoint.  Provide this cursor to retrieve the next page of results for your original request.  For more information, see [Pagination](https://developer.squareup.com/docs/working-with-apis/pagination).
   --limit: int # The maximum number of results to return in a single paged response. This limit is advisory.  The response might contain more or fewer results. The minimum value is 1 and the maximum value is 100.  The default value is 20. For more information, see [Pagination](https://developer.squareup.com/docs/working-with-apis/pagination).
 ]: nothing -> record<custom_attribute_definitions: table<key: string, schema: record, name: string, description: string, visibility: string, version: int, updated_at: string, created_at: string>, cursor: string, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -6384,7 +6397,7 @@ export def "orders-custom-attributes ListOrderCustomAttributes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --visibility-filter: string # Requests that all of the custom attributes be returned, or only those that are read-only or read-write.
+  --visibility-filter: string@visibility-filter-completer # Requests that all of the custom attributes be returned, or only those that are read-only or read-write.
   --cursor: string # The cursor returned in the paged response from the previous call to this endpoint.  Provide this cursor to retrieve the next page of results for your original request.  For more information, see [Pagination](https://developer.squareup.com/docs/working-with-apis/pagination).
   --limit: int # The maximum number of results to return in a single paged response. This limit is advisory.  The response might contain more or fewer results. The minimum value is 1 and the maximum value is 100.  The default value is 20. For more information, see [Pagination](https://developer.squareup.com/docs/working-with-apis/pagination).
   --with-definitions: string@bool-completer # Indicates whether to return the [custom attribute definition](entity:CustomAttributeDefinition) in the `definition` field of each custom attribute. Set this parameter to `true` to get the name and description of each custom attribute,  information about the data type, or other definition details. The default value is `false`. (default: false)
@@ -6530,7 +6543,7 @@ export def "payments ListPayments" [
   --offline-end-time: string # Indicates the end of the time range for which to retrieve offline payments, in RFC 3339 format for timestamps. The range is determined using the `offline_payment_details.client_created_at` field for each Payment. If set, payments without a value set in `offline_payment_details.client_created_at` will not be returned.  Default: The current time.
   --updated-at-begin-time: string # Indicates the start of the time range to retrieve payments for, in RFC 3339 format.  The range is determined using the `updated_at` field for each Payment.
   --updated-at-end-time: string # Indicates the end of the time range to retrieve payments for, in RFC 3339 format.  The range is determined using the `updated_at` field for each Payment.
-  --sort-field: string # The field used to sort results by. The default is `CREATED_AT`.
+  --sort-field: string@sort-field-completer-1 # The field used to sort results by. The default is `CREATED_AT`.
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, payments: table<id: string, created_at: string, updated_at: string, amount_money: record, tip_money: record, total_money: record, app_fee_money: record, app_fee_allocations: list, approved_money: record, processing_fee: list, refunded_money: record, status: string, delay_duration: string, delay_action: string, delayed_until: string, source_type: string, card_details: record, cash_details: record, bank_account_details: record, electronic_money_details: record, external_details: record, wallet_details: record, buy_now_pay_later_details: record, square_account_details: record, location_id: string, order_id: string, reference_id: string, customer_id: string, employee_id: string, team_member_id: string, refund_ids: list, risk_evaluation: record, terminal_checkout_id: string, buyer_email_address: string, billing_address: record, shipping_address: record, note: string, statement_description_identifier: string, capabilities: list, receipt_number: string, receipt_url: string, device_details: record, application_details: record, buyer_currency_exchange: any, is_offline_payment: bool, offline_payment_details: record, version_token: string>, cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6735,10 +6748,10 @@ export def "payouts ListPayouts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --location-id: string # The ID of the location for which to list the payouts. By default, payouts are returned for the default (main) location associated with the seller.
-  --status: string # If provided, only payouts with the given status are returned.
+  --status: string@status-completer-3 # If provided, only payouts with the given status are returned.
   --begin-time: string # The timestamp for the beginning of the payout creation time, in RFC 3339 format. Inclusive. Default: The current time minus one year.
   --end-time: string # The timestamp for the end of the payout creation time, in RFC 3339 format. Default: The current time.
-  --sort-order: string # The order in which payouts are listed.
+  --sort-order: string@sort-order-completer # The order in which payouts are listed.
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this cursor to retrieve the next set of results for the original query. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination). If request parameters change between requests, subsequent results may contain duplicates or missing records.
   --limit: int # The maximum number of results to be returned in a single page. It is possible to receive fewer results than the specified limit on a given page. The default value of 100 is also the maximum allowed value. If the provided value is greater than 100, it is ignored and the default value is used instead. Default: `100`
 ]: nothing -> record<payouts: table<id: string, status: string, location_id: string, created_at: string, updated_at: string, amount_money: record, destination: record, version: int, type: string, payout_fee: list, arrival_date: string, end_to_end_id: string>, cursor: string, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -6786,7 +6799,7 @@ export def "payouts-payout-entries ListPayoutEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --sort-order: string # The order in which payout entries are listed.
+  --sort-order: string@sort-order-completer # The order in which payout entries are listed.
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this cursor to retrieve the next set of results for the original query. For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination). If request parameters change between requests, subsequent results may contain duplicates or missing records.
   --limit: int # The maximum number of results to be returned in a single page. It is possible to receive fewer results than the specified limit on a given page. The default value of 100 is also the maximum allowed value. If the provided value is greater than 100, it is ignored and the default value is used instead. Default: `100`
 ]: nothing -> record<payout_entries: table<id: string, payout_id: string, effective_at: string, type: string, gross_amount_money: record, fee_amount_money: record, net_amount_money: record, type_app_fee_revenue_details: record, type_app_fee_refund_details: record, type_automatic_savings_details: record, type_automatic_savings_reversed_details: record, type_charge_details: record, type_deposit_fee_details: record, type_deposit_fee_reversed_details: record, type_dispute_details: record, type_fee_details: record, type_free_processing_details: record, type_hold_adjustment_details: record, type_open_dispute_details: record, type_other_details: record, type_other_adjustment_details: record, type_refund_details: record, type_release_adjustment_details: record, type_reserve_hold_details: record, type_reserve_release_details: record, type_square_capital_payment_details: record, type_square_capital_reversed_payment_details: record, type_tax_on_fee_details: record, type_third_party_fee_details: record, type_third_party_fee_refund_details: record, type_square_payroll_transfer_details: record, type_square_payroll_transfer_reversed_details: record>, cursor: string, errors: table<category: string, code: string, detail: string, field: string>> {
@@ -6821,7 +6834,7 @@ export def "refunds ListPaymentRefunds" [
   --limit: int # The maximum number of results to be returned in a single page.  It is possible to receive fewer results than the specified limit on a given page.  If the supplied value is greater than 100, no more than 100 results are returned.  Default: 100
   --updated-at-begin-time: string # Indicates the start of the time range to retrieve each `PaymentRefund` for, in RFC 3339 format.  The range is determined using the `updated_at` field for each `PaymentRefund`.  Default: If omitted, the time range starts at `begin_time`.
   --updated-at-end-time: string # Indicates the end of the time range to retrieve each `PaymentRefund` for, in RFC 3339 format.  The range is determined using the `updated_at` field for each `PaymentRefund`.  Default: The current time.
-  --sort-field: string # The field used to sort results by. The default is `CREATED_AT`.
+  --sort-field: string@sort-field-completer-2 # The field used to sort results by. The default is `CREATED_AT`.
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, refunds: table<id: string, status: string, location_id: string, unlinked: bool, destination_type: string, destination_details: record, amount_money: record, app_fee_money: record, app_fee_allocations: list, processing_fee: list, payment_id: string, order_id: string, reason: string, created_at: string, updated_at: string, team_member_id: string, terminal_refund_id: string>, cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8413,7 +8426,7 @@ export def "webhooks-subscriptions ListWebhookSubscriptions" [
   --allow-errors(-e) # Return full response without error handling
   --cursor: string # A pagination cursor returned by a previous call to this endpoint. Provide this to retrieve the next set of results for your original query.  For more information, see [Pagination](https://developer.squareup.com/docs/build-basics/common-api-patterns/pagination).
   --include-disabled: string@bool-completer # Includes disabled [Subscription](entity:WebhookSubscription)s. By default, all enabled [Subscription](entity:WebhookSubscription)s are returned. (default: false)
-  --sort-order: string # Sorts the returned list by when the [Subscription](entity:WebhookSubscription) was created with the specified order. This field defaults to ASC.
+  --sort-order: string@sort-order-completer # Sorts the returned list by when the [Subscription](entity:WebhookSubscription) was created with the specified order. This field defaults to ASC.
   --limit: int # The maximum number of results to be returned in a single page. It is possible to receive fewer results than the specified limit on a given page. The default value of 100 is also the maximum allowed value.  Default: 100
 ]: nothing -> record<errors: table<category: string, code: string, detail: string, field: string>, subscriptions: table<id: string, name: string, enabled: bool, event_types: list, notification_url: string, api_version: string, signature_key: string, created_at: string, updated_at: string>, cursor: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

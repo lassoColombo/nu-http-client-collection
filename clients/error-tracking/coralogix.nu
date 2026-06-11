@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -70,11 +71,16 @@ def enableCoralogixCustomerSupportAccess-completer [] { ["CORALOGIX_CUSTOMER_SUP
 def priority-completer [] { ["CASE_PRIORITY_P1" "CASE_PRIORITY_P2" "CASE_PRIORITY_P3" "CASE_PRIORITY_P4" "CASE_PRIORITY_P5" "CASE_PRIORITY_UNSPECIFIED"] }
 def viewType-completer [] { ["VIEW_TYPE_ARCHIVE_LOGS" "VIEW_TYPE_ARCHIVE_TEMPLATES" "VIEW_TYPE_LOGS" "VIEW_TYPE_TEMPLATES" "VIEW_TYPE_UNSPECIFIED"] }
 def range-completer [] { ["RANGE_CURRENT_MONTH" "RANGE_LAST_30_DAYS" "RANGE_LAST_90_DAYS" "RANGE_LAST_WEEK" "RANGE_LAST_YEAR" "RANGE_UNSPECIFIED"] }
+def source-type-completer [] { ["SOURCE_TYPE_LOGS" "SOURCE_TYPE_SPANS" "SOURCE_TYPE_UNSPECIFIED"] }
 def priority-completer-1 [] { ["PRIORITY_TYPE_BLOCK" "PRIORITY_TYPE_HIGH" "PRIORITY_TYPE_LOW" "PRIORITY_TYPE_MEDIUM" "PRIORITY_TYPE_UNSPECIFIED"] }
 def sourceType-completer [] { ["SOURCE_TYPE_LOGS" "SOURCE_TYPE_SPANS" "SOURCE_TYPE_UNSPECIFIED"] }
 def type-completer [] { ["E2M_TYPE_LOGS2METRICS" "E2M_TYPE_SPANS2METRICS" "E2M_TYPE_UNSPECIFIED"] }
+def type-completer-1 [] { ["AWS_EVENT_BRIDGE" "DEMISTO" "EMAIL_GROUP" "GENERIC" "IBM_EVENT_NOTIFICATIONS" "JIRA" "MICROSOFT_TEAMS" "MS_TEAMS_WORKFLOW" "OPSGENIE" "PAGERDUTY" "SEND_LOG" "SLACK" "UNKNOWN"] }
+def type-completer-2 [] { ["CONNECTOR_TYPE_UNSPECIFIED" "EMAIL" "GENERIC_HTTPS" "IBM_EVENT_NOTIFICATIONS" "PAGERDUTY" "SERVICE_NOW" "SLACK"] }
+def connector-type-completer [] { ["CONNECTOR_TYPE_UNSPECIFIED" "EMAIL" "GENERIC_HTTPS" "IBM_EVENT_NOTIFICATIONS" "PAGERDUTY" "SERVICE_NOW" "SLACK"] }
+def supported-by-entity-type-completer [] { ["ALERTS" "CASES" "ENTITY_TYPE_UNSPECIFIED" "TEST_NOTIFICATIONS"] }
 def entityType-completer [] { ["ALERTS" "CASES" "ENTITY_TYPE_UNSPECIFIED" "TEST_NOTIFICATIONS"] }
-def type-completer-1 [] { ["CONNECTOR_TYPE_UNSPECIFIED" "EMAIL" "GENERIC_HTTPS" "IBM_EVENT_NOTIFICATIONS" "PAGERDUTY" "SERVICE_NOW" "SLACK"] }
+def entity-type-completer [] { ["ALERTS" "CASES" "ENTITY_TYPE_UNSPECIFIED" "TEST_NOTIFICATIONS"] }
 def sloTimeFrame-completer [] { ["SLO_TIME_FRAME_14_DAYS" "SLO_TIME_FRAME_21_DAYS" "SLO_TIME_FRAME_28_DAYS" "SLO_TIME_FRAME_7_DAYS" "SLO_TIME_FRAME_UNSPECIFIED"] }
 def sourceType-completer-1 [] { ["SOURCE_TYPE_DATA_MAP" "SOURCE_TYPE_LOG" "SOURCE_TYPE_UNSPECIFIED"] }
 
@@ -2750,7 +2756,7 @@ export def "dataplans-policies GetCompanyPolicies" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --enabled-only: string@bool-completer # e.g. true
-  --source-type: string
+  --source-type: string@source-type-completer
 ]: nothing -> record<policies: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4937,7 +4943,7 @@ export def "integrations-webhooks-v1-list-by-type ListOutgoingWebhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --type: string
+  --type: string@type-completer-1
 ]: nothing -> record<deployed: table<createdAt: string, externalId: int, id: string, name: string, updatedAt: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5184,7 +5190,7 @@ export def "notifications-notification-center-connector-schema GetConnectorSchem
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --type: string
+  --type: string@type-completer-2
 ]: nothing -> record<connectorSchema: record<connectorConfigSchema: record<fields: list>, messageConfigSchemas: list<record>, supportedPayloadTypes: list<string>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5207,8 +5213,8 @@ export def "notifications-notification-center-connectors ListConnectors" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --connector-type: string
-  --supported-by-entity-type: string
+  --connector-type: string@connector-type-completer
+  --supported-by-entity-type: string@supported-by-entity-type-completer
 ]: nothing -> record<connectors: table<configOverrides: list, connectorConfig: record, createTime: string, description: string, diagnostics: record, id: string, name: string, teamId: int, type: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5347,7 +5353,7 @@ export def "notifications-notification-center-connectors-get-type-summaries GetC
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --supported-by-entity-type: string
+  --supported-by-entity-type: string@supported-by-entity-type-completer
 ]: nothing -> record<connectorTypeSummaries: table<count: int, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5370,8 +5376,8 @@ export def "notifications-notification-center-connectors-list-summaries ListConn
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --connector-type: string
-  --supported-by-entity-type: string
+  --connector-type: string@connector-type-completer
+  --supported-by-entity-type: string@supported-by-entity-type-completer
 ]: nothing -> record<connectors: table<createTime: string, description: string, id: string, name: string, teamId: int, type: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5441,7 +5447,7 @@ export def "notifications-notification-center-notifications-testing-test-connect
   --entityType: string@entityType-completer
   --body-fields: list # item shape: {fieldName?: string, value?: string}
   --payloadType: string # e.g. default
-  --type: string@type-completer-1
+  --type: string@type-completer-2
 ]: any -> record<result: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5799,8 +5805,8 @@ export def "notifications-notification-center-presets-default-summary-get GetDef
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --connector-type: string
-  --entity-type: string
+  --connector-type: string@connector-type-completer
+  --entity-type: string@entity-type-completer
 ]: nothing -> record<presetSummary: record<connectorType: string, createTime: string, description: string, entityType: string, id: string, name: string, parentId: string, presetType: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5823,8 +5829,8 @@ export def "notifications-notification-center-presets-summaries-list ListPresetS
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --connector-type: string
-  --entity-type: string
+  --connector-type: string@connector-type-completer
+  --entity-type: string@entity-type-completer
 ]: nothing -> record<presetSummaries: table<connectorType: string, createTime: string, description: string, entityType: string, id: string, name: string, parentId: string, presetType: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5847,8 +5853,8 @@ export def "notifications-notification-center-presets-system-default-summary-get
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --connector-type: string
-  --entity-type: string
+  --connector-type: string@connector-type-completer
+  --entity-type: string@entity-type-completer
 ]: nothing -> record<presetSummary: record<connectorType: string, createTime: string, description: string, entityType: string, id: string, name: string, parentId: string, presetType: string, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5871,7 +5877,7 @@ export def "notifications-notification-center-routers ListGlobalRouters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --entity-type: string
+  --entity-type: string@entity-type-completer
   --source-entity-labels: record
 ]: nothing -> record<routers: table<createTime: string, description: string, entityLabelMatcher: record, entityLabels: record, entityType: string, fallback: list, id: string, name: string, routingLabels: record, rules: list, updateTime: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

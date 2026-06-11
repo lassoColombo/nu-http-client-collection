@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -66,13 +67,17 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def label-filetype-completer [] { ["PDF" "PDF_2.3x7.5" "PDF_4x6" "PDF_4x8" "PDF_A4" "PDF_A5" "PDF_A6" "PNG" "PNG_2.3x7.5" "ZPLII"] }
-def carrier-completer [] { ["canada_post" "chronopost" "colissimo" "correos" "deutsche_post" "dhl_express" "dpd_de" "dpd_uk" "fedex" "hermes_uk" "mondial_relay" "poste_italiane" "royal_mail" "royal_mail_sf" "ups" "usps"] }
-def carrier-completer-1 [] { ["canada_post" "ups" "usps"] }
+def carrier-completer [] { ["airterra" "apc_postal" "apg" "aramex" "asendia_us" "australia_post" "axlehire" "better_trucks" "borderguru" "boxberry" "bring" "canada_post" "chronopost" "colissimo" "collect_plus" "correios_br" "correos_espana" "deutsche_post" "dhl_benelux" "dhl_ecommerce" "dhl_express" "dhl_germany" "dhl_germany_c2c" "dpd_de" "dpd_uk" "estafeta" "fastway_australia" "fedex" "globegistics" "gls_us" "gophr" "gso" "hermes_germany_b2c" "hermes_uk" "hongkong_post" "lasership" "lso" "mondial_relay" "new_zealand_post" "nippon_express" "ontrac" "parcelforce" "passport" "pcf" "poste_italiane" "posti" "purolator" "royal_mail" "royal_mail_sf" "rr_donnelley" "russian_post" "skypostal" "stuart" "swyft" "uds" "ups" "usps" "veho"] }
+def carrier-completer-1 [] { ["canada_post" "chronopost" "colissimo" "correos" "deutsche_post" "dhl_express" "dpd_de" "dpd_uk" "fedex" "hermes_uk" "mondial_relay" "poste_italiane" "royal_mail" "royal_mail_sf" "ups" "usps"] }
+def carrier-completer-2 [] { ["canada_post" "ups" "usps"] }
 def mass-unit-completer [] { ["g" "kg" "lb" "oz"] }
+def shop-app-completer [] { ["Amazon" "Bigcommerce" "CSV_Import" "Etsy" "Godaddy" "Magento" "Shippo" "Shopify" "Spreecommerce" "StripeRelay" "Walmart" "Weebly" "WooCommerce" "eBay" "ePages"] }
 def order-status-completer [] { ["AWAITPAY" "CANCELLED" "PAID" "PARTIALLY_FULFILLED" "REFUNDED" "SHIPPED" "UNKNOWN"] }
 def weight-unit-completer [] { ["g" "kg" "lb" "oz"] }
 def include-completer [] { ["all" "enabled" "user"] }
 def type-completer [] { ["FLAT_RATE" "FREE_SHIPPING" "LIVE_RATE"] }
+def object-status-completer [] { ["ERROR" "QUEUED" "REFUNDED" "REFUNDPENDING" "REFUNDREJECTED" "SUCCESS" "WAITING"] }
+def tracking-status-completer [] { ["DELIVERED" "FAILURE" "PRE_TRANSIT" "RETURNED" "TRANSIT" "UNKNOWN"] }
 def label-file-type-completer [] { ["PDF" "PDF_2.3x7.5" "PDF_4x6" "PDF_4x8" "PDF_A4" "PDF_A5" "PDF_A6" "PNG" "PNG_2.3x7.5" "ZPLII"] }
 def distance-unit-completer [] { ["cm" "ft" "in" "m" "mm" "yd"] }
 def event-completer [] { ["all" "batch_created" "batch_purchased" "track_updated" "transaction_created" "transaction_updated"] }
@@ -374,7 +379,7 @@ export def "carrier-accounts ListCarrierAccounts" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --service-levels: string@bool-completer # Appends the property `service_levels` to each returned carrier account
-  --carrier: string # Filter the response by the specified carrier
+  --carrier: string@carrier-completer # Filter the response by the specified carrier
   --account-id: string # Filter the response by the specified carrier account Id
   --page: int # The page number you want to select (format: int64, default: 1)
   --results: int # The number of results to return per page (max 100, default 5) (format: int64, default: 5)
@@ -524,7 +529,7 @@ export def "carrier-accounts-register-new RegisterCarrierAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --SHIPPO-API-VERSION: string # Optional string used to pick a non-default API version to use. See our <a href="https://docs.goshippo.com/docs/api_concepts/apiversioning/">API version</a> guide. (e.g. 2018-02-08)
-  carrier: string@carrier-completer
+  carrier: string@carrier-completer-1
   --parameters: record # shape: {canada_post_terms: bool, company: string, email: string, full_name: string, phone: string}
 ]: any -> any {
   let input = $in
@@ -552,7 +557,7 @@ export def "carrier-accounts-reg-status GetCarrierRegistrationStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --carrier: string@carrier-completer-1 # filter by specific carrier
+  --carrier: string@carrier-completer-2 # filter by specific carrier
   --SHIPPO-API-VERSION: string # Optional string used to pick a non-default API version to use. See our <a href="https://docs.goshippo.com/docs/api_concepts/apiversioning/">API version</a> guide. (e.g. 2018-02-08)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -976,7 +981,7 @@ export def "orders ListOrders" [
   --page: int # The page number you want to select (format: int64, default: 1)
   --results: int # The number of results to return per page (max 100) (format: int64, default: 25)
   --order-status: list # Filter orders by order status
-  --shop-app: string # Filter orders by shop app
+  --shop-app: string@shop-app-completer # Filter orders by shop app (e.g. Shippo)
   --start-date: string # Filter orders created after the input date and time (ISO 8601 UTC format).  This is based on the  `placed_at` field, meaning when the order has been placed, not when the order object was created.
   --end-date: string # Filter orders created before the input date and time (ISO 8601 UTC format).  This is based on the  `placed_at` field, meaning when the order has been placed, not when the order object was created.
   --SHIPPO-API-VERSION: string # Optional string used to pick a non-default API version to use. See our <a href="https://docs.goshippo.com/docs/api_concepts/apiversioning/">API version</a> guide. (e.g. 2018-02-08)
@@ -1675,8 +1680,8 @@ export def "transactions ListTransactions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --rate: string # Filter by rate ID
-  --object-status: string # Filter by object status
-  --tracking-status: string # Filter by tracking status
+  --object-status: string@object-status-completer # Filter by object status (e.g. SUCCESS)
+  --tracking-status: string@tracking-status-completer # Filter by tracking status (e.g. DELIVERED)
   --page: int # The page number you want to select (format: int64, default: 1)
   --results: int # The number of results to return per page (max 100) (format: int64, default: 25)
   --SHIPPO-API-VERSION: string # Optional string used to pick a non-default API version to use. See our <a href="https://docs.goshippo.com/docs/api_concepts/apiversioning/">API version</a> guide. (e.g. 2018-02-08)

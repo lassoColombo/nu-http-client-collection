@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -65,6 +66,7 @@ def base-url-completer [] { ["https://api.workos.com" "https://api.workos-test.c
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def order-completer [] { ["asc" "desc" "normal"] }
 def type-completer [] { ["generic_otp" "sms" "totp"] }
 def assignment-completer [] { ["direct" "indirect"] }
 def connection-type-completer [] { ["ADFSSAML" "AdpOidc" "AppleOAuth" "Auth0SAML" "AzureSAML" "BitbucketOAuth" "CasSAML" "ClassLinkSAML" "CleverOIDC" "CloudflareSAML" "CyberArkSAML" "DiscordOAuth" "DuoSAML" "EntraIdOIDC" "GenericOIDC" "GenericSAML" "GitLabOAuth" "GithubOAuth" "GoogleOAuth" "GoogleOIDC" "GoogleSAML" "IntuitOAuth" "JumpCloudSAML" "KeycloakSAML" "LastPassSAML" "LinkedInOAuth" "LoginGovOidc" "MagicLink" "MicrosoftOAuth" "MiniOrangeSAML" "NetIqSAML" "OktaOIDC" "OktaSAML" "OneLoginSAML" "OracleSAML" "PingFederateSAML" "PingOneSAML" "RipplingSAML" "SalesforceOAuth" "SalesforceSAML" "ShibbolethGenericSAML" "ShibbolethSAML" "SimpleSamlPhpSAML" "SlackOAuth" "VMwareSAML" "VercelMarketplaceOAuth" "VercelOAuth" "XeroOAuth"] }
@@ -75,7 +77,7 @@ def provider-completer [] { ["AppleOAuth" "BitbucketOAuth" "GitHubOAuth" "GitLab
 def screen-hint-completer [] { ["sign-in" "sign-up"] }
 def provider-completer-1 [] { ["AppleOAuth" "BitbucketOAuth" "GitHubOAuth" "GitLabOAuth" "GoogleOAuth" "IntuitOAuth" "LinkedInOAuth" "MicrosoftOAuth" "SalesforceOAuth" "SlackOAuth" "VercelMarketplaceOAuth" "VercelOAuth" "XeroOAuth" "authkit"] }
 def locale-completer [] { ["af" "am" "ar" "bg" "bn" "bs" "ca" "cs" "da" "de" "de-DE" "el" "en" "en-AU" "en-CA" "en-GB" "en-US" "es" "es-419" "es-ES" "es-US" "et" "fa" "fi" "fil" "fr" "fr-BE" "fr-CA" "fr-FR" "fy" "gl" "gu" "ha" "he" "hi" "hr" "hu" "hy" "id" "is" "it" "it-IT" "ja" "jv" "ka" "kk" "km" "kn" "ko" "lt" "lv" "mk" "ml" "mn" "mr" "ms" "my" "nb" "ne" "nl" "nl-BE" "nl-NL" "nn" "no" "pa" "pl" "pt" "pt-BR" "pt-PT" "ro" "ru" "sk" "sl" "sq" "sr" "sv" "sw" "ta" "te" "th" "tr" "uk" "ur" "uz" "vi" "zh" "zh-CN" "zh-HK" "zh-TW" "zu"] }
-def order-completer [] { ["asc" "desc"] }
+def order-completer-1 [] { ["asc" "desc"] }
 def status-completer [] { ["disabled" "enabled"] }
 
 # List all available API commands with their parameters
@@ -189,7 +191,7 @@ export def "audit-logs-actions list" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. (e.g. obj_1234567890)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. (e.g. obj_1234567890)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time.
+  --order: string@order-completer # Order the results by the creation time. (default: desc, e.g. desc)
 ]: nothing -> record<object: string, list_metadata: record<before: string, after: string>, data: table<object: string, name: string, schema: record, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -246,7 +248,7 @@ export def "audit-logs-actions-schemas schemas" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. (e.g. obj_1234567890)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. (e.g. obj_1234567890)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time.
+  --order: string@order-completer # Order the results by the creation time. (default: desc, e.g. desc)
 ]: nothing -> record<object: string, list_metadata: record<before: string, after: string>, data: table<object: string, version: int, actor: record, targets: list, metadata: record, created_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -538,7 +540,7 @@ export def "authorization-organization-memberships-resources listResourcesForMem
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
   --permission-slug: string # The permission slug to filter by. Only child resources where the organization membership has this permission are returned. (e.g. project:read)
   --parent-resource-id: string # The WorkOS ID of the parent resource. Provide this or both `parent_resource_external_id` and `parent_resource_type_slug`, but not both. Mutually exclusive with `parent_resource_type_slug` and `parent_resource_external_id`. (e.g. authz_resource_01XYZ789)
   --parent-resource-type-slug: string # The slug of the parent resource type. Must be provided together with `parent_resource_external_id`. Required with `parent_resource_external_id`. Mutually exclusive with `parent_resource_id`. (e.g. project)
@@ -570,7 +572,7 @@ export def "authorization-organization-memberships-resources-permissions listEff
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
 ]: nothing -> record<object: string, data: table<object: string, id: string, slug: string, name: string, description: string, system: bool, resource_type_slug: string, created_at: string, updated_at: string>, list_metadata: record<before: string, after: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -599,7 +601,7 @@ export def "authorization-organization-memberships-resources-permissions listEff
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
 ]: nothing -> record<object: string, data: table<object: string, id: string, slug: string, name: string, description: string, system: bool, resource_type_slug: string, created_at: string, updated_at: string>, list_metadata: record<before: string, after: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -626,7 +628,7 @@ export def "authorization-organization-memberships-role-assignments listRoleAssi
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
   --resource-id: string # Filter assignments by the ID of the resource. (e.g. authz_resource_01HXYZ123456789ABCDEFGH)
   --resource-external-id: string # Filter assignments by the external ID of the resource. (e.g. project-ext-456)
   --resource-type-slug: string # Filter assignments by the slug of the resource type. (e.g. project)
@@ -1015,7 +1017,7 @@ export def "authorization-organizations-resources-organization-memberships listO
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
   --permission-slug: string # The permission slug to filter by. Only users with this permission on the resource are returned. (e.g. project:read)
   --assignment: string@assignment-completer # Filter by assignment type. Use "direct" for direct assignments only, or "indirect" to include inherited assignments. (e.g. direct)
 ]: nothing -> record<object: string, data: table<object: string, id: string, user_id: string, organization_id: string, status: string, directory_managed: bool, organization_name: string, custom_attributes: record, created_at: string, updated_at: string, user: record>, list_metadata: record<before: string, after: string>> {
@@ -1046,7 +1048,7 @@ export def "authorization-organizations-resources-role-assignments listRoleAssig
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
   --role-slug: string # Filter assignments by the slug of the role. (e.g. editor)
 ]: nothing -> record<object: string, data: table<object: string, id: string, organization_membership_id: string, role: record, resource: record, created_at: string, updated_at: string>, list_metadata: record<before: string, after: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1073,7 +1075,7 @@ export def "authorization-permissions list" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
 ]: nothing -> record<object: string, data: table<object: string, id: string, slug: string, name: string, description: string, system: bool, resource_type_slug: string, created_at: string, updated_at: string>, list_metadata: record<before: string, after: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1198,7 +1200,7 @@ export def "authorization-resources list" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
   --organization-id: string # Filter resources by organization ID. (e.g. org_01EHZNVPK3SFK441A1RGBFSHRT)
   --resource-type-slug: string # Filter resources by resource type slug. (e.g. project)
   --resource-external-id: string # Filter resources by external ID. (e.g. my-project-123)
@@ -1333,7 +1335,7 @@ export def "authorization-resources-organization-memberships listOrganizationMem
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
   --permission-slug: string # The permission slug to filter by. Only users with this permission on the resource are returned. (e.g. document:edit)
   --assignment: string@assignment-completer # Filter by assignment type. Use `direct` for direct assignments only, or `indirect` to include inherited assignments. (e.g. direct)
 ]: nothing -> record<object: string, data: table<object: string, id: string, user_id: string, organization_id: string, status: string, directory_managed: bool, organization_name: string, custom_attributes: record, created_at: string, updated_at: string, user: record>, list_metadata: record<before: string, after: string>> {
@@ -1362,7 +1364,7 @@ export def "authorization-resources-role-assignments listRoleAssignmentsForResou
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
   --role-slug: string # Filter assignments by the slug of the role. (e.g. editor)
 ]: nothing -> record<object: string, data: table<object: string, id: string, organization_membership_id: string, role: record, resource: record, created_at: string, updated_at: string>, list_metadata: record<before: string, after: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1539,7 +1541,7 @@ export def "connect-applications list" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
   --organization-id: string # Filter Connect Applications by organization ID. (e.g. org_01EHZNVPK3SFK441A1RGBFSHRT)
 ]: nothing -> record<object: string, data: table<object: string, id: string, client_id: string, description: string, name: string, scopes: list, created_at: string, updated_at: string>, list_metadata: record<before: string, after: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1742,7 +1744,7 @@ export def "connections list" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. (e.g. obj_1234567890)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. (e.g. obj_1234567890)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time.
+  --order: string@order-completer # Order the results by the creation time. (default: desc, e.g. desc)
   --connection-type: string@connection-type-completer # Filter Connections by their type. (e.g. GithubOAuth)
   --domain: string # Filter Connections by their associated domain. (e.g. foo-corp.com)
   --organization-id: string # Filter Connections by their associated organization. (e.g. org_01EHWNCE74X7JSDV0X3SZ3KJNY)
@@ -1872,7 +1874,7 @@ export def "directories list" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. (e.g. obj_1234567890)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. (e.g. obj_1234567890)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time.
+  --order: string@order-completer # Order the results by the creation time. (default: desc, e.g. desc)
   --organization-id: string # Filter Directories by their associated organization. (e.g. org_01EHZNVPK3SFK441A1RGBFSHRT)
   --search: string # Searchable text to match against Directory names. (e.g. Foo Corp)
   --domain: string # Filter Directories by their associated domain. (DEPRECATED, e.g. foo-corp.com)
@@ -1945,7 +1947,7 @@ export def "directory-groups list" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
   --directory: string # Unique identifier of the WorkOS Directory. This value can be obtained from the WorkOS dashboard or from the WorkOS API. (e.g. directory_01ECAZ4NV9QMV47GW873HDCX74)
   --user: string # Unique identifier of the WorkOS Directory User. This value can be obtained from the WorkOS API. (e.g. directory_user_01E1JG7J09H96KYP8HM9B0G5SJ)
 ]: nothing -> record<object: string, data: table<object: string, id: string, idp_id: string, directory_id: string, organization_id: string, name: string, raw_attributes: record, created_at: string, updated_at: string>, list_metadata: record<before: string, after: string>> {
@@ -1995,7 +1997,7 @@ export def "directory-users list" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
   --directory: string # Unique identifier of the WorkOS Directory. This value can be obtained from the WorkOS dashboard or from the WorkOS API. (e.g. directory_01ECAZ4NV9QMV47GW873HDCX74)
   --group: string # Unique identifier of the WorkOS Directory Group. This value can be obtained from the WorkOS API. (e.g. directory_group_01E64QTDNS0EGJ0FMCVY9BWGZT)
 ]: nothing -> record<object: string, data: table<object: string, id: string, directory_id: string, organization_id: string, idp_id: string, email: string, first_name: string, last_name: string, name: string, emails: list, job_title: string, username: string, state: string, raw_attributes: record, custom_attributes: record, role: record, roles: list, created_at: string, updated_at: string, groups: list>, list_metadata: record<before: string, after: string>> {
@@ -2045,7 +2047,7 @@ export def "events list" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
   --events: list # Filter events by one or more event types (e.g. `dsync.user.created`). (e.g. [dsync.user.created, dsync.user.updated])
   --range-start: string # ISO-8601 date string to filter events created after this date. (e.g. 2025-01-01T00:00:00Z)
   --range-end: string # ISO-8601 date string to filter events created before this date. (e.g. 2025-12-31T23:59:59Z)
@@ -2075,7 +2077,7 @@ export def "feature-flags list" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. (e.g. obj_1234567890)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. (e.g. obj_1234567890)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time.
+  --order: string@order-completer # Order the results by the creation time. (default: desc, e.g. desc)
 ]: nothing -> record<object: string, data: table<object: string, id: string, slug: string, name: string, description: string, owner: any, tags: list, enabled: bool, default_value: bool, created_at: string, updated_at: string>, list_metadata: record<before: string, after: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2305,7 +2307,7 @@ export def "organizations list" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
   --domains: list # The domains of an Organization. Any Organization with a matching domain will be returned. (e.g. [foo-corp.com])
   --search: string # Searchable text for an Organization. Matches against the organization name. (e.g. Acme Corp)
 ]: nothing -> record<object: string, data: table<object: string, id: string, name: string, domains: list, metadata: record, external_id: string, stripe_customer_id: string, created_at: string, updated_at: string, allow_profiles_outside_organization: bool>, list_metadata: record<before: string, after: string>> {
@@ -2535,7 +2537,7 @@ export def "organizations-api-keys list" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. (e.g. obj_1234567890)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. (e.g. obj_1234567890)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time.
+  --order: string@order-completer # Order the results by the creation time. (default: desc, e.g. desc)
 ]: nothing -> record<object: string, data: table<object: string, id: string, owner: record, name: string, obfuscated_value: string, last_used_at: string, expires_at: string, permissions: list, created_at: string, updated_at: string>, list_metadata: record<before: string, after: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2590,7 +2592,7 @@ export def "organizations-feature-flags list" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. (e.g. obj_1234567890)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. (e.g. obj_1234567890)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time.
+  --order: string@order-completer # Order the results by the creation time. (default: desc, e.g. desc)
 ]: nothing -> record<object: string, data: table<object: string, id: string, slug: string, name: string, description: string, owner: any, tags: list, enabled: bool, default_value: bool, created_at: string, updated_at: string>, list_metadata: record<before: string, after: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2644,7 +2646,7 @@ export def "organizations-groups list" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
 ]: nothing -> record<object: string, data: table<object: string, id: string, organization_id: string, name: string, description: string, created_at: string, updated_at: string>, list_metadata: record<before: string, after: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2773,7 +2775,7 @@ export def "organizations-groups-organization-memberships listMembers" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
 ]: nothing -> record<object: string, data: table<object: string, id: string, user_id: string, organization_id: string, status: string, directory_managed: bool, organization_name: string, custom_attributes: record, created_at: string, updated_at: string>, list_metadata: record<before: string, after: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3274,7 +3276,7 @@ export def "user-management-invitations list" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
   --organization-id: string # The ID of the [organization](/reference/organization) that the recipient will join. (e.g. org_01E4ZCR3C56J083X43JQXF3JK5)
   --email: string # The email address of the recipient. (format: email, e.g. marcelina.davis@example.com)
 ]: nothing -> record<object: string, list_metadata: record<before: string, after: string>, data: table<object: string, id: string, email: string, state: string, accepted_at: string, revoked_at: string, expires_at: string, organization_id: string, inviter_user_id: string, accepted_user_id: string, role_slug: string, created_at: string, updated_at: string, token: string, accept_invitation_url: string>> {
@@ -3540,7 +3542,7 @@ export def "user-management-organization-memberships list" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
   --organization-id: string # The ID of the [organization](/reference/organization) which the user belongs to. (e.g. org_01E4ZCR3C56J083X43JQXF3JK5)
   --statuses: list # Filter by the status of the organization membership. Array including any of `active`, `inactive`, or `pending`. (e.g. [active])
   --user-id: string # The ID of the [user](/reference/authkit/user). (e.g. user_01E4ZCR3C5A4QZ2Z2JQXGKZJ9E)
@@ -3711,7 +3713,7 @@ export def "user-management-organization-memberships-groups listGroups" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
 ]: nothing -> record<object: string, data: table<object: string, id: string, organization_id: string, name: string, description: string, created_at: string, updated_at: string>, list_metadata: record<before: string, after: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3885,7 +3887,7 @@ export def "user-management-users list0" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
   --organization: string # Filter users by the organization they are a member of. Deprecated in favor of `organization_id`. (DEPRECATED, e.g. org_01EHZNVPK3SFK441A1RGBFSHRT)
   --organization-id: string # Filter users by the organization they are a member of. (e.g. org_01EHZNVPK3SFK441A1RGBFSHRT)
   --email: string # Filter users by their email address. (e.g. user@example.com)
@@ -4167,7 +4169,7 @@ export def "user-management-users-sessions list" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
 ]: nothing -> record<object: string, list_metadata: record<before: string, after: string>, data: table<object: string, id: string, impersonator: record, ip_address: string, organization_id: string, user_agent: string, user_id: string, auth_method: string, status: string, expires_at: string, ended_at: string, created_at: string, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4194,7 +4196,7 @@ export def "user-management-users-api-keys list" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. (e.g. obj_1234567890)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. (e.g. obj_1234567890)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time.
+  --order: string@order-completer # Order the results by the creation time. (default: desc, e.g. desc)
   --organization-id: string # The ID of the organization to filter user API keys by. When provided, only API keys created against that organization membership are returned. (e.g. org_01EHZNVPK3SFK441A1RGBFSHRT)
 ]: nothing -> record<object: string, data: table<object: string, id: string, owner: record, name: string, obfuscated_value: string, last_used_at: string, expires_at: string, permissions: list, created_at: string, updated_at: string>, list_metadata: record<before: string, after: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4251,7 +4253,7 @@ export def "user-management-users-feature-flags list" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. (e.g. obj_1234567890)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. (e.g. obj_1234567890)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time.
+  --order: string@order-completer # Order the results by the creation time. (default: desc, e.g. desc)
 ]: nothing -> record<object: string, data: table<object: string, id: string, slug: string, name: string, description: string, owner: any, tags: list, enabled: bool, default_value: bool, created_at: string, updated_at: string>, list_metadata: record<before: string, after: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4278,7 +4280,7 @@ export def "user-management-users-authorized-applications list" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
 ]: nothing -> record<object: string, data: table<object: string, id: string, granted_scopes: list, oauth_resource: string, application: record>, list_metadata: record<before: string, after: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4431,7 +4433,7 @@ export def "user-management-users-auth-factors list0" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. (e.g. obj_1234567890)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. (e.g. obj_1234567890)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time.
+  --order: string@order-completer # Order the results by the creation time. (default: desc, e.g. desc)
 ]: nothing -> record<object: string, data: table<object: string, id: string, type: string, user_id: string, sms: record, totp: record, created_at: string, updated_at: string>, list_metadata: record<before: string, after: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4533,7 +4535,7 @@ export def "vault-kv JumpWireWebDataVaultControllerindex" [
   --limit: int # Upper limit on the number of objects to return. (default: 10, e.g. 10)
   --before: string # Cursor for the previous page of results. (e.g. b21f3a8c-7e4d-4b1a-9c5e-2d8f6a7b3c4e)
   --after: string # Cursor for the next page of results. (e.g. a10e2b7d-6c3f-4a2b-8d1e-3f9a5b8c7d6e)
-  --order: string@order-completer # Sort direction for results. (e.g. desc)
+  --order: string@order-completer-1 # Sort direction for results. (e.g. desc)
   --search: string # Filter results by name or structured search JSON. (e.g. my-secret)
   --updatedAfter: string # ISO 8601 timestamp to filter by last modified time. (format: date-time, e.g. 2024-01-01T00:00:00Z)
 ]: nothing -> record<data: table<id: string, name: string, updated_at: string>, list_metadata: record<after: string, before: string>> {
@@ -4727,7 +4729,7 @@ export def "webhook-endpoints list" [
   --before: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `before="obj_123"` to fetch a new batch of objects before `"obj_123"`. (e.g. xxx_01HXYZ123456789ABCDEFGHIJ)
   --after: string # An object ID that defines your place in the list. When the ID is not present, you are at the end of the list. For example, if you make a list request and receive 100 objects, ending with `"obj_123"`, your subsequent call can include `after="obj_123"` to fetch a new batch of objects after `"obj_123"`. (e.g. xxx_01HXYZ987654321KJIHGFEDCBA)
   --limit: int # Upper limit on the number of objects to return, between `1` and `100`. (default: 10, e.g. 10)
-  --order: string # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records).
+  --order: string@order-completer # Order the results by the creation time. Supported values are `"asc"` (ascending), `"desc"` (descending), and `"normal"` (descending with reversed cursor semantics where `before` fetches older records and `after` fetches newer records). (default: desc, e.g. desc)
 ]: nothing -> record<object: string, data: table<object: string, id: string, endpoint_url: string, secret: string, status: string, events: list, created_at: string, updated_at: string>, list_metadata: record<before: string, after: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

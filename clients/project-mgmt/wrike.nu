@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -65,12 +66,35 @@ def base-url-completer [] { ["https://www.wrike.com/api/v4" "https://app-eu.wrik
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def statuses-completer [] { ["Approved" "Cancelled" "Draft" "Pending" "Rejected"] }
+def type-completer [] { ["FilesOnly" "Regular"] }
 def size-completer [] { ["h400" "w100" "w200" "w300" "w400" "w44"] }
-def type-completer [] { ["Project" "Task"] }
+def objectType-completer [] { ["AccessRole" "Account" "AnalyzeReport" "AnalyzeReportWidget" "Attachment" "CalendarExternalLink" "Comment" "CustomField" "DataExport" "Folder" "Group" "Invitation" "Oauth2Client" "PowerBIEntity" "Project" "PublicLink" "RequestForm" "Space" "Task" "Timesheet" "TimesheetTimeframeSettings" "User" "UserRole" "UserType" "Whiteboard" "Workflow" "WorkspaceSnapshot"] }
+def type-completer-1 [] { ["CalculatedDate" "CalculatedNumeric" "Checkbox" "Contacts" "Currency" "Date" "DropDown" "Duration" "LinkToDatabase" "Multiple" "Numeric" "Percentage" "Text"] }
+def changeScope-completer [] { ["Account" "Space"] }
+def type-completer-2 [] { ["Project" "Task"] }
+def version-completer [] { ["V0" "V1" "V2" "V3" "V4"] }
+def relationType-completer [] { ["FinishToFinish" "FinishToStart" "StartToFinish" "StartToStart"] }
+def rescheduleMode-completer [] { ["End" "Start"] }
+def type-completer-3 [] { ["ApiV2Account" "ApiV2Attachment" "ApiV2Comment" "ApiV2Folder" "ApiV2RequestForm" "ApiV2Task" "ApiV2Timelog" "ApiV2User"] }
+def role-completer [] { ["Collaborator" "User"] }
+def avatarColor-completer [] { ["Blue1" "Blue2" "DarkBlue1" "DarkBlue2" "DarkCyan1" "DarkCyan2" "Green1" "Green2" "Orange1" "Orange2" "Pink1" "Pink2" "Purple1" "Purple2" "Red1" "Red2" "Turquoise1" "Turquoise2" "Yellow1" "Yellow2" "YellowGreen1" "YellowGreen2"] }
 def accessType-completer [] { ["Locked" "Private" "Public"] }
 def accessType-completer-1 [] { ["Private" "Public"] }
+def importance-completer [] { ["High" "Low" "Normal"] }
+def type-completer-4 [] { ["Backlog" "Milestone" "Planned"] }
 def sortField-completer [] { ["CompletedDate" "CreatedDate" "DueDate" "Importance" "LastAccessDate" "StartFinishInterval" "Status" "Title" "UpdatedDate"] }
-def exclusionType-completer [] { ["OtherNonWorking" "VacationPTO"] }
+def sortOrder-completer [] { ["Asc" "Desc"] }
+def status-completer [] { ["Active" "Cancelled" "Completed" "Deferred"] }
+def billingType-completer [] { ["Billable" "NonBillable"] }
+def ruleType-completer [] { ["Hard" "Soft"] }
+def frequency-completer [] { ["Day" "Month" "Week"] }
+def trackExceptionsMode-completer [] { ["ActualCapacity" "TotalCapacity"] }
+def timeframe-completer [] { ["Monthly" "Weekly"] }
+def approvalStatus-completer [] { ["Approved" "NotSubmitted" "Pending" "Rejected"] }
+def exclusionType-completer [] { ["OtherNonWorking" "Overtime" "VacationPTO"] }
+def exclusionType-completer-1 [] { ["OtherNonWorking" "VacationPTO"] }
+def exclusionType-completer-2 [] { ["AdditionalWorkDays" "OtherEvent" "PublicHolidays"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -175,11 +199,11 @@ export def "approvals GET:/approvals/empty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --statuses: string # Get approvals for specified statuses * `Draft` * `Approved` * `Rejected` * `Cancelled` * `Pending`
+  --statuses: string@statuses-completer # Get approvals for specified statuses * `Draft` * `Approved` * `Rejected` * `Cancelled` * `Pending`
   --updatedDate: string # Last updated date filter, exact match or range
   --approvers: string # Approvers filter, match of any
   --pendingApprovers: string # Pending approvers filter, match of any
-  --type: string # Get approvals for specified types * `FilesOnly` * `Regular`
+  --type: string@type-completer # Get approvals for specified types * `FilesOnly` * `Regular`
   --dueDate: string # Due date filter, exact match or range
   --limit: float # Limit on number of returned approvals
   --pageSize: float # Page size
@@ -737,7 +761,7 @@ export def "audit-log log/empty" [
   --operations: string # Operations filter * `SecondFactorEnabled` * `CustomFieldRemoved` * `CalendarExternalLinksActivated` * `TaskDuplication` * `GanttSnapshotDeleted` * `CalendarExternalLinkDeleted` * `TaskRestored` * `CalendarExternalLinksDeactivated` * `PowerBIPublicLinkDeleted` * `ApprovalCanceled` * `RequestFormCreated` * `SamlClearPasswordForSamlUsers` * `OneTimePasswordUsed` * `AnalyzeWidgetPublicLinkCreated` * `TaskErased` * `InvitationPolicyChanged` * `CalendarExternalLinkCreated` * `UserTaskGroupRolesChanged` * `UserJoinedSpace` * `SamlSSOSettingsChanged` * `UserFailLogin` * `SamlSSODisabled` * `AdminMailSettingsChanged` * `CustomFieldRemovedFromFolder` * `UserLoggedIn` * `UserRoleChanged` * `CustomFieldAddedToFolder` * `UserTypeModified` * `AccessCodeAccepted` * `PublicLinkExpirationChanged` * `UserLogout` * `PowerBIPublicLinkCreated` * `GuestReviewerRevoked` * `ApprovedIpRangesOrSubnetsChanged` * `TaskScheduleChanged` * `CustomFieldRestored` * `AccountDeleted` * `UserAdminPermissionsChanged` * `AttachDeleted` * `SpaceDeleted` * `AuditReportCreated` * `UserTypeCreated` * `ExcelExportCreated` * `AdminLoggedInAsUser` * `WorkflowCreated` * `TaskUnsharedFromAuthor` * `AccessAuditReportCsvExport` * `AttachMarkAsFinal` * `OneTimePasswordStatusSwitched` * `ApproverAdded` * `UserLeftSpace` * `TaskUnarchived` * `ApprovalDescriptionChanged` * `GroupParentRemoved` * `GuestReviewAccountSettingsChanged` * `WorkflowDeleted` * `PasswordPolicyModified` * `GroupInviteeAdded` * `UserRestored` * `WorkflowArchived` * `ApprovalDueDateChanged` * `AnalyzeWidgetPublicLinkDeleted` * `SpaceArchivedUnarchived` * `TaskStatusChanged` * `TaskCommentChanged` * `AccessRoleDeleted` * `TaskUnassigned` * `AnalyzePublicLinkCreated` * `GuestReviewRejected` * `TaskUnshared` * `PasswordChanged` * `RequestFormDeleted` * `AttemptDownloadInfectedAttach` * `InvitationSend` * `AccessRoleModified` * `SpaceCreated` * `ApprovedDomainsChanged` * `TimesheetStatusChanged` * `TimelogLocked` * `UserRevokeAdmin` * `RecycleBinErased` * `ApproverRemoved` * `UserDeleted` * `GanttSnapshotCreated` * `GroupMemberRemoved` * `UserProfileUpdated` * `SecondFactorUsageReportCreated` * `SecondFactorDisabled` * `WhiteboardCreated` * `AttachViewed` * `AccessRoleCreated` * `GroupMemberAdded` * `AccountDataExportRequested` * `SamlSSOMetadataChanged` * `GroupRenamed` * `PublicLinkCreated` * `TaskShared` * `AccountModified` * `PublicLinkPasswordRequested` * `WorkflowModified` * `PublicLinkDeleted` * `AccessCodeDeclined` * `AnalyzeWidgetPublicLinkAccessed` * `ApprovalCreated` * `Oauth2AccessRevoked` * `TaskParentRemoved` * `AntivirusDeletedInfectedAttach` * `RequestFormModified` * `GroupInviteeRemoved` * `GuestReviewerInvited` * `TaskArchived` * `AccountBackupCreated` * `FeedCreated` * `AccessCodeGenerated` * `UserDeactivated` * `AttachCopied` * `GroupParentAdded` * `GuestReviewerChanged` * `TimelogUnlocked` * `TaskCreated` * `WhiteboardRemoved` * `OneTimePasswordRevoked` * `ApprovalFinished` * `TaskAssigned` * `OneTimePasswordCreated` * `GroupCreated` * `TimesheetCreated` * `UsersAndGroupsExported` * `AttachMoved` * `CustomFieldCreated` * `AutomatedIntegrationsExecution` * `PowerBIPublicLinkAccessed` * `AttachUnmarkAsFinal` * `AnalyzePublicLinkAccessed` * `TimesheetTimeframeSettingsModified` * `GroupDeleted` * `CustomFieldModified` * `TaskCommentDeleted` * `AnalyzePublicLinkDeleted` * `UserTypeDeleted` * `TimesheetTimeframeSettingsCreated` * `Oauth2AccessGranted` * `UserGrantAdmin` * `PublicLinksAccountSettingsChanged` * `WorkflowUnarchived` * `TaskDeleted` * `InvitationAccepted` * `AccountDataExportGenerated` * `SamlSSOEnabled` * `PublicLinkPasswordChanged` * `TaskParentAdded` * `ApprovalDecisionMade` * `GuestReviewAccepted` * `UserCustomFieldValueChanged` * `UserActivated` * `AttachUploaded` * `AttachDownloaded`
   --pageSize: float # Page size
   --nextPageToken: string # Next page token, overrides any other parameters in request
-  --objectType: string # Filter by object type. Requires both eventDate and operations to be specified. * `Account` * `Group` * `AnalyzeReportWidget` * `Task` * `User` * `WorkspaceSnapshot` * `TimesheetTimeframeSettings` * `CalendarExternalLink` * `Attachment` * `Folder` * `DataExport` * `PowerBIEntity` * `Whiteboard` * `Space` * `Comment` * `RequestForm` * `AccessRole` * `Timesheet` * `Invitation` * `Workflow` * `AnalyzeReport` * `Oauth2Client` * `Project` * `PublicLink` * `UserRole` * `CustomField` * `UserType`
+  --objectType: string@objectType-completer # Filter by object type. Requires both eventDate and operations to be specified. * `Account` * `Group` * `AnalyzeReportWidget` * `Task` * `User` * `WorkspaceSnapshot` * `TimesheetTimeframeSettings` * `CalendarExternalLink` * `Attachment` * `Folder` * `DataExport` * `PowerBIEntity` * `Whiteboard` * `Space` * `Comment` * `RequestForm` * `AccessRole` * `Timesheet` * `Invitation` * `Workflow` * `AnalyzeReport` * `Oauth2Client` * `Project` * `PublicLink` * `UserRole` * `CustomField` * `UserType`
   --objectIds: string # Filter by object ids. Requires objectType to be specified. Accepts up to 10 ids.
   --users: string # Filter by users ids. Accepts up to 10 ids.
 ]: nothing -> record<data: table<ipAddress: string, objectName: string, userEmail: string, details: record, id: string, operation: string, userId: string, objectId: string, eventDate: string, objectType: string>, kind: string> {
@@ -1421,7 +1445,7 @@ export def "customfields POST:/customfields/empty" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --title: string # Custom field title
-  --type: string # Custom field type * `Multiple` - Collection field * `Percentage` - Comparable field * `Text` - String field, Comparable field * `Duration` - Comparable field * `CalculatedNumeric` - Calculated comparable field * `Date` - Comparable field * `CalculatedDate` - Calculated comparable field * `Numeric` - Comparable field * `Contacts` - Collection field * `Checkbox` - Boolean field * `Currency` - Comparable field * `DropDown` - String field, Comparable field * `LinkToDatabase` - Link to database field
+  --type: string@type-completer-1 # Custom field type * `Multiple` - Collection field * `Percentage` - Comparable field * `Text` - String field, Comparable field * `Duration` - Comparable field * `CalculatedNumeric` - Calculated comparable field * `Date` - Comparable field * `CalculatedDate` - Calculated comparable field * `Numeric` - Comparable field * `Contacts` - Collection field * `Checkbox` - Boolean field * `Currency` - Comparable field * `DropDown` - String field, Comparable field * `LinkToDatabase` - Link to database field
   --spaceId: string # Custom field space ID
   --sharing: string # Custom field access settings
   --shareds: string # Users to share custom field with. Parameter is obsolete, use 'sharing' instead
@@ -1501,8 +1525,8 @@ export def "customfields PUT:/customfields/single" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --title: string # Custom field title
-  --type: string # Custom field type. Conversion from any type of field to LinkToDatabase is not supported * `Multiple` - Collection field * `Percentage` - Comparable field * `Text` - String field, Comparable field * `Duration` - Comparable field * `CalculatedNumeric` - Calculated comparable field * `Date` - Comparable field * `CalculatedDate` - Calculated comparable field * `Numeric` - Comparable field * `Contacts` - Collection field * `Checkbox` - Boolean field * `Currency` - Comparable field * `DropDown` - String field, Comparable field * `LinkToDatabase` - Link to database field
-  --changeScope: string # Custom field scope * `Space` - Use it with valid 'spaceId' parameter to move custom field to space level * `Account` - Use it with null 'spaceId' parameter to move custom field to account level
+  --type: string@type-completer-1 # Custom field type. Conversion from any type of field to LinkToDatabase is not supported * `Multiple` - Collection field * `Percentage` - Comparable field * `Text` - String field, Comparable field * `Duration` - Comparable field * `CalculatedNumeric` - Calculated comparable field * `Date` - Comparable field * `CalculatedDate` - Calculated comparable field * `Numeric` - Comparable field * `Contacts` - Collection field * `Checkbox` - Boolean field * `Currency` - Comparable field * `DropDown` - String field, Comparable field * `LinkToDatabase` - Link to database field
+  --changeScope: string@changeScope-completer # Custom field scope * `Space` - Use it with valid 'spaceId' parameter to move custom field to space level * `Account` - Use it with null 'spaceId' parameter to move custom field to account level
   --spaceId: string # Custom field space ID
   --sharing: string # Custom field access settings
   --addShareds: string # Share custom field with specified users. Parameter is obsolete, use 'sharing' instead
@@ -1536,7 +1560,7 @@ export def "custom-item-types types/empty" [
   --title: string # Filter search results by title
   --limit: float # Result entries limit (default: 10000)
   --withDeleted: string@bool-completer # Include deleted custom item types in the result (default: false)
-  --type: string@type-completer # Related type of returned custom item types * `Project` - Project based * `Task` - Task based
+  --type: string@type-completer-2 # Related type of returned custom item types * `Project` - Project based * `Task` - Task based
   --qp-fields: string # Json string array of optional fields to be included in the response model * `dataUsageStatistics` - Return collection of data usage statistics
 ]: nothing -> record<data: table<spaceId: string, relatedType: string, customFieldIds: list, isDeleted: bool, archivedOn: string, icon: record, description: string, id: string, title: string, dataUsageStatistics: record, archivedBy: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1564,7 +1588,7 @@ export def "spaces-custom-item-types types" [
   --title: string # Filter search results by title
   --limit: float # Result entries limit (default: 10000)
   --withDeleted: string@bool-completer # Include deleted custom item types in the result (default: false)
-  --type: string@type-completer # Related type of returned custom item types * `Project` - Project based * `Task` - Task based
+  --type: string@type-completer-2 # Related type of returned custom item types * `Project` - Project based * `Task` - Task based
   --qp-fields: string # Json string array of optional fields to be included in the response model * `dataUsageStatistics` - Return collection of data usage statistics
 ]: nothing -> record<data: table<spaceId: string, relatedType: string, customFieldIds: list, isDeleted: bool, archivedOn: string, icon: record, description: string, id: string, title: string, dataUsageStatistics: record, archivedBy: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1703,7 +1727,7 @@ export def "data-export-schema schema/empty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --version: string # Version * `V0` * `V1` * `V2` * `V3` * `V4`
+  --version: string@version-completer # Version * `V0` * `V1` * `V2` * `V3` * `V4`
 ]: nothing -> record<data: table<columns: list, alias: string, id: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1751,7 +1775,7 @@ export def "tasks-dependencies POST:/tasks/single/dependencies" [
   --allow-errors(-e) # Return full response without error handling
   --predecessorId: string # Add predecessor task, only one of predecessorId/successorId fields can be specified
   --successorId: string # Add successor task, only one of predecessorId/successorId fields can be specified
-  --relationType: string # Relation between Predecessor and Successor * `FinishToFinish` - Finish to finish. Allowed only when predecessor and successor are Planned or Milestone tasks * `StartToStart` - Start to start. Allowed only when both predecessor and successor are Planned tasks * `StartToFinish` - Start to finish. Allowed only when predecessor is Planned, and successor is Planned or Milestone task * `FinishToStart` - Finish to start. Allowed only when predecessor is Planned or Milestone, and successor is Planned task
+  --relationType: string@relationType-completer # Relation between Predecessor and Successor * `FinishToFinish` - Finish to finish. Allowed only when predecessor and successor are Planned or Milestone tasks * `StartToStart` - Start to start. Allowed only when both predecessor and successor are Planned tasks * `StartToFinish` - Start to finish. Allowed only when predecessor is Planned, and successor is Planned or Milestone task * `FinishToStart` - Finish to start. Allowed only when predecessor is Planned or Milestone, and successor is Planned task
   --lagTime: float # Always in minutes, positive numbers are lag time and negative numbers are lead time (default: 0)
 ]: nothing -> record<data: table<relationType: string, successorId: string, lagTime: float, id: string, predecessorId: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1798,7 +1822,7 @@ export def "dependencies PUT:/dependencies/single" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --relationType: string # Relation between Predecessor and Successor * `FinishToFinish` - Finish to finish. Allowed only when predecessor and successor are Planned or Milestone tasks * `StartToStart` - Start to start. Allowed only when both predecessor and successor are Planned tasks * `StartToFinish` - Start to finish. Allowed only when predecessor is Planned, and successor is Planned or Milestone task * `FinishToStart` - Finish to start. Allowed only when predecessor is Planned or Milestone, and successor is Planned task
+  --relationType: string@relationType-completer # Relation between Predecessor and Successor * `FinishToFinish` - Finish to finish. Allowed only when predecessor and successor are Planned or Milestone tasks * `StartToStart` - Start to start. Allowed only when both predecessor and successor are Planned tasks * `StartToFinish` - Start to finish. Allowed only when predecessor is Planned, and successor is Planned or Milestone task * `FinishToStart` - Finish to start. Allowed only when predecessor is Planned or Milestone, and successor is Planned task
   --lagTime: float # Always in minutes, positive numbers are lag time and negative numbers are lead time
 ]: nothing -> record<data: table<relationType: string, successorId: string, lagTime: float, id: string, predecessorId: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1931,7 +1955,7 @@ export def "folder-blueprints-launch-async async" [
   --copyCustomFields: string@bool-completer # Copy custom fields (default: true)
   --copyAttachments: string@bool-completer # Copy attachments (default: false)
   --rescheduleDate: string # Date to use in task rescheduling. Note: Only active tasks can be rescheduled. Format: yyyy-MM-dd Format: yyyy-MM-dd
-  --rescheduleMode: string # Mode to be used for rescheduling (based on first or last date). Used only if reschedule date is specified. * `Start` - Tasks in scope are rescheduled starting from reschedule date * `End` - Tasks in scope are rescheduled ending with reschedule date
+  --rescheduleMode: string@rescheduleMode-completer # Mode to be used for rescheduling (based on first or last date). Used only if reschedule date is specified. * `Start` - Tasks in scope are rescheduled starting from reschedule date * `End` - Tasks in scope are rescheduled ending with reschedule date
   --entryLimit: float # Maximum number of tasks/folders in tree for copy. The operation will fail if limit is exceeded. This should be 1..250 (default: 250)
 ]: nothing -> record<data: table<result: record, processedCount: float, errorMessage: string, progressPercent: float, id: string, totalCount: float, type: string, status: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2214,7 +2238,7 @@ export def "copy-folder folder/single" [
   --copyStatuses: string@bool-completer # Copy task statuses or set to Active otherwise (default: true)
   --copyParents: string@bool-completer # Preserve parent folders (default: false)
   --rescheduleDate: string # Date to use in task rescheduling. Note that only active tasks can be rescheduled. To activate and reschedule all tasks, use 'rescheduleDate' in combination with copyStatuses = false Format: yyyy-MM-dd
-  --rescheduleMode: string # Mode to be used for rescheduling (based on first or last date), has effect only if reschedule date is specified. * `Start` - Tasks in scope are rescheduled starting from reschedule date * `End` - Tasks in scope are rescheduled ending with reschedule date
+  --rescheduleMode: string@rescheduleMode-completer # Mode to be used for rescheduling (based on first or last date), has effect only if reschedule date is specified. * `Start` - Tasks in scope are rescheduled starting from reschedule date * `End` - Tasks in scope are rescheduled ending with reschedule date
   --entryLimit: float # Limit maximum allowed number for tasks/folders in tree for copy, operation will fail if limit is exceeded, should be 1..250 (default: 250)
   --plainTextCustomFields: string@bool-completer # Strip HTML tags from custom fields
 ]: nothing -> record<data: table<color: string, customItemTypeId: string, childIds: list, scope: string, project: record, id: string, title: string, space: bool>, kind: string> {
@@ -2252,7 +2276,7 @@ export def "copy-folder-async async/single" [
   --copyStatuses: string@bool-completer # Copy task statuses or set to Active otherwise (default: true)
   --copyParents: string@bool-completer # Preserve parent folders (default: false)
   --rescheduleDate: string # Date to use in task rescheduling. Note that only active tasks can be rescheduled. To activate and reschedule all tasks, use 'rescheduleDate' in combination with copyStatuses = false Format: yyyy-MM-dd
-  --rescheduleMode: string # Mode to be used for rescheduling (based on first or last date), has effect only if reschedule date is specified. * `Start` - Tasks in scope are rescheduled starting from reschedule date * `End` - Tasks in scope are rescheduled ending with reschedule date
+  --rescheduleMode: string@rescheduleMode-completer # Mode to be used for rescheduling (based on first or last date), has effect only if reschedule date is specified. * `Start` - Tasks in scope are rescheduled starting from reschedule date * `End` - Tasks in scope are rescheduled ending with reschedule date
   --entryLimit: float # Limit maximum allowed number for tasks/folders in tree for copy, operation will fail if limit is exceeded, should be 1..250 (default: 250)
 ]: nothing -> record<data: table<result: record, processedCount: float, errorMessage: string, progressPercent: float, id: string, totalCount: float, type: string, status: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2656,7 +2680,7 @@ export def "ids GET:/ids/empty" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --type: string # Entity type * `ApiV2Task` - API v2 task * `ApiV2Attachment` - API v2 attachment * `ApiV2Comment` - API v2 comment * `ApiV2Folder` - API v2 folder * `ApiV2Timelog` - API v2 timelog entry * `ApiV2User` - API v2 user or group * `ApiV2Account` - API v2 account * `ApiV2RequestForm` - API v2 request form
+  --type: string@type-completer-3 # Entity type * `ApiV2Task` - API v2 task * `ApiV2Attachment` - API v2 attachment * `ApiV2Comment` - API v2 comment * `ApiV2Folder` - API v2 folder * `ApiV2Timelog` - API v2 timelog entry * `ApiV2User` - API v2 user or group * `ApiV2Account` - API v2 account * `ApiV2RequestForm` - API v2 request form
   --ids: string # List of APIv2 legacy IDs. Limit : `1000`
 ]: nothing -> record<data: table<id: string, apiV2Id: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2704,7 +2728,7 @@ export def "invitations POST:/invitations/empty" [
   --email: string # Create an invitation for current email
   --firstName: string # First name of invited user
   --lastName: string # Last name of invited user
-  --role: string # [Deprecated] It is recommended to use 'userTypeId' parameter instead. Set user role in account. Mutually exclusive with userTypeId param * `User` * `Collaborator`
+  --role: string@role-completer # [Deprecated] It is recommended to use 'userTypeId' parameter instead. Set user role in account. Mutually exclusive with userTypeId param * `User` * `Collaborator`
   --external: string@bool-completer # [Deprecated] It is recommended to use 'userTypeId' parameter instead. Set external flag for invited user. Flag 'External' can be applied only to the role 'User'. Mutually exclusive with userTypeId param (default: false)
   --subject: string # Custom message subject. Not available for free accounts
   --message: string # Custom message body. Not available for free accounts
@@ -2733,7 +2757,7 @@ export def "invitations PUT:/invitations/single" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --resend: string@bool-completer # Resend invitation
-  --role: string # [Deprecated] It is recommended to use 'userTypeId' parameter instead. Change role of user in account for pending invitation. Mutually exclusive with userTypeId param.  * `User` * `Collaborator`
+  --role: string@role-completer # [Deprecated] It is recommended to use 'userTypeId' parameter instead. Change role of user in account for pending invitation. Mutually exclusive with userTypeId param.  * `User` * `Collaborator`
   --external: string@bool-completer # [Deprecated] It is recommended to use 'userTypeId' parameter instead. Change external flag for pending invitation. Flag 'External' can be applied only to the role 'User'. Mutually exclusive with userTypeId param
   --userTypeId: string # Change user type of user in account for pending invitation. Mutually exclusive with role and external params
 ]: nothing -> record<data: table<userTypeId: string, accountId: string, firstName: string, lastName: string, external: bool, inviterUserId: string, role: string, id: string, email: string, status: string, invitationDate: string, resolvedDate: string>, kind: string> {
@@ -2803,7 +2827,7 @@ export def "jobroles POST:/jobroles/empty" [
   --allow-errors(-e) # Return full response without error handling
   --title: string # Name of Job Role
   --shortTitle: string # Short name of Job Role
-  --avatarColor: string # Job Role Avatar color * `Purple1` - #BA68C8 * `Purple2` - #8E24AA * `Blue1` - #64B5F6 * `Pink1` - #F06292 * `Pink2` - #D81B60 * `Red1` - #E57373 * `Red2` - #E53935 * `Turquoise1` - #4DD0E1 * `Turquoise2` - #00ACC1 * `Blue2` - #1E88E5 * `DarkBlue1` - #7986CB * `Green2` - #43A047 * `DarkBlue2` - #3949AB * `Green1` - #81C784 * `Yellow1` - #FBC02D * `Yellow2` - #F9A825 * `Orange2` - #F57C00 * `DarkCyan2` - #00897B * `Orange1` - #FF9800 * `DarkCyan1` - #4DB6AC * `YellowGreen2` - #AFB42B * `YellowGreen1` - #C0CA33
+  --avatarColor: string@avatarColor-completer # Job Role Avatar color * `Purple1` - #BA68C8 * `Purple2` - #8E24AA * `Blue1` - #64B5F6 * `Pink1` - #F06292 * `Pink2` - #D81B60 * `Red1` - #E57373 * `Red2` - #E53935 * `Turquoise1` - #4DD0E1 * `Turquoise2` - #00ACC1 * `Blue2` - #1E88E5 * `DarkBlue1` - #7986CB * `Green2` - #43A047 * `DarkBlue2` - #3949AB * `Green1` - #81C784 * `Yellow1` - #FBC02D * `Yellow2` - #F9A825 * `Orange2` - #F57C00 * `DarkCyan2` - #00897B * `Orange1` - #FF9800 * `DarkCyan1` - #4DB6AC * `YellowGreen2` - #AFB42B * `YellowGreen1` - #C0CA33
 ]: nothing -> record<data: table<isDeleted: bool, avatarUrl: string, id: string, shortTitle: string, title: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3382,7 +3406,7 @@ export def "task-blueprints-launch-async async" [
   --copyCustomFields: string@bool-completer # Copy custom fields (default: true)
   --copyAttachments: string@bool-completer # Copy attachments (default: false)
   --rescheduleDate: string # Date to use in task rescheduling. Note: Only active tasks can be rescheduled. Format: yyyy-MM-dd Format: yyyy-MM-dd
-  --rescheduleMode: string # Mode to be used for rescheduling (based on first or last date). Used only if reschedule date is specified. * `Start` - Tasks in scope are rescheduled starting from reschedule date * `End` - Tasks in scope are rescheduled ending with reschedule date
+  --rescheduleMode: string@rescheduleMode-completer # Mode to be used for rescheduling (based on first or last date). Used only if reschedule date is specified. * `Start` - Tasks in scope are rescheduled starting from reschedule date * `End` - Tasks in scope are rescheduled ending with reschedule date
   --entryLimit: float # Maximum number of tasks/folders in tree for copy. The operation will fail if limit is exceeded. This should be 1..250 (default: 250)
 ]: nothing -> record<data: table<result: record, processedCount: float, errorMessage: string, progressPercent: float, id: string, totalCount: float, type: string, status: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3409,7 +3433,7 @@ export def "tasks GET:/tasks/empty" [
   --descendants: string@bool-completer # Adds all descendant folders to search scope. Applicable only for GET/folders/{folderId}/tasks and GET/spaces/{spaceId}/tasks endpoints
   --title: string # Title filter, contains match
   --status: string # Status filter, match with any of specified constants * `Active` - Active * `Deferred` - Deferred * `Completed` - Completed * `Cancelled` - Cancelled
-  --importance: string # Importance filter, exact match * `High` * `Low` * `Normal`
+  --importance: string@importance-completer # Importance filter, exact match * `High` * `Low` * `Normal`
   --startDate: string # Start date filter, date match or range
   --dueDate: string # Due date filter, date match or range
   --scheduledDate: string # Scheduled date filter. Both dates should be set in ranged version. Returns all tasks that have schedule intersecting with specified interval, date match or range
@@ -3420,10 +3444,10 @@ export def "tasks GET:/tasks/empty" [
   --responsibles: string # Assignees filter with specified users or invitations, match of any
   --responsiblePlaceholders: string # Assignee Placeholders filter, match of any
   --permalink: string # Task permalink, exact match
-  --type: string # Task type * `Milestone` * `Backlog` * `Planned`
+  --type: string@type-completer-4 # Task type * `Milestone` * `Backlog` * `Planned`
   --limit: float # Limit on number of returned tasks
   --sortField: string@sortField-completer # Sort field * `Status` - Sort by status * `Importance` - Sort by importance * `UpdatedDate` - Sort by updated date * `CreatedDate` - Sort by created date * `Title` - Lexicographic sorting by title * `StartFinishInterval` - Sort by start-finish interval * `DueDate` - Sort by due date * `LastAccessDate` - Sort by last access date * `CompletedDate` - Sort by completed date
-  --sortOrder: string # Sort order * `Asc` - Ascending sort order * `Desc` - Descending sort order
+  --sortOrder: string@sortOrder-completer # Sort order * `Asc` - Ascending sort order * `Desc` - Descending sort order
   --subTasks: string@bool-completer # Adds subtasks to search scope
   --pageSize: float # The number of tasks to return (max 1000 items per page)
   --nextPageToken: string # A pagination request will return a token that applies an offset to the next page. The returned value should be used as an input parameter in the next request. Parameter pageSize can be omitted in this case. If you included optional fields to the first request, you will need to include those  in each new call
@@ -3462,7 +3486,7 @@ export def "folders-tasks GET:/folders/single/tasks" [
   --descendants: string@bool-completer # Adds all descendant folders to search scope. Applicable only for GET/folders/{folderId}/tasks and GET/spaces/{spaceId}/tasks endpoints
   --title: string # Title filter, contains match
   --status: string # Status filter, match with any of specified constants * `Active` - Active * `Deferred` - Deferred * `Completed` - Completed * `Cancelled` - Cancelled
-  --importance: string # Importance filter, exact match * `High` * `Low` * `Normal`
+  --importance: string@importance-completer # Importance filter, exact match * `High` * `Low` * `Normal`
   --startDate: string # Start date filter, date match or range
   --dueDate: string # Due date filter, date match or range
   --scheduledDate: string # Scheduled date filter. Both dates should be set in ranged version. Returns all tasks that have schedule intersecting with specified interval, date match or range
@@ -3473,10 +3497,10 @@ export def "folders-tasks GET:/folders/single/tasks" [
   --responsibles: string # Assignees filter with specified users or invitations, match of any
   --responsiblePlaceholders: string # Assignee Placeholders filter, match of any
   --permalink: string # Task permalink, exact match
-  --type: string # Task type * `Milestone` * `Backlog` * `Planned`
+  --type: string@type-completer-4 # Task type * `Milestone` * `Backlog` * `Planned`
   --limit: float # Limit on number of returned tasks
   --sortField: string@sortField-completer # Sort field * `Status` - Sort by status * `Importance` - Sort by importance * `UpdatedDate` - Sort by updated date * `CreatedDate` - Sort by created date * `Title` - Lexicographic sorting by title * `StartFinishInterval` - Sort by start-finish interval * `DueDate` - Sort by due date * `LastAccessDate` - Sort by last access date * `CompletedDate` - Sort by completed date
-  --sortOrder: string # Sort order * `Asc` - Ascending sort order * `Desc` - Descending sort order
+  --sortOrder: string@sortOrder-completer # Sort order * `Asc` - Ascending sort order * `Desc` - Descending sort order
   --subTasks: string@bool-completer # Adds subtasks to search scope
   --pageSize: float # The number of tasks to return (max 1000 items per page)
   --nextPageToken: string # A pagination request will return a token that applies an offset to the next page. The returned value should be used as an input parameter in the next request. Parameter pageSize can be omitted in this case. If you included optional fields to the first request, you will need to include those  in each new call
@@ -3514,8 +3538,8 @@ export def "folders-tasks POST:/folders/single/tasks" [
   --allow-errors(-e) # Return full response without error handling
   --title: string # Title of task, required
   --description: string # Description of task, will be left blank, if not set
-  --status: string # Status of task. Not available for the Team plan * `Active` - Active * `Deferred` - Deferred * `Completed` - Completed * `Cancelled` - Cancelled
-  --importance: string # Importance of task * `High` * `Low` * `Normal`
+  --status: string@status-completer # Status of task. Not available for the Team plan * `Active` - Active * `Deferred` - Deferred * `Completed` - Completed * `Cancelled` - Cancelled
+  --importance: string@importance-completer # Importance of task * `High` * `Low` * `Normal`
   --dates: string # Task dates. If not specified, a backlogged task is created
   --shareds: string # Shares task with specified users or invitations. The task is always shared with the author.
   --parents: string # Parent folders for newly created task. Can not contain recycleBinId
@@ -3530,7 +3554,7 @@ export def "folders-tasks POST:/folders/single/tasks" [
   --customFields: string # List of custom fields to set in newly created task. Limit : `100`
   --customStatus: string # Custom status ID
   --effortAllocation: string # Set Task Effort fields: mode, total Effort
-  --billingType: string # Task's timelogs billing type * `Billable` - Billable * `NonBillable` - Non-Billable
+  --billingType: string@billingType-completer # Task's timelogs billing type * `Billable` - Billable * `NonBillable` - Non-Billable
   --withInvitations: string@bool-completer # Include invitations in sharedIds & responsibleIds lists
   --customItemTypeId: string # Custom Item Type ID to create a task from
   --plainTextCustomFields: string@bool-completer # Strip HTML tags from custom fields
@@ -3562,7 +3586,7 @@ export def "spaces-tasks GET:/spaces/single/tasks" [
   --descendants: string@bool-completer # Adds all descendant folders to search scope. Applicable only for GET/folders/{folderId}/tasks and GET/spaces/{spaceId}/tasks endpoints
   --title: string # Title filter, contains match
   --status: string # Status filter, match with any of specified constants * `Active` - Active * `Deferred` - Deferred * `Completed` - Completed * `Cancelled` - Cancelled
-  --importance: string # Importance filter, exact match * `High` * `Low` * `Normal`
+  --importance: string@importance-completer # Importance filter, exact match * `High` * `Low` * `Normal`
   --startDate: string # Start date filter, date match or range
   --dueDate: string # Due date filter, date match or range
   --scheduledDate: string # Scheduled date filter. Both dates should be set in ranged version. Returns all tasks that have schedule intersecting with specified interval, date match or range
@@ -3573,10 +3597,10 @@ export def "spaces-tasks GET:/spaces/single/tasks" [
   --responsibles: string # Assignees filter with specified users or invitations, match of any
   --responsiblePlaceholders: string # Assignee Placeholders filter, match of any
   --permalink: string # Task permalink, exact match
-  --type: string # Task type * `Milestone` * `Backlog` * `Planned`
+  --type: string@type-completer-4 # Task type * `Milestone` * `Backlog` * `Planned`
   --limit: float # Limit on number of returned tasks
   --sortField: string@sortField-completer # Sort field * `Status` - Sort by status * `Importance` - Sort by importance * `UpdatedDate` - Sort by updated date * `CreatedDate` - Sort by created date * `Title` - Lexicographic sorting by title * `StartFinishInterval` - Sort by start-finish interval * `DueDate` - Sort by due date * `LastAccessDate` - Sort by last access date * `CompletedDate` - Sort by completed date
-  --sortOrder: string # Sort order * `Asc` - Ascending sort order * `Desc` - Descending sort order
+  --sortOrder: string@sortOrder-completer # Sort order * `Asc` - Ascending sort order * `Desc` - Descending sort order
   --subTasks: string@bool-completer # Adds subtasks to search scope
   --pageSize: float # The number of tasks to return (max 1000 items per page)
   --nextPageToken: string # A pagination request will return a token that applies an offset to the next page. The returned value should be used as an input parameter in the next request. Parameter pageSize can be omitted in this case. If you included optional fields to the first request, you will need to include those  in each new call
@@ -3699,8 +3723,8 @@ export def "tasks PUT:/tasks/single" [
   --allow-errors(-e) # Return full response without error handling
   --title: string # Title of task
   --description: string # Task Description
-  --status: string # Task status. Not available for the Team plan * `Active` - Active * `Deferred` - Deferred * `Completed` - Completed * `Cancelled` - Cancelled
-  --importance: string # Task importance * `High` * `Low` * `Normal`
+  --status: string@status-completer # Task status. Not available for the Team plan * `Active` - Active * `Deferred` - Deferred * `Completed` - Completed * `Cancelled` - Cancelled
+  --importance: string@importance-completer # Task importance * `High` * `Low` * `Normal`
   --dates: string # Reschedule task and/or change task type
   --addParents: string # Put task into specified folders of same account. Cannot contain RecycleBin folder
   --removeParents: string # Remove task from specified folders. Can not contain RecycleBin folder
@@ -3722,7 +3746,7 @@ export def "tasks PUT:/tasks/single" [
   --restore: string@bool-completer # Restore task from Recycled Bin
   --effortAllocation: string # Set Task Effort fields: mode, total Effort
   --setResponsibleAllocation: string # Update responsible allocations
-  --billingType: string # Task's timelogs billing type * `Billable` - Billable * `NonBillable` - Non-Billable
+  --billingType: string@billingType-completer # Task's timelogs billing type * `Billable` - Billable * `NonBillable` - Non-Billable
   --withInvitations: string@bool-completer # Include invitations in sharedIds & responsibleIds lists
   --convertToCustomItemType: string # Custom Item Type id
   --plainTextCustomFields: string@bool-completer # Strip HTML tags from custom fields
@@ -4320,9 +4344,9 @@ export def "workschedules-timesheet-submission-rules rules-by-workscheduleId-1" 
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --enabled: string@bool-completer # Switch to toggle on/off timesheet submission rule
-  --ruleType: string # Type of timesheet submission rule * `Hard` - Hard * `Soft` - Soft
-  --frequency: string # Frequency for timesheet submission rule * `Month` - Week * `Week` - Week * `Day` - Day
-  --trackExceptionsMode: string # Track exceptions mode for timesheet submission rule * `TotalCapacity` - Total Capacity * `ActualCapacity` - Actual Capacity
+  --ruleType: string@ruleType-completer # Type of timesheet submission rule * `Hard` - Hard * `Soft` - Soft
+  --frequency: string@frequency-completer # Frequency for timesheet submission rule * `Month` - Week * `Week` - Week * `Day` - Day
+  --trackExceptionsMode: string@trackExceptionsMode-completer # Track exceptions mode for timesheet submission rule * `TotalCapacity` - Total Capacity * `ActualCapacity` - Actual Capacity
 ]: nothing -> record<data: table<trackExceptionsMode: string, ruleType: string, workScheduleId: string, enabled: bool, frequency: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4374,7 +4398,7 @@ export def "timesheets POST:/timesheets/empty" [
   --periodStartDate: string # Timesheet period start date range (required)
   --userId: string # UserId for whom to create the timesheet
   --taskIds: string # Optional: TaskIds to create new rows
-  --timeframe: string # Optional: Timeframe for the timesheet * `Monthly` * `Weekly`
+  --timeframe: string@timeframe-completer # Optional: Timeframe for the timesheet * `Monthly` * `Weekly`
 ]: nothing -> record<data: table<timesheetId: string, accountId: string, periodStartDate: string, timeframe: string, approval: record, rows: list, userId: string, periodEndDate: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4398,7 +4422,7 @@ export def "timesheets PUT:/timesheets/single" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --approvalStatus: string # Timesheet approval status * `NotSubmitted` * `Approved` * `Rejected` * `Pending`
+  --approvalStatus: string@approvalStatus-completer # Timesheet approval status * `NotSubmitted` * `Approved` * `Rejected` * `Pending`
 ]: nothing -> record<data: table<timesheetId: string, accountId: string, periodStartDate: string, timeframe: string, approval: record, rows: list, userId: string, periodEndDate: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4567,7 +4591,7 @@ export def "user-schedule-exclusions exclusions/empty-1" [
   --userId: string # User id to add new exception
   --fromDate: string # New exception from date Format: yyyy-MM-dd
   --toDate: string # New exception to date Format: yyyy-MM-dd
-  --exclusionType: string # Type of new exception * `VacationPTO` - Paid vacations * `Overtime` - Additional working days * `OtherNonWorking` - Other non-working days
+  --exclusionType: string@exclusionType-completer # Type of new exception * `VacationPTO` - Paid vacations * `Overtime` - Additional working days * `OtherNonWorking` - Other non-working days
 ]: nothing -> record<data: table<fromDate: string, isWorkDays: bool, toDate: string, exclusionType: string, id: string, userId: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4615,7 +4639,7 @@ export def "user-schedule-exclusions exclusions/single-by-userScheduleExclusionI
   --allow-errors(-e) # Return full response without error handling
   --fromDate: string # Exception from date Format: yyyy-MM-dd
   --toDate: string # Exception to date Format: yyyy-MM-dd
-  --exclusionType: string # Type of exception * `VacationPTO` - Paid vacations * `Overtime` - Additional working days * `OtherNonWorking` - Other non-working days
+  --exclusionType: string@exclusionType-completer # Type of exception * `VacationPTO` - Paid vacations * `Overtime` - Additional working days * `OtherNonWorking` - Other non-working days
 ]: nothing -> record<data: table<fromDate: string, isWorkDays: bool, toDate: string, exclusionType: string, id: string, userId: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4686,7 +4710,7 @@ export def "user-schedule-partial-exclusion exclusion/empty-1" [
   --allow-errors(-e) # Return full response without error handling
   --userId: string # User id
   --dateRange: string # Date range
-  --exclusionType: string@exclusionType-completer # Exclusion type * `VacationPTO` - Vacation or paid time off * `OtherNonWorking` - Other non-working time
+  --exclusionType: string@exclusionType-completer-1 # Exclusion type * `VacationPTO` - Vacation or paid time off * `OtherNonWorking` - Other non-working time
   --capacityMinutes: float # Capacity minutes
 ]: nothing -> record<data: table<exclusionType: string, finishDate: string, id: string, userId: string, capacityMinutes: float, startDate: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4734,7 +4758,7 @@ export def "user-schedule-partial-exclusion exclusion/single-by-userSchedulePart
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --dateRange: string # Date range
-  --exclusionType: string@exclusionType-completer # Exclusion type * `VacationPTO` - Vacation or paid time off * `OtherNonWorking` - Other non-working time
+  --exclusionType: string@exclusionType-completer-1 # Exclusion type * `VacationPTO` - Vacation or paid time off * `OtherNonWorking` - Other non-working time
   --capacityMinutes: float # Capacity minutes
 ]: nothing -> record<data: table<exclusionType: string, finishDate: string, id: string, userId: string, capacityMinutes: float, startDate: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5037,7 +5061,7 @@ export def "workschedule-exclusions exclusions/single-by-workscheduleExclusionId
   --allow-errors(-e) # Return full response without error handling
   --fromDate: string # Exception from date Format: yyyy-MM-dd
   --toDate: string # Exception to date Format: yyyy-MM-dd
-  --exclusionType: string # Type of exception * `PublicHolidays` - Non-working days because of public holidays * `OtherEvent` - Non-working days because of some company or private event * `AdditionalWorkDays` - Additional working days, i.e. during weekends
+  --exclusionType: string@exclusionType-completer-2 # Type of exception * `PublicHolidays` - Non-working days because of public holidays * `OtherEvent` - Non-working days because of some company or private event * `AdditionalWorkDays` - Additional working days, i.e. during weekends
 ]: nothing -> record<data: table<fromDate: string, isWorkDays: bool, toDate: string, exclusionType: string, id: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5109,7 +5133,7 @@ export def "workschedules-workschedule-exclusions exclusions-by-workscheduleId-1
   --allow-errors(-e) # Return full response without error handling
   --fromDate: string # New exception from date Format: yyyy-MM-dd
   --toDate: string # New exception to date Format: yyyy-MM-dd
-  --exclusionType: string # Type of new exception * `PublicHolidays` - Non-working days because of public holidays * `OtherEvent` - Non-working days because of some company or private event * `AdditionalWorkDays` - Additional working days, i.e. during weekends
+  --exclusionType: string@exclusionType-completer-2 # Type of new exception * `PublicHolidays` - Non-working days because of public holidays * `OtherEvent` - Non-working days because of some company or private event * `AdditionalWorkDays` - Additional working days, i.e. during weekends
 ]: nothing -> record<data: table<fromDate: string, isWorkDays: bool, toDate: string, exclusionType: string, id: string>, kind: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

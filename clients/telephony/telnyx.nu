@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -76,6 +77,7 @@ def sort-completer-4 [] { ["business_name" "created_at" "first_name" "last_name"
 def phone-number-type-completer [] { ["landline" "local" "mobile" "national" "shared_cost" "toll_free"] }
 def provider-completer [] { ["elevenlabs" "retell" "vapi"] }
 def telnyx-conversation-channel-completer [] { ["phone_call" "sms_chat" "web_call" "web_chat"] }
+def conversation-channel-completer [] { ["phone_call" "sms_chat"] }
 def telnyx-conversation-channel-completer-1 [] { ["phone_call" "sms_chat"] }
 def model-completer [] { ["deepgram/nova-3" "distil-whisper/distil-large-v2" "openai/whisper-large-v3-turbo"] }
 def response-format-completer [] { ["json" "verbose_json"] }
@@ -147,16 +149,20 @@ def beep-enabled-completer [] { ["always" "never" "on_enter" "on_exit"] }
 def supervisor-role-completer-1 [] { ["barge" "monitor" "none" "whisper"] }
 def anchorsite-override-completer-1 [] { ["Amsterdam, Netherlands" "Ashburn, VA" "Chicago, IL" "Frankfurt, Germany" "Latency" "London, UK" "San Jose, CA" "Sydney, Australia" "Toronto, Canada" "Vancouver, Canada"] }
 def sip-uri-calling-preference-completer [] { ["disabled" "internal" "unrestricted"] }
-def encrypted-media-completer [] { ["SRTP"] }
+def encrypted-media-completer [] { ["" "SRTP"] }
 def webhook-api-version-completer-1 [] { ["1" "2" "texml"] }
 def noise-suppression-completer [] { ["both" "disabled" "inbound" "outbound"] }
 def backend-completer [] { ["azure" "gcs" "s3"] }
 def dialogflow-api-completer [] { ["cx" "es"] }
 def sort-completer-8 [] { ["-created_at" "-display_name" "-status" "-updated_at" "created_at" "display_name" "status" "updated_at"] }
+def filterstatus-completer [] { ["draft" "expired" "in_review" "infringement_claimed" "permanently_rejected" "rejected" "submitted" "suspended" "unsuccessful" "verified"] }
+def comment-type-completer [] { ["admin_response" "customer_inquiry" "internal_note" "notification" "rejection_reason" "status_update" "vetting_comment"] }
 def certify-no-infringement-completer [] { ["true"] }
 def certify-brand-is-accurate-completer [] { ["true"] }
 def certify-no-shaft-content-completer [] { ["true"] }
 def certify-ip-ownership-completer [] { ["true"] }
+def filterstatus-completer-1 [] { ["expired" "in_review" "permanently_rejected" "submitted" "suspended" "unsuccessful" "verified"] }
+def status-completer-3 [] { ["expired" "in_review" "permanently_rejected" "submitted" "suspended" "unsuccessful" "verified"] }
 def country-code-completer [] { ["CA" "PR" "US"] }
 def organization-type-completer [] { ["commercial" "government" "non_profit"] }
 def role-type-completer [] { ["bpo" "enterprise"] }
@@ -165,6 +171,7 @@ def number-of-employees-completer [] { ["1-10" "10001+" "11-50" "2001-10000" "20
 def organization-legal-type-completer [] { ["corporation" "llc" "nonprofit" "other" "partnership"] }
 def sort-completer-9 [] { ["-created_at" "-display_name" "-expiring_at" "-status" "-submitted_at" "-updated_at" "-verified_at" "created_at" "display_name" "expiring_at" "status" "submitted_at" "updated_at" "verified_at"] }
 def check-frequency-completer [] { ["biweekly" "business_daily" "daily" "monthly" "never" "weekly"] }
+def filterstatus-completer-2 [] { ["cancelled" "completed" "failed" "in_progress" "pending"] }
 def external-sip-connection-completer [] { ["zoom"] }
 def usage-completer [] { ["calling_user_assignment" "first_party_app_assignment"] }
 def sort-completer-10 [] { ["active" "application_name" "created_at"] }
@@ -182,8 +189,10 @@ def type-completer-3 [] { ["RCS"] }
 def type-completer-4 [] { ["WHATSAPP"] }
 def verification-method-completer [] { ["call" "sms"] }
 def sortphone-number-completer [] { ["asc" "desc"] }
+def time-frame-completer [] { ["1h" "24h" "30d" "3d" "3h" "7d"] }
 def webhook-api-version-completer-2 [] { ["1" "2" "2010-04-01"] }
 def op-completer [] { ["info" "start" "stop"] }
+def status-completer-4 [] { ["In Progress" "Rejected" "Verified" "Waiting For Customer" "Waiting For Telnyx" "Waiting For Vendor"] }
 def type-completer-5 [] { ["ios"] }
 def channel-type-id-completer [] { ["email" "sms" "voice" "webhook"] }
 def type-completer-6 [] { ["caller-name" "carrier"] }
@@ -216,20 +225,22 @@ def aggregation-type-completer [] { ["BILLING_GROUP" "CONNECTION" "NO_AGGREGATIO
 def product-breakdown-completer [] { ["COUNTRY" "DID_VS_TOLL_FREE" "DID_VS_TOLL_FREE_PER_COUNTRY" "NO_BREAKDOWN"] }
 def aggregation-type-completer-1 [] { ["NO_AGGREGATION" "PROFILE" "TAGS"] }
 def direction-completer-1 [] { ["INBOUND" "OUTBOUND"] }
-def status-completer-3 [] { ["DELIVERED" "DLR_TIMEOUT" "DLR_UNCONFIRMED" "FAILED" "GW_REJECT" "GW_TIMEOUT" "RECEIVED"] }
+def status-completer-5 [] { ["DELIVERED" "DLR_TIMEOUT" "DLR_UNCONFIRMED" "FAILED" "GW_REJECT" "GW_TIMEOUT" "RECEIVED"] }
 def message-type-completer [] { ["MMS" "SMS"] }
 def phone-number-type-completer-1 [] { ["local" "mobile" "national" "shared_cost" "toll_free"] }
 def action-completer-2 [] { ["ordering" "porting"] }
 def expand-completer [] { ["none" "record"] }
-def filterstatus-completer [] { ["completed" "failed" "in-progress"] }
+def filterstatus-completer-3 [] { ["completed" "failed" "in-progress"] }
 def filtertype-completer-1 [] { ["remove_private_wireless_gateway" "remove_wireless_blocklist" "set_private_wireless_gateway" "set_wireless_blocklist"] }
 def sort-completer-16 [] { ["-current_billing_period_consumed_data.amount" "current_billing_period_consumed_data.amount"] }
 def credential-type-completer [] { ["uac_external_credential"] }
+def service-type-completer [] { ["ai_assistant" "file_based" "in_call" "streaming"] }
 def provider-completer-1 [] { ["assemblyai" "azure" "deepgram" "google" "openai" "soniox" "speechmatics" "telnyx" "xai"] }
 def transcription-engine-completer-2 [] { ["Azure" "Deepgram" "Google" "Soniox" "Speechmatics" "Telnyx" "xAI"] }
 def input-format-completer [] { ["mp3" "wav"] }
 def provider-completer-2 [] { ["aws" "telnyx"] }
-def status-completer-4 [] { ["failure" "pending" "success"] }
+def status-completer-6 [] { ["failure" "pending" "success"] }
+def product-type-completer [] { ["branded_calling" "number_reputation"] }
 def Status-completer [] { ["busy" "canceled" "completed" "failed" "no-answer"] }
 def UrlMethod-completer [] { ["GET" "POST"] }
 def StatusCallbackMethod-completer [] { ["GET" "POST"] }
@@ -282,15 +293,16 @@ def sort-completer-18 [] { ["-service" "-type" "service" "type"] }
 def type-completer-7 [] { ["blacklist" "whitelist"] }
 def limit-bw-kbps-completer [] { ["1024" "512"] }
 def type-completer-8 [] { ["blacklist" "throttling" "whitelist"] }
+def limit-bw-kbps-completer-1 [] { ["" "1024" "512"] }
 def verification-method-completer-1 [] { ["sms" "voice"] }
 def filtercategory-completer [] { ["AUTHENTICATION" "MARKETING" "UTILITY"] }
 def category-completer [] { ["AUTHENTICATION" "MARKETING" "UTILITY"] }
-def status-completer-5 [] { ["accepted" "rejected"] }
+def status-completer-7 [] { ["accepted" "rejected"] }
 def filterprovider-completer [] { ["Minimax" "Telnyx" "minimax" "telnyx"] }
 def sort-completer-19 [] { ["-created_at" "-name" "created_at" "name"] }
 def gender-completer [] { ["female" "male" "neutral"] }
 def provider-completer-5 [] { ["Minimax" "Telnyx" "minimax" "telnyx"] }
-def model-id-completer [] { ["Qwen3TTS"] }
+def model-id-completer [] { ["" "Qwen3TTS"] }
 def provider-completer-6 [] { ["Telnyx" "telnyx"] }
 def sort-completer-20 [] { ["-created_at" "asc" "created_at" "desc"] }
 def type-completer-9 [] { ["country" "mcc" "plmn"] }
@@ -1985,7 +1997,7 @@ export def "ai-assistants list" [
 # --mcp_servers item shape: {id: string, allowed_tools?: list}
 # --external_llm shape: {model: string, base_url: string, llm_api_key_ref?: string, authentication_method?: "token"|"certificate", certificate_ref?: string, token_retrieval_url?: string, forward_metadata?: bool}
 # --fallback_config shape: {model?: string, llm_api_key_ref?: string, external_llm?: record}
-# --voice_settings shape: {voice: string, voice_speed?: float, api_key_ref?: string, temperature?: float, similarity_boost?: float, use_speaker_boost?: bool, style?: float, speed?: float, language_boost?: "auto"|"Chinese"|"Chinese,Yue"|"English"|"Arabic"|"Russian"|"Spanish"|"French"|"Portuguese"|"German"|"Turkish"|"Dutch"|"Ukrainian"|"Vietnamese"|"Indonesian"|"Japanese"|"Italian"|"Korean"|"Thai"|"Polish"|"Romanian"|"Greek"|"Czech"|"Finnish"|"Hindi"|"Bulgarian"|"Danish"|"Hebrew"|"Malay"|"Persian"|"Slovak"|"Swedish"|"Croatian"|"Filipino"|"Hungarian"|"Norwegian"|"Slovenian"|"Catalan"|"Nynorsk"|"Tamil"|"Afrikaans", expressive_mode?: bool, background_audio?: any}
+# --voice_settings shape: {voice: string, voice_speed?: float, api_key_ref?: string, temperature?: float, similarity_boost?: float, use_speaker_boost?: bool, style?: float, speed?: float, language_boost?: ""|"auto"|"Chinese"|"Chinese,Yue"|"English"|"Arabic"|"Russian"|"Spanish"|"French"|"Portuguese"|"German"|"Turkish"|"Dutch"|"Ukrainian"|"Vietnamese"|"Indonesian"|"Japanese"|"Italian"|"Korean"|"Thai"|"Polish"|"Romanian"|"Greek"|"Czech"|"Finnish"|"Hindi"|"Bulgarian"|"Danish"|"Hebrew"|"Malay"|"Persian"|"Slovak"|"Swedish"|"Croatian"|"Filipino"|"Hungarian"|"Norwegian"|"Slovenian"|"Catalan"|"Nynorsk"|"Tamil"|"Afrikaans", expressive_mode?: bool, background_audio?: any}
 # --transcription shape: {model?: "deepgram/flux"|"deepgram/nova-3"|"deepgram/nova-2"|"azure/fast"|"assemblyai/universal-streaming"|"xai/grok-stt"|"soniox/stt-rt-v4"|"distil-whisper/distil-large-v2"|"openai/whisper-large-v3-turbo", language?: string, api_key_ref?: string, region?: string, settings?: record}
 # --telephony_settings shape: {default_texml_app_id?: string, supports_unauthenticated_web_calls?: bool, noise_suppression?: "krisp"|"deepfilternet"|"disabled", noise_suppression_config?: record, time_limit_secs?: int, user_idle_timeout_secs?: int, user_idle_reply_secs?: int, voicemail_detection?: record, recording_settings?: record}
 # --messaging_settings shape: {default_messaging_profile_id?: string, delivery_status_webhook_url?: string, conversation_inactivity_minutes?: int}
@@ -2016,7 +2028,7 @@ export def "ai-assistants post" [
   --llm-api-key-ref: string # This is only needed when using third-party inference providers selected by `model`. The `identifier` for an integration secret [/v2/integration_secrets](https://developers.telnyx.com/api-reference/integration-secrets/create-a-secret) that refers to your LLM provider's API key. For bring-your-own endpoint authentication, use `external_llm.llm_api_key_ref` instead. Warning: Free plans are unlikely to work with this integration.
   --external-llm: record # shape: {model: string, base_url: string, llm_api_key_ref?: string, authentication_method?: "token"|"certificate", certificate_ref?: string, token_retrieval_url?: string, forward_metadata?: bool}
   --fallback-config: record # shape: {model?: string, llm_api_key_ref?: string, external_llm?: record}
-  --voice-settings: record # shape: {voice: string, voice_speed?: float, api_key_ref?: string, temperature?: float, similarity_boost?: float, use_speaker_boost?: bool, style?: float, speed?: float, language_boost?: "auto"|"Chinese"|"Chinese,Yue"|"English"|"Arabic"|"Russian"|"Spanish"|"French"|"Portuguese"|"German"|"Turkish"|"Dutch"|"Ukrainian"|"Vietnamese"|"Indonesian"|"Japanese"|"Italian"|"Korean"|"Thai"|"Polish"|"Romanian"|"Greek"|"Czech"|"Finnish"|"Hindi"|"Bulgarian"|"Danish"|"Hebrew"|"Malay"|"Persian"|"Slovak"|"Swedish"|"Croatian"|"Filipino"|"Hungarian"|"Norwegian"|"Slovenian"|"Catalan"|"Nynorsk"|"Tamil"|"Afrikaans", expressive_mode?: bool, background_audio?: any}
+  --voice-settings: record # shape: {voice: string, voice_speed?: float, api_key_ref?: string, temperature?: float, similarity_boost?: float, use_speaker_boost?: bool, style?: float, speed?: float, language_boost?: ""|"auto"|"Chinese"|"Chinese,Yue"|"English"|"Arabic"|"Russian"|"Spanish"|"French"|"Portuguese"|"German"|"Turkish"|"Dutch"|"Ukrainian"|"Vietnamese"|"Indonesian"|"Japanese"|"Italian"|"Korean"|"Thai"|"Polish"|"Romanian"|"Greek"|"Czech"|"Finnish"|"Hindi"|"Bulgarian"|"Danish"|"Hebrew"|"Malay"|"Persian"|"Slovak"|"Swedish"|"Croatian"|"Filipino"|"Hungarian"|"Norwegian"|"Slovenian"|"Catalan"|"Nynorsk"|"Tamil"|"Afrikaans", expressive_mode?: bool, background_audio?: any}
   --transcription: record # shape: {model?: "deepgram/flux"|"deepgram/nova-3"|"deepgram/nova-2"|"azure/fast"|"assemblyai/universal-streaming"|"xai/grok-stt"|"soniox/stt-rt-v4"|"distil-whisper/distil-large-v2"|"openai/whisper-large-v3-turbo", language?: string, api_key_ref?: string, region?: string, settings?: record}
   --telephony-settings: record # shape: {default_texml_app_id?: string, supports_unauthenticated_web_calls?: bool, noise_suppression?: "krisp"|"deepfilternet"|"disabled", noise_suppression_config?: record, time_limit_secs?: int, user_idle_timeout_secs?: int, user_idle_reply_secs?: int, voicemail_detection?: record, recording_settings?: record}
   --messaging-settings: record # shape: {default_messaging_profile_id?: string, delivery_status_webhook_url?: string, conversation_inactivity_minutes?: int}
@@ -2433,7 +2445,7 @@ export def "ai-assistants get" [
 # --mcp_servers item shape: {id: string, allowed_tools?: list}
 # --external_llm shape: {model: string, base_url: string, llm_api_key_ref?: string, authentication_method?: "token"|"certificate", certificate_ref?: string, token_retrieval_url?: string, forward_metadata?: bool}
 # --fallback_config shape: {model?: string, llm_api_key_ref?: string, external_llm?: record}
-# --voice_settings shape: {voice: string, voice_speed?: float, api_key_ref?: string, temperature?: float, similarity_boost?: float, use_speaker_boost?: bool, style?: float, speed?: float, language_boost?: "auto"|"Chinese"|"Chinese,Yue"|"English"|"Arabic"|"Russian"|"Spanish"|"French"|"Portuguese"|"German"|"Turkish"|"Dutch"|"Ukrainian"|"Vietnamese"|"Indonesian"|"Japanese"|"Italian"|"Korean"|"Thai"|"Polish"|"Romanian"|"Greek"|"Czech"|"Finnish"|"Hindi"|"Bulgarian"|"Danish"|"Hebrew"|"Malay"|"Persian"|"Slovak"|"Swedish"|"Croatian"|"Filipino"|"Hungarian"|"Norwegian"|"Slovenian"|"Catalan"|"Nynorsk"|"Tamil"|"Afrikaans", expressive_mode?: bool, background_audio?: any}
+# --voice_settings shape: {voice: string, voice_speed?: float, api_key_ref?: string, temperature?: float, similarity_boost?: float, use_speaker_boost?: bool, style?: float, speed?: float, language_boost?: ""|"auto"|"Chinese"|"Chinese,Yue"|"English"|"Arabic"|"Russian"|"Spanish"|"French"|"Portuguese"|"German"|"Turkish"|"Dutch"|"Ukrainian"|"Vietnamese"|"Indonesian"|"Japanese"|"Italian"|"Korean"|"Thai"|"Polish"|"Romanian"|"Greek"|"Czech"|"Finnish"|"Hindi"|"Bulgarian"|"Danish"|"Hebrew"|"Malay"|"Persian"|"Slovak"|"Swedish"|"Croatian"|"Filipino"|"Hungarian"|"Norwegian"|"Slovenian"|"Catalan"|"Nynorsk"|"Tamil"|"Afrikaans", expressive_mode?: bool, background_audio?: any}
 # --transcription shape: {model?: "deepgram/flux"|"deepgram/nova-3"|"deepgram/nova-2"|"azure/fast"|"assemblyai/universal-streaming"|"xai/grok-stt"|"soniox/stt-rt-v4"|"distil-whisper/distil-large-v2"|"openai/whisper-large-v3-turbo", language?: string, api_key_ref?: string, region?: string, settings?: record}
 # --telephony_settings shape: {default_texml_app_id?: string, supports_unauthenticated_web_calls?: bool, noise_suppression?: "krisp"|"deepfilternet"|"disabled", noise_suppression_config?: record, time_limit_secs?: int, user_idle_timeout_secs?: int, user_idle_reply_secs?: int, voicemail_detection?: record, recording_settings?: record}
 # --messaging_settings shape: {default_messaging_profile_id?: string, delivery_status_webhook_url?: string, conversation_inactivity_minutes?: int}
@@ -2465,7 +2477,7 @@ export def "ai-assistants post-by-assistant_id" [
   --llm-api-key-ref: string # This is only needed when using third-party inference providers selected by `model`. The `identifier` for an integration secret [/v2/integration_secrets](https://developers.telnyx.com/api-reference/integration-secrets/create-a-secret) that refers to your LLM provider's API key. For bring-your-own endpoint authentication, use `external_llm.llm_api_key_ref` instead. Warning: Free plans are unlikely to work with this integration.
   --external-llm: record # shape: {model: string, base_url: string, llm_api_key_ref?: string, authentication_method?: "token"|"certificate", certificate_ref?: string, token_retrieval_url?: string, forward_metadata?: bool}
   --fallback-config: record # shape: {model?: string, llm_api_key_ref?: string, external_llm?: record}
-  --voice-settings: record # shape: {voice: string, voice_speed?: float, api_key_ref?: string, temperature?: float, similarity_boost?: float, use_speaker_boost?: bool, style?: float, speed?: float, language_boost?: "auto"|"Chinese"|"Chinese,Yue"|"English"|"Arabic"|"Russian"|"Spanish"|"French"|"Portuguese"|"German"|"Turkish"|"Dutch"|"Ukrainian"|"Vietnamese"|"Indonesian"|"Japanese"|"Italian"|"Korean"|"Thai"|"Polish"|"Romanian"|"Greek"|"Czech"|"Finnish"|"Hindi"|"Bulgarian"|"Danish"|"Hebrew"|"Malay"|"Persian"|"Slovak"|"Swedish"|"Croatian"|"Filipino"|"Hungarian"|"Norwegian"|"Slovenian"|"Catalan"|"Nynorsk"|"Tamil"|"Afrikaans", expressive_mode?: bool, background_audio?: any}
+  --voice-settings: record # shape: {voice: string, voice_speed?: float, api_key_ref?: string, temperature?: float, similarity_boost?: float, use_speaker_boost?: bool, style?: float, speed?: float, language_boost?: ""|"auto"|"Chinese"|"Chinese,Yue"|"English"|"Arabic"|"Russian"|"Spanish"|"French"|"Portuguese"|"German"|"Turkish"|"Dutch"|"Ukrainian"|"Vietnamese"|"Indonesian"|"Japanese"|"Italian"|"Korean"|"Thai"|"Polish"|"Romanian"|"Greek"|"Czech"|"Finnish"|"Hindi"|"Bulgarian"|"Danish"|"Hebrew"|"Malay"|"Persian"|"Slovak"|"Swedish"|"Croatian"|"Filipino"|"Hungarian"|"Norwegian"|"Slovenian"|"Catalan"|"Nynorsk"|"Tamil"|"Afrikaans", expressive_mode?: bool, background_audio?: any}
   --transcription: record # shape: {model?: "deepgram/flux"|"deepgram/nova-3"|"deepgram/nova-2"|"azure/fast"|"assemblyai/universal-streaming"|"xai/grok-stt"|"soniox/stt-rt-v4"|"distil-whisper/distil-large-v2"|"openai/whisper-large-v3-turbo", language?: string, api_key_ref?: string, region?: string, settings?: record}
   --telephony-settings: record # shape: {default_texml_app_id?: string, supports_unauthenticated_web_calls?: bool, noise_suppression?: "krisp"|"deepfilternet"|"disabled", noise_suppression_config?: record, time_limit_secs?: int, user_idle_timeout_secs?: int, user_idle_reply_secs?: int, voicemail_detection?: record, recording_settings?: record}
   --messaging-settings: record # shape: {default_messaging_profile_id?: string, delivery_status_webhook_url?: string, conversation_inactivity_minutes?: int}
@@ -2689,7 +2701,7 @@ export def "ai-assistants-scheduled-events events" [
   --allow-errors(-e) # Return full response without error handling
   --from-date: string # Start of the date range filter (inclusive, ISO 8601). (format: date-time)
   --to-date: string # End of the date range filter (inclusive, ISO 8601). (format: date-time)
-  --conversation-channel: string # Filter results by conversation channel.
+  --conversation-channel: string@conversation-channel-completer # Filter results by conversation channel.
   --page: record # Consolidated page parameter (deepObject style). Originally: page[size], page[number]
 ]: nothing -> record<meta: record<total_pages: int, total_results: int, page_number: int, page_size: int>, data: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3005,7 +3017,7 @@ export def "ai-assistants-versions GetAssistantVersion" [
 # --mcp_servers item shape: {id: string, allowed_tools?: list}
 # --external_llm shape: {model: string, base_url: string, llm_api_key_ref?: string, authentication_method?: "token"|"certificate", certificate_ref?: string, token_retrieval_url?: string, forward_metadata?: bool}
 # --fallback_config shape: {model?: string, llm_api_key_ref?: string, external_llm?: record}
-# --voice_settings shape: {voice: string, voice_speed?: float, api_key_ref?: string, temperature?: float, similarity_boost?: float, use_speaker_boost?: bool, style?: float, speed?: float, language_boost?: "auto"|"Chinese"|"Chinese,Yue"|"English"|"Arabic"|"Russian"|"Spanish"|"French"|"Portuguese"|"German"|"Turkish"|"Dutch"|"Ukrainian"|"Vietnamese"|"Indonesian"|"Japanese"|"Italian"|"Korean"|"Thai"|"Polish"|"Romanian"|"Greek"|"Czech"|"Finnish"|"Hindi"|"Bulgarian"|"Danish"|"Hebrew"|"Malay"|"Persian"|"Slovak"|"Swedish"|"Croatian"|"Filipino"|"Hungarian"|"Norwegian"|"Slovenian"|"Catalan"|"Nynorsk"|"Tamil"|"Afrikaans", expressive_mode?: bool, background_audio?: any}
+# --voice_settings shape: {voice: string, voice_speed?: float, api_key_ref?: string, temperature?: float, similarity_boost?: float, use_speaker_boost?: bool, style?: float, speed?: float, language_boost?: ""|"auto"|"Chinese"|"Chinese,Yue"|"English"|"Arabic"|"Russian"|"Spanish"|"French"|"Portuguese"|"German"|"Turkish"|"Dutch"|"Ukrainian"|"Vietnamese"|"Indonesian"|"Japanese"|"Italian"|"Korean"|"Thai"|"Polish"|"Romanian"|"Greek"|"Czech"|"Finnish"|"Hindi"|"Bulgarian"|"Danish"|"Hebrew"|"Malay"|"Persian"|"Slovak"|"Swedish"|"Croatian"|"Filipino"|"Hungarian"|"Norwegian"|"Slovenian"|"Catalan"|"Nynorsk"|"Tamil"|"Afrikaans", expressive_mode?: bool, background_audio?: any}
 # --transcription shape: {model?: "deepgram/flux"|"deepgram/nova-3"|"deepgram/nova-2"|"azure/fast"|"assemblyai/universal-streaming"|"xai/grok-stt"|"soniox/stt-rt-v4"|"distil-whisper/distil-large-v2"|"openai/whisper-large-v3-turbo", language?: string, api_key_ref?: string, region?: string, settings?: record}
 # --telephony_settings shape: {default_texml_app_id?: string, supports_unauthenticated_web_calls?: bool, noise_suppression?: "krisp"|"deepfilternet"|"disabled", noise_suppression_config?: record, time_limit_secs?: int, user_idle_timeout_secs?: int, user_idle_reply_secs?: int, voicemail_detection?: record, recording_settings?: record}
 # --messaging_settings shape: {default_messaging_profile_id?: string, delivery_status_webhook_url?: string, conversation_inactivity_minutes?: int}
@@ -3038,7 +3050,7 @@ export def "ai-assistants-versions UpdateAssistantVersion" [
   --llm-api-key-ref: string # This is only needed when using third-party inference providers selected by `model`. The `identifier` for an integration secret [/v2/integration_secrets](https://developers.telnyx.com/api-reference/integration-secrets/create-a-secret) that refers to your LLM provider's API key. For bring-your-own endpoint authentication, use `external_llm.llm_api_key_ref` instead. Warning: Free plans are unlikely to work with this integration.
   --external-llm: record # shape: {model: string, base_url: string, llm_api_key_ref?: string, authentication_method?: "token"|"certificate", certificate_ref?: string, token_retrieval_url?: string, forward_metadata?: bool}
   --fallback-config: record # shape: {model?: string, llm_api_key_ref?: string, external_llm?: record}
-  --voice-settings: record # shape: {voice: string, voice_speed?: float, api_key_ref?: string, temperature?: float, similarity_boost?: float, use_speaker_boost?: bool, style?: float, speed?: float, language_boost?: "auto"|"Chinese"|"Chinese,Yue"|"English"|"Arabic"|"Russian"|"Spanish"|"French"|"Portuguese"|"German"|"Turkish"|"Dutch"|"Ukrainian"|"Vietnamese"|"Indonesian"|"Japanese"|"Italian"|"Korean"|"Thai"|"Polish"|"Romanian"|"Greek"|"Czech"|"Finnish"|"Hindi"|"Bulgarian"|"Danish"|"Hebrew"|"Malay"|"Persian"|"Slovak"|"Swedish"|"Croatian"|"Filipino"|"Hungarian"|"Norwegian"|"Slovenian"|"Catalan"|"Nynorsk"|"Tamil"|"Afrikaans", expressive_mode?: bool, background_audio?: any}
+  --voice-settings: record # shape: {voice: string, voice_speed?: float, api_key_ref?: string, temperature?: float, similarity_boost?: float, use_speaker_boost?: bool, style?: float, speed?: float, language_boost?: ""|"auto"|"Chinese"|"Chinese,Yue"|"English"|"Arabic"|"Russian"|"Spanish"|"French"|"Portuguese"|"German"|"Turkish"|"Dutch"|"Ukrainian"|"Vietnamese"|"Indonesian"|"Japanese"|"Italian"|"Korean"|"Thai"|"Polish"|"Romanian"|"Greek"|"Czech"|"Finnish"|"Hindi"|"Bulgarian"|"Danish"|"Hebrew"|"Malay"|"Persian"|"Slovak"|"Swedish"|"Croatian"|"Filipino"|"Hungarian"|"Norwegian"|"Slovenian"|"Catalan"|"Nynorsk"|"Tamil"|"Afrikaans", expressive_mode?: bool, background_audio?: any}
   --transcription: record # shape: {model?: "deepgram/flux"|"deepgram/nova-3"|"deepgram/nova-2"|"azure/fast"|"assemblyai/universal-streaming"|"xai/grok-stt"|"soniox/stt-rt-v4"|"distil-whisper/distil-large-v2"|"openai/whisper-large-v3-turbo", language?: string, api_key_ref?: string, region?: string, settings?: record}
   --telephony-settings: record # shape: {default_texml_app_id?: string, supports_unauthenticated_web_calls?: bool, noise_suppression?: "krisp"|"deepfilternet"|"disabled", noise_suppression_config?: record, time_limit_secs?: int, user_idle_timeout_secs?: int, user_idle_reply_secs?: int, voicemail_detection?: record, recording_settings?: record}
   --messaging-settings: record # shape: {default_messaging_profile_id?: string, delivery_status_webhook_url?: string, conversation_inactivity_minutes?: int}
@@ -9608,7 +9620,7 @@ export def "dir listAllDirs" [
   --filterexpiring-atgte: string # Return only DIRs whose `expiring_at` is at or after this ISO-8601 timestamp. Pairs with the `[lte]` variant to build renewal-window dashboards. (format: date-time)
   --filterexpiring-atlte: string # Return only DIRs whose `expiring_at` is at or before this ISO-8601 timestamp. (format: date-time)
   --filterenterprise-id: string # Filter by enterprise ID. (format: uuid)
-  --filterstatus: string # Filter by DIR status.
+  --filterstatus: string@filterstatus-completer # Filter by DIR status.
   --filterdisplay-namecontains: string # Case-insensitive partial match on display name.
   --filtercall-reasoncontains: string # Case-insensitive partial match on call reason.
 ]: nothing -> record<data: table<id: string, enterprise_id: string, display_name: string, reselling: bool, certify_brand_is_accurate: bool, certify_no_shaft_content: bool, certify_ip_ownership: bool, authorizer_name: string, authorizer_email: string, logo_url: string, call_reasons: list, documents: list, status: string, rejection_reasons: list, rejected_at: string, created_at: string, updated_at: string, submitted_at: string, verified_at: string, expiring_at: string>, meta: record<total_pages: int, total_results: int, page_number: int, page_size: int>> {
@@ -9737,7 +9749,7 @@ export def "dir-comments listCommentsSimple" [
   --allow-errors(-e) # Return full response without error handling
   --pagenumber: int # 1-based page number. Out-of-range values return an empty page with correct meta. (default: 1, e.g. 1)
   --pagesize: int # Items per page. Maximum 250; values above are clamped to 250. (default: 20, e.g. 20)
-  --comment-type: string # Restrict to comments of this category. Customer-visible categories only: internal-only comments are filtered out regardless of this filter.
+  --comment-type: string@comment-type-completer # Restrict to comments of this category. Customer-visible categories only: internal-only comments are filtered out regardless of this filter.
 ]: nothing -> record<data: table<id: string, entity_type: string, content: string, visibility: string, author_role: string, author_name: string, comment_type: string, created_at: string>, meta: record<total_pages: int, total_results: int, page_number: int, page_size: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9878,7 +9890,7 @@ export def "dir-phone-number-batches listDirPhoneNumberBatchesSimplified" [
   --allow-errors(-e) # Return full response without error handling
   --pagenumber: int # 1-based page number. Out-of-range values return an empty page with correct meta. (default: 1, e.g. 1)
   --pagesize: int # Items per page. Maximum 250; values above are clamped to 250. (default: 20, e.g. 20)
-  --filterstatus: string # Restrict to batches whose aggregate status equals this value.
+  --filterstatus: string@filterstatus-completer-1 # Restrict to batches whose aggregate status equals this value.
 ]: nothing -> record<data: table<batch_id: string, dir_id: string, dir_display_name: string, enterprise_id: string, status: string, total_count: int, submitted_at: string, documents: list, phone_numbers: list>, meta: record<total_pages: int, total_results: int, page_number: int, page_size: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9953,7 +9965,7 @@ export def "dir-phone-numbers listDirPhoneNumbersSimplified" [
   --allow-errors(-e) # Return full response without error handling
   --pagenumber: int # 1-based page number. Out-of-range values return an empty page with correct meta. (default: 1, e.g. 1)
   --pagesize: int # Items per page. Maximum 250; values above are clamped to 250. (default: 20, e.g. 20)
-  --status: string # Filter by phone-number status.
+  --status: string@status-completer-3 # Filter by phone-number status.
 ]: nothing -> record<data: table<id: string, dir_id: string, enterprise_id: string, phone_number: string, batch_id: string, loa_document_id: string, status: string, rejection_reason: record, created_at: string, updated_at: string, verified_at: string>, meta: record<total_pages: int, total_results: int, page_number: int, page_size: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10609,7 +10621,7 @@ export def "enterprises-dir listDirsForEnterprise" [
   --filterexpiring-atgte: string # Return only DIRs whose `expiring_at` is at or after this ISO-8601 timestamp. (format: date-time)
   --filterexpiring-atlte: string # Return only DIRs whose `expiring_at` is at or before this ISO-8601 timestamp. (format: date-time)
   --filterexpiring-within-days: int # Convenience: returns DIRs whose `expiring_at` falls within the next N days (1–365). Equivalent to setting `filter[expiring_at][gte]=<now>` + `filter[expiring_at][lte]=<now+N>`. Mutually exclusive with the explicit `[gte]`/`[lte]` filters - combining returns 400.
-  --filterstatus: string # Filter by DIR status.
+  --filterstatus: string@filterstatus-completer # Filter by DIR status.
   --filterdisplay-namecontains: string # Case-insensitive partial match on display name.
   --filtercall-reasoncontains: string # Case-insensitive partial match on call reason.
 ]: nothing -> record<data: table<id: string, enterprise_id: string, display_name: string, reselling: bool, certify_brand_is_accurate: bool, certify_no_shaft_content: bool, certify_ip_ownership: bool, authorizer_name: string, authorizer_email: string, logo_url: string, call_reasons: list, documents: list, status: string, rejection_reasons: list, rejected_at: string, created_at: string, updated_at: string, submitted_at: string, verified_at: string, expiring_at: string>, meta: record<total_pages: int, total_results: int, page_number: int, page_size: int>> {
@@ -10952,7 +10964,7 @@ export def "enterprises-reputation-remediation listReputationRemediations" [
   --allow-errors(-e) # Return full response without error handling
   --pagenumber: int # 1-based page number. Out-of-range values return an empty page with correct meta. (default: 1, e.g. 1)
   --pagesize: int # Items per page. Maximum 250; values above are clamped to 250. (default: 20, e.g. 20)
-  --filterstatus: string # Filter by customer-facing status.
+  --filterstatus: string@filterstatus-completer-2 # Filter by customer-facing status. (e.g. in_progress)
   --filtercreated-atgte: string # Only requests created on or after this timestamp (ISO 8601). (format: date-time, e.g. 2026-01-01T00:00:00Z)
   --filtercreated-atlte: string # Only requests created on or before this timestamp (ISO 8601). (format: date-time, e.g. 2026-12-31T23:59:59Z)
 ]: nothing -> record<data: table<id: string, status: string, phone_numbers_count: int, call_purpose: string, created_at: string, updated_at: string, tier1_completed_at: string, tier2_completed_at: string>, meta: record<total_pages: int, total_results: int, page_number: int, page_size: int>> {
@@ -11885,8 +11897,8 @@ export def "fqdn-connections ListFqdnConnections" [
 # POST /fqdn_connections
 # operationId: CreateFqdnConnection
 # --rtcp_settings shape: {port?: "rtcp-mux"|"rtp+1", capture_enabled?: bool, report_frequency_secs?: int}
-# --inbound shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", codecs?: list, default_routing_method?: "sequential"|"round-robin", default_primary_fqdn_id?: string, default_secondary_fqdn_id?: string, default_tertiary_fqdn_id?: string, channel_limit?: int, generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, sip_compact_headers_enabled?: bool, sip_region?: "US"|"Europe"|"Australia", sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone", timeout_1xx_secs?: int, timeout_2xx_secs?: int, shaken_stir_enabled?: bool}
-# --outbound shape: {ani_override?: string, ani_override_type?: "always"|"normal"|"emergency", call_parking_enabled?: bool, channel_limit?: int, generate_ringback_tone?: bool, instant_ringback_enabled?: bool, ip_authentication_method?: "credential-authentication"|"ip-authentication", ip_authentication_token?: string, localization?: string, outbound_voice_profile_id?: string, t38_reinvite_source?: "telnyx"|"customer"|"disabled"|"passthru"|"caller-passthru"|"callee-passthru", tech_prefix?: string, encrypted_media?: "SRTP", timeout_1xx_secs?: int, timeout_2xx_secs?: int}
+# --inbound shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", codecs?: list, default_routing_method?: "sequential"|"round-robin"|"", default_primary_fqdn_id?: string, default_secondary_fqdn_id?: string, default_tertiary_fqdn_id?: string, channel_limit?: int, generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, sip_compact_headers_enabled?: bool, sip_region?: "US"|"Europe"|"Australia", sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone", timeout_1xx_secs?: int, timeout_2xx_secs?: int, shaken_stir_enabled?: bool}
+# --outbound shape: {ani_override?: string, ani_override_type?: "always"|"normal"|"emergency", call_parking_enabled?: bool, channel_limit?: int, generate_ringback_tone?: bool, instant_ringback_enabled?: bool, ip_authentication_method?: "credential-authentication"|"ip-authentication", ip_authentication_token?: string, localization?: string, outbound_voice_profile_id?: string, t38_reinvite_source?: "telnyx"|"customer"|"disabled"|"passthru"|"caller-passthru"|"callee-passthru", tech_prefix?: string, encrypted_media?: "SRTP"|"", timeout_1xx_secs?: int, timeout_2xx_secs?: int}
 # --noise_suppression_details shape: {engine?: "denoiser"|"deep_filter_net"|"deep_filter_net_large"|"krisp_viva_tel"|"krisp_viva_tel_lite"|"krisp_viva_promodel"|"krisp_viva_ss"|"quail_voice_focus", attenuation_limit?: int}
 # --jitter_buffer shape: {enable_jitter_buffer?: bool, jitterbuffer_msec_min?: int, jitterbuffer_msec_max?: int}
 export def "fqdn-connections CreateFqdnConnection" [
@@ -11916,8 +11928,8 @@ export def "fqdn-connections CreateFqdnConnection" [
   --call-cost-in-webhooks: string@bool-completer # Specifies if call cost webhooks should be sent for this connection. (default: false)
   --webhook-timeout-secs: int # Specifies how many seconds to wait before timing out a webhook. (nullable, e.g. 25)
   --rtcp-settings: record # e.g. {port: rtcp-mux, capture_enabled: true, report_frequency_secs: 10} — shape: {port?: "rtcp-mux"|"rtp+1", capture_enabled?: bool, report_frequency_secs?: int}
-  --inbound: record # e.g. {ani_number_format: +E.164, dnis_number_format: +e164, codecs: [G722], default_routing_method: sequential, default_primary_fqdn_id: 1293384261075731497, default_secondary_fqdn_id: 1293384261075731498, default_tertiary_fqdn_id: 1293384261075731499, channel_limit: 10, generate_ringback_tone: true, isup_headers_enabled: true, prack_enabled: true, sip_compact_headers_enabled: true, sip_region: US, sip_subdomain: test, sip_subdomain_receive_settings: only_my_connections, timeout_1xx_secs: 10, timeout_2xx_secs: 20, shaken_stir_enabled: true} — shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", codecs?: list, default_routing_method?: "sequential"|"round-robin", default_primary_fqdn_id?: string, default_secondary_fqdn_id?: string, default_tertiary_fqdn_id?: string, channel_limit?: int, generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, sip_compact_headers_enabled?: bool, sip_region?: "US"|"Europe"|"Australia", sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone", timeout_1xx_secs?: int, timeout_2xx_secs?: int, shaken_stir_enabled?: bool}
-  --outbound: record # shape: {ani_override?: string, ani_override_type?: "always"|"normal"|"emergency", call_parking_enabled?: bool, channel_limit?: int, generate_ringback_tone?: bool, instant_ringback_enabled?: bool, ip_authentication_method?: "credential-authentication"|"ip-authentication", ip_authentication_token?: string, localization?: string, outbound_voice_profile_id?: string, t38_reinvite_source?: "telnyx"|"customer"|"disabled"|"passthru"|"caller-passthru"|"callee-passthru", tech_prefix?: string, encrypted_media?: "SRTP", timeout_1xx_secs?: int, timeout_2xx_secs?: int}
+  --inbound: record # e.g. {ani_number_format: +E.164, dnis_number_format: +e164, codecs: [G722], default_routing_method: sequential, default_primary_fqdn_id: 1293384261075731497, default_secondary_fqdn_id: 1293384261075731498, default_tertiary_fqdn_id: 1293384261075731499, channel_limit: 10, generate_ringback_tone: true, isup_headers_enabled: true, prack_enabled: true, sip_compact_headers_enabled: true, sip_region: US, sip_subdomain: test, sip_subdomain_receive_settings: only_my_connections, timeout_1xx_secs: 10, timeout_2xx_secs: 20, shaken_stir_enabled: true} — shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", codecs?: list, default_routing_method?: "sequential"|"round-robin"|"", default_primary_fqdn_id?: string, default_secondary_fqdn_id?: string, default_tertiary_fqdn_id?: string, channel_limit?: int, generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, sip_compact_headers_enabled?: bool, sip_region?: "US"|"Europe"|"Australia", sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone", timeout_1xx_secs?: int, timeout_2xx_secs?: int, shaken_stir_enabled?: bool}
+  --outbound: record # shape: {ani_override?: string, ani_override_type?: "always"|"normal"|"emergency", call_parking_enabled?: bool, channel_limit?: int, generate_ringback_tone?: bool, instant_ringback_enabled?: bool, ip_authentication_method?: "credential-authentication"|"ip-authentication", ip_authentication_token?: string, localization?: string, outbound_voice_profile_id?: string, t38_reinvite_source?: "telnyx"|"customer"|"disabled"|"passthru"|"caller-passthru"|"callee-passthru", tech_prefix?: string, encrypted_media?: "SRTP"|"", timeout_1xx_secs?: int, timeout_2xx_secs?: int}
   --noise-suppression: string@noise-suppression-completer # Controls when noise suppression is applied to calls. When set to 'inbound', noise suppression is applied to incoming audio. When set to 'outbound', it's applied to outgoing audio. When set to 'both', it's applied in both directions. When set to 'disabled', noise suppression is turned off. (e.g. both)
   --noise-suppression-details: record # Configuration options for noise suppression. These settings are stored regardless of the noise_suppression value, but only take effect when noise_suppression is not 'disabled'. If you disable noise suppression and later re-enable it, the previously configured settings will be used. — shape: {engine?: "denoiser"|"deep_filter_net"|"deep_filter_net_large"|"krisp_viva_tel"|"krisp_viva_tel_lite"|"krisp_viva_promodel"|"krisp_viva_ss"|"quail_voice_focus", attenuation_limit?: int}
   --jitter-buffer: record # Configuration options for Jitter Buffer. Enables Jitter Buffer for RTP streams of SIP Trunking calls. The feature is off unless enabled. You may define min and max values in msec for customized buffering behaviors. Larger values add latency but tolerate more jitter, while smaller values reduce latency but are more sensitive to jitter and reordering. — shape: {enable_jitter_buffer?: bool, jitterbuffer_msec_min?: int, jitterbuffer_msec_max?: int}
@@ -11982,8 +11994,8 @@ export def "fqdn-connections RetrieveFqdnConnection" [
 # PATCH /fqdn_connections/{id}
 # operationId: UpdateFqdnConnection
 # --rtcp_settings shape: {port?: "rtcp-mux"|"rtp+1", capture_enabled?: bool, report_frequency_secs?: int}
-# --inbound shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", codecs?: list, default_routing_method?: "sequential"|"round-robin", default_primary_fqdn_id?: string, default_secondary_fqdn_id?: string, default_tertiary_fqdn_id?: string, channel_limit?: int, generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, sip_compact_headers_enabled?: bool, sip_region?: "US"|"Europe"|"Australia", sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone", timeout_1xx_secs?: int, timeout_2xx_secs?: int, shaken_stir_enabled?: bool}
-# --outbound shape: {ani_override?: string, ani_override_type?: "always"|"normal"|"emergency", call_parking_enabled?: bool, channel_limit?: int, generate_ringback_tone?: bool, instant_ringback_enabled?: bool, ip_authentication_method?: "credential-authentication"|"ip-authentication", ip_authentication_token?: string, localization?: string, outbound_voice_profile_id?: string, t38_reinvite_source?: "telnyx"|"customer"|"disabled"|"passthru"|"caller-passthru"|"callee-passthru", tech_prefix?: string, encrypted_media?: "SRTP", timeout_1xx_secs?: int, timeout_2xx_secs?: int}
+# --inbound shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", codecs?: list, default_routing_method?: "sequential"|"round-robin"|"", default_primary_fqdn_id?: string, default_secondary_fqdn_id?: string, default_tertiary_fqdn_id?: string, channel_limit?: int, generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, sip_compact_headers_enabled?: bool, sip_region?: "US"|"Europe"|"Australia", sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone", timeout_1xx_secs?: int, timeout_2xx_secs?: int, shaken_stir_enabled?: bool}
+# --outbound shape: {ani_override?: string, ani_override_type?: "always"|"normal"|"emergency", call_parking_enabled?: bool, channel_limit?: int, generate_ringback_tone?: bool, instant_ringback_enabled?: bool, ip_authentication_method?: "credential-authentication"|"ip-authentication", ip_authentication_token?: string, localization?: string, outbound_voice_profile_id?: string, t38_reinvite_source?: "telnyx"|"customer"|"disabled"|"passthru"|"caller-passthru"|"callee-passthru", tech_prefix?: string, encrypted_media?: "SRTP"|"", timeout_1xx_secs?: int, timeout_2xx_secs?: int}
 # --noise_suppression_details shape: {engine?: "denoiser"|"deep_filter_net"|"deep_filter_net_large"|"krisp_viva_tel"|"krisp_viva_tel_lite"|"krisp_viva_promodel"|"krisp_viva_ss"|"quail_voice_focus", attenuation_limit?: int}
 # --jitter_buffer shape: {enable_jitter_buffer?: bool, jitterbuffer_msec_min?: int, jitterbuffer_msec_max?: int}
 export def "fqdn-connections UpdateFqdnConnection" [
@@ -12013,8 +12025,8 @@ export def "fqdn-connections UpdateFqdnConnection" [
   --call-cost-in-webhooks: string@bool-completer # Specifies if call cost webhooks should be sent for this connection. (default: false)
   --webhook-timeout-secs: int # Specifies how many seconds to wait before timing out a webhook. (nullable, e.g. 25)
   --rtcp-settings: record # e.g. {port: rtcp-mux, capture_enabled: true, report_frequency_secs: 10} — shape: {port?: "rtcp-mux"|"rtp+1", capture_enabled?: bool, report_frequency_secs?: int}
-  --inbound: record # e.g. {ani_number_format: +E.164, dnis_number_format: +e164, codecs: [G722], default_routing_method: sequential, default_primary_fqdn_id: 1293384261075731497, default_secondary_fqdn_id: 1293384261075731498, default_tertiary_fqdn_id: 1293384261075731499, channel_limit: 10, generate_ringback_tone: true, isup_headers_enabled: true, prack_enabled: true, sip_compact_headers_enabled: true, sip_region: US, sip_subdomain: test, sip_subdomain_receive_settings: only_my_connections, timeout_1xx_secs: 10, timeout_2xx_secs: 20, shaken_stir_enabled: true} — shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", codecs?: list, default_routing_method?: "sequential"|"round-robin", default_primary_fqdn_id?: string, default_secondary_fqdn_id?: string, default_tertiary_fqdn_id?: string, channel_limit?: int, generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, sip_compact_headers_enabled?: bool, sip_region?: "US"|"Europe"|"Australia", sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone", timeout_1xx_secs?: int, timeout_2xx_secs?: int, shaken_stir_enabled?: bool}
-  --outbound: record # shape: {ani_override?: string, ani_override_type?: "always"|"normal"|"emergency", call_parking_enabled?: bool, channel_limit?: int, generate_ringback_tone?: bool, instant_ringback_enabled?: bool, ip_authentication_method?: "credential-authentication"|"ip-authentication", ip_authentication_token?: string, localization?: string, outbound_voice_profile_id?: string, t38_reinvite_source?: "telnyx"|"customer"|"disabled"|"passthru"|"caller-passthru"|"callee-passthru", tech_prefix?: string, encrypted_media?: "SRTP", timeout_1xx_secs?: int, timeout_2xx_secs?: int}
+  --inbound: record # e.g. {ani_number_format: +E.164, dnis_number_format: +e164, codecs: [G722], default_routing_method: sequential, default_primary_fqdn_id: 1293384261075731497, default_secondary_fqdn_id: 1293384261075731498, default_tertiary_fqdn_id: 1293384261075731499, channel_limit: 10, generate_ringback_tone: true, isup_headers_enabled: true, prack_enabled: true, sip_compact_headers_enabled: true, sip_region: US, sip_subdomain: test, sip_subdomain_receive_settings: only_my_connections, timeout_1xx_secs: 10, timeout_2xx_secs: 20, shaken_stir_enabled: true} — shape: {ani_number_format?: "+E.164"|"E.164"|"+E.164-national"|"E.164-national", dnis_number_format?: "+e164"|"e164"|"national"|"sip_username", codecs?: list, default_routing_method?: "sequential"|"round-robin"|"", default_primary_fqdn_id?: string, default_secondary_fqdn_id?: string, default_tertiary_fqdn_id?: string, channel_limit?: int, generate_ringback_tone?: bool, isup_headers_enabled?: bool, prack_enabled?: bool, sip_compact_headers_enabled?: bool, sip_region?: "US"|"Europe"|"Australia", sip_subdomain?: string, sip_subdomain_receive_settings?: "only_my_connections"|"from_anyone", timeout_1xx_secs?: int, timeout_2xx_secs?: int, shaken_stir_enabled?: bool}
+  --outbound: record # shape: {ani_override?: string, ani_override_type?: "always"|"normal"|"emergency", call_parking_enabled?: bool, channel_limit?: int, generate_ringback_tone?: bool, instant_ringback_enabled?: bool, ip_authentication_method?: "credential-authentication"|"ip-authentication", ip_authentication_token?: string, localization?: string, outbound_voice_profile_id?: string, t38_reinvite_source?: "telnyx"|"customer"|"disabled"|"passthru"|"caller-passthru"|"callee-passthru", tech_prefix?: string, encrypted_media?: "SRTP"|"", timeout_1xx_secs?: int, timeout_2xx_secs?: int}
   --noise-suppression: string@noise-suppression-completer # Controls when noise suppression is applied to calls. When set to 'inbound', noise suppression is applied to incoming audio. When set to 'outbound', it's applied to outgoing audio. When set to 'both', it's applied in both directions. When set to 'disabled', noise suppression is turned off. (e.g. both)
   --noise-suppression-details: record # Configuration options for noise suppression. These settings are stored regardless of the noise_suppression value, but only take effect when noise_suppression is not 'disabled'. If you disable noise suppression and later re-enable it, the previously configured settings will be used. — shape: {engine?: "denoiser"|"deep_filter_net"|"deep_filter_net_large"|"krisp_viva_tel"|"krisp_viva_tel_lite"|"krisp_viva_promodel"|"krisp_viva_ss"|"quail_voice_focus", attenuation_limit?: int}
   --jitter-buffer: record # Configuration options for Jitter Buffer. Enables Jitter Buffer for RTP streams of SIP Trunking calls. The feature is off unless enabled. You may define min and max values in msec for customized buffering behaviors. Larger values add latency but tolerate more jitter, while smaller values reduce latency but are more sensitive to jitter and reordering. — shape: {enable_jitter_buffer?: bool, jitterbuffer_msec_min?: int, jitterbuffer_msec_max?: int}
@@ -15224,7 +15236,7 @@ export def "messaging-profile-metrics GetProfileMetrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --time-frame: string # The time frame for metrics.
+  --time-frame: string@time-frame-completer # The time frame for metrics. (default: 24h)
 ]: nothing -> record<data: list<record>, meta: record<total_pages: int, total_results: int, page_number: int, page_size: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15453,7 +15465,7 @@ export def "messaging-profiles-metrics GetDetailedProfileMetrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --time-frame: string # The time frame for metrics.
+  --time-frame: string@time-frame-completer # The time frame for metrics. (default: 24h)
 ]: nothing -> record<data: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15659,7 +15671,7 @@ export def "messaging-tollfree-verification-requests ListVerificationRequests" [
   --page-size: int #          Request this many records per page          This value is automatically clamped if the provided value is too large.         
   --date-start: string # Start of the date range filter (inclusive, ISO 8601). (format: date-time)
   --date-end: string # End of the date range filter (inclusive, ISO 8601). (format: date-time)
-  --status: string # Filter results by status.
+  --status: string@status-completer-4 # Filter results by status.
   --phone-number: string # Filter results by phone number.
   --business-name: string # Filter verification requests by business name
 ]: nothing -> record<records: table<businessName: string, corporateWebsite: string, businessAddr1: string, businessAddr2: string, businessCity: string, businessState: string, businessZip: string, businessContactFirstName: string, businessContactLastName: string, businessContactEmail: string, businessContactPhone: string, messageVolume: record, phoneNumbers: list, useCase: record, useCaseSummary: string, productionMessageContent: string, optInWorkflow: string, optInWorkflowImageURLs: list, additionalInformation: string, isvReseller: string, webhookUrl: string, businessRegistrationNumber: string, businessRegistrationType: string, businessRegistrationCountry: string, doingBusinessAs: string, entityType: record, optInConfirmationResponse: string, helpMessageResponse: string, privacyPolicyURL: string, termsAndConditionURL: string, ageGatedContent: bool, optInKeywords: string, campaignVerifyAuthorizationToken: string, id: string, verificationStatus: record, reason: string, createdAt: string, updatedAt: string>, total_records: int> {
@@ -21199,7 +21211,7 @@ export def "reports-mdrs GetPaginatedMdrs" [
   --profile: string # Filter results by profile. (e.g. My profile)
   --cld: string # Filter results by cld. (e.g. +15551237654)
   --cli: string # Filter results by cli. (e.g. +15551237654)
-  --status: string@status-completer-3 # Filter results by status. (e.g. DELIVERED)
+  --status: string@status-completer-5 # Filter results by status. (e.g. DELIVERED)
   --message-type: string@message-type-completer # Filter results by message type. (e.g. SMS)
 ]: nothing -> record<data: table<created_at: string, profile_name: string, direction: string, parts: float, status: string, cld: string, cli: string, rate: string, cost: string, currency: string, id: string, message_type: string, record_type: string>, meta: record<total_pages: int, total_results: int, page_number: int, page_size: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -22536,7 +22548,7 @@ export def "sim-card-group-actions GetSimCardGroupActions" [
   --pagenumber: int # The page number to load. (default: 1)
   --pagesize: int # The size of the page. (default: 20)
   --filtersim-card-group-id: string # A valid SIM card group ID. (format: uuid, e.g. 47a1c2b0-cc7b-4ab1-bb98-b33fb0fc61b9)
-  --filterstatus: string@filterstatus-completer # Filter by a specific status of the resource's lifecycle. (e.g. in-progress)
+  --filterstatus: string@filterstatus-completer-3 # Filter by a specific status of the resource's lifecycle. (e.g. in-progress)
   --filtertype: string@filtertype-completer-1 # Filter by action type. (e.g. set_private_wireless_gateway)
 ]: nothing -> record<data: table<id: string, record_type: string, sim_card_group_id: string, type: string, status: string, settings: record, created_at: string, updated_at: string>, meta: record<total_pages: int, total_results: int, page_number: int, page_size: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -23441,7 +23453,7 @@ export def "speech-to-text-providers listSttProviders" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --service-type: string # Filter to entries that support the given service type. For backward compatibility with the values that briefly shipped before the product-aligned rename, the legacy aliases `file_transcription`, `in_call_transcription`, and `ai_assistant_transcription` are silently accepted and normalized to `file_based`, `in_call`, and `ai_assistant` respectively. The response always emits the canonical (post-rename) values.
+  --service-type: string@service-type-completer # Filter to entries that support the given service type. For backward compatibility with the values that briefly shipped before the product-aligned rename, the legacy aliases `file_transcription`, `in_call_transcription`, and `ai_assistant_transcription` are silently accepted and normalized to `file_based`, `in_call`, and `ai_assistant` respectively. The response always emits the canonical (post-rename) values.
   --provider: string@provider-completer-1 # Filter to entries for a specific STT provider. The enum mirrors the providers advertised across the speech-to-text spec (including `google` and `telnyx`, which are accepted as WebSocket transcription engines). A provider that has no models currently registered for any service type will return an empty `data` array rather than an error.
 ]: nothing -> record<data: table<provider: string, model: string, service_types: list>, meta: record<total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -23973,7 +23985,7 @@ export def "sub-number-orders-report CreateSubNumberOrdersReport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string@status-completer-4 # Filter by order status (e.g. success)
+  --status: string@status-completer-6 # Filter by order status (e.g. success)
   --country-code: string # Filter by country code (e.g. US)
   --created-at-gt: string # Filter for orders created after this date (format: date-time, e.g. 2023-04-05T10:22:08.230549Z)
   --created-at-lt: string # Filter for orders created before this date (format: date-time, e.g. 2025-06-05T10:22:08.230549Z)
@@ -24194,7 +24206,7 @@ export def "terms-of-service-agreements listTermsOfServiceAgreements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --product-type: string # Optional filter. Omit to list the user's agreements for **every** product (branded_calling and number_reputation); pass a value to return only that product's agreements. (e.g. branded_calling)
+  --product-type: string@product-type-completer # Optional filter. Omit to list the user's agreements for **every** product (branded_calling and number_reputation); pass a value to return only that product's agreements. (e.g. branded_calling)
   --pagenumber: int # 1-based page number. Out-of-range values return an empty page with correct meta. (default: 1, e.g. 1)
   --pagesize: int # Items per page. Maximum 250; values above are clamped to 250. (default: 20, e.g. 20)
 ]: nothing -> record<data: table<id: string, terms_version: string, version: string, product_type: string, agreed_at: string, created_at: string>, meta: record<total_pages: int, total_results: int, page_number: int, page_size: int>> {
@@ -24262,7 +24274,7 @@ export def "terms-of-service-info get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --product-type: string # Optional product filter. Omit to return info for all products. (e.g. branded_calling)
+  --product-type: string@product-type-completer # Optional product filter. Omit to return info for all products. (e.g. branded_calling)
 ]: nothing -> record<agreements: table<product_type: string, current_version: string, terms_url: string, effective_date: string, description: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -24306,7 +24318,7 @@ export def "terms-of-service-status get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --product-type: string # Which product's ToS to check. Defaults to `branded_calling`.
+  --product-type: string@product-type-completer # Which product's ToS to check. Defaults to `branded_calling`. (e.g. branded_calling)
 ]: nothing -> record<data: record<product_type: string, current_terms_version: string, has_agreed: bool, agreed_version: string, agreed_at: string, agreement_required: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -25760,7 +25772,7 @@ export def "traffic-policy-profiles UpdateTrafficPolicyProfile" [
   --services: list # Array of PCEF service IDs to include in the profile. (e.g. [service_123])
   --ip-ranges: list # Array of IP ranges in CIDR notation. (e.g. [10.64.0.0/24])
   --domains: list # Array of domain names. (e.g. [netflix.com])
-  --limit-bw-kbps: int@limit-bw-kbps-completer # Bandwidth limit in kbps. Must be 512 or 1024, or null to remove. (nullable, e.g. 1024)
+  --limit-bw-kbps: int@limit-bw-kbps-completer-1 # Bandwidth limit in kbps. Must be 512 or 1024, or null to remove. (nullable, e.g. 1024)
 ]: any -> record<data: record<id: string, record_type: string, type: string, services: list<string>, ip_ranges: list<string>, domains: list<string>, limit_bw_kbps: int, created_at: string, updated_at: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -25808,7 +25820,7 @@ export def "uac-connections ListUacConnections" [
 # --noise_suppression_details shape: {engine?: "denoiser"|"deep_filter_net"|"deep_filter_net_large"|"krisp_viva_tel"|"krisp_viva_tel_lite"|"krisp_viva_promodel"|"krisp_viva_ss"|"quail_voice_focus", attenuation_limit?: int}
 # --jitter_buffer shape: {enable_jitter_buffer?: bool, jitterbuffer_msec_min?: int, jitterbuffer_msec_max?: int}
 # --internal_uac_settings shape: {destination_uri?: string}
-# --external_uac_settings shape: {username?: string, password?: string, proxy?: string, auth_username?: string, from_user?: string, outbound_proxy?: string, expiration_sec?: int, transport?: "UDP"|"TLS"|"TCP"}
+# --external_uac_settings shape: {username?: string, password?: string, proxy?: string, auth_username?: string, from_user?: string, outbound_proxy?: string, expiration_sec?: int, transport?: "UDP"|"TLS"|"TCP"|""}
 export def "uac-connections CreateUacConnection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -25843,7 +25855,7 @@ export def "uac-connections CreateUacConnection" [
   --noise-suppression-details: record # Configuration options for noise suppression. These settings are stored regardless of the noise_suppression value, but only take effect when noise_suppression is not 'disabled'. If you disable noise suppression and later re-enable it, the previously configured settings will be used. — shape: {engine?: "denoiser"|"deep_filter_net"|"deep_filter_net_large"|"krisp_viva_tel"|"krisp_viva_tel_lite"|"krisp_viva_promodel"|"krisp_viva_ss"|"quail_voice_focus", attenuation_limit?: int}
   --jitter-buffer: record # Configuration options for Jitter Buffer. Enables Jitter Buffer for RTP streams of SIP Trunking calls. The feature is off unless enabled. You may define min and max values in msec for customized buffering behaviors. Larger values add latency but tolerate more jitter, while smaller values reduce latency but are more sensitive to jitter and reordering. — shape: {enable_jitter_buffer?: bool, jitterbuffer_msec_min?: int, jitterbuffer_msec_max?: int}
   --internal-uac-settings: record # Internal Telnyx-side settings for a UAC connection. (e.g. {destination_uri: 14155550123@acme.sip.telnyx.com}) — shape: {destination_uri?: string}
-  --external-uac-settings: record # External SIP peer settings used by Telnyx when registering to your PBX and routing outbound calls. (e.g. {username: ext8492, password: testtesttest, proxy: sip-pbx.acme.example, auth_username: auth8492, from_user: 8492, outbound_proxy: outbound.sip-pbx.acme.example:5061, expiration_sec: 600, transport: TLS}) — shape: {username?: string, password?: string, proxy?: string, auth_username?: string, from_user?: string, outbound_proxy?: string, expiration_sec?: int, transport?: "UDP"|"TLS"|"TCP"}
+  --external-uac-settings: record # External SIP peer settings used by Telnyx when registering to your PBX and routing outbound calls. (e.g. {username: ext8492, password: testtesttest, proxy: sip-pbx.acme.example, auth_username: auth8492, from_user: 8492, outbound_proxy: outbound.sip-pbx.acme.example:5061, expiration_sec: 600, transport: TLS}) — shape: {username?: string, password?: string, proxy?: string, auth_username?: string, from_user?: string, outbound_proxy?: string, expiration_sec?: int, transport?: "UDP"|"TLS"|"TCP"|""}
 ]: any -> record<data: record<id: string, record_type: string, active: bool, user_name: string, password: string, created_at: string, updated_at: string, anchorsite_override: string, connection_name: string, sip_uri_calling_preference: string, default_on_hold_comfort_noise_enabled: bool, dtmf_type: string, encode_contact_header_enabled: bool, encrypted_media: string, onnet_t38_passthrough_enabled: bool, ios_push_credential_id: string, android_push_credential_id: string, webhook_event_url: string, webhook_event_failover_url: string, webhook_api_version: string, webhook_timeout_secs: int, call_cost_in_webhooks: bool, tags: list<string>, rtcp_settings: record<port: string, capture_enabled: bool, report_frequency_secs: int>, inbound: record<ani_number_format: string, dnis_number_format: string, codecs: list, default_routing_method: string, channel_limit: int, generate_ringback_tone: bool, isup_headers_enabled: bool, prack_enabled: bool, sip_compact_headers_enabled: bool, timeout_1xx_secs: int, timeout_2xx_secs: int, shaken_stir_enabled: bool, simultaneous_ringing: string, sip_subdomain: string, sip_subdomain_receive_settings: string>, outbound: record<call_parking_enabled: bool, ani_override: string, ani_override_type: string, channel_limit: int, instant_ringback_enabled: bool, generate_ringback_tone: bool, localization: string, t38_reinvite_source: string, outbound_voice_profile_id: string>, noise_suppression: string, noise_suppression_details: record<engine: string, attenuation_limit: int>, jitter_buffer: record<enable_jitter_buffer: bool, jitterbuffer_msec_min: int, jitterbuffer_msec_max: int>, authentication: string, registration_status: string, registration_status_updated_at: string, fqdn: string, fqdns: list<record>, fqdn_outbound_authentication: string, internal_uac_settings: record<destination_uri: string>, external_uac_settings: record<username: string, password: string, proxy: string, auth_username: string, from_user: string, outbound_proxy: string, expiration_sec: int, transport: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -25910,7 +25922,7 @@ export def "uac-connections RetrieveUacConnection" [
 # --noise_suppression_details shape: {engine?: "denoiser"|"deep_filter_net"|"deep_filter_net_large"|"krisp_viva_tel"|"krisp_viva_tel_lite"|"krisp_viva_promodel"|"krisp_viva_ss"|"quail_voice_focus", attenuation_limit?: int}
 # --jitter_buffer shape: {enable_jitter_buffer?: bool, jitterbuffer_msec_min?: int, jitterbuffer_msec_max?: int}
 # --internal_uac_settings shape: {destination_uri?: string}
-# --external_uac_settings shape: {username?: string, password?: string, proxy?: string, auth_username?: string, from_user?: string, outbound_proxy?: string, expiration_sec?: int, transport?: "UDP"|"TLS"|"TCP"}
+# --external_uac_settings shape: {username?: string, password?: string, proxy?: string, auth_username?: string, from_user?: string, outbound_proxy?: string, expiration_sec?: int, transport?: "UDP"|"TLS"|"TCP"|""}
 export def "uac-connections UpdateUacConnection" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -25946,7 +25958,7 @@ export def "uac-connections UpdateUacConnection" [
   --noise-suppression-details: record # Configuration options for noise suppression. These settings are stored regardless of the noise_suppression value, but only take effect when noise_suppression is not 'disabled'. If you disable noise suppression and later re-enable it, the previously configured settings will be used. — shape: {engine?: "denoiser"|"deep_filter_net"|"deep_filter_net_large"|"krisp_viva_tel"|"krisp_viva_tel_lite"|"krisp_viva_promodel"|"krisp_viva_ss"|"quail_voice_focus", attenuation_limit?: int}
   --jitter-buffer: record # Configuration options for Jitter Buffer. Enables Jitter Buffer for RTP streams of SIP Trunking calls. The feature is off unless enabled. You may define min and max values in msec for customized buffering behaviors. Larger values add latency but tolerate more jitter, while smaller values reduce latency but are more sensitive to jitter and reordering. — shape: {enable_jitter_buffer?: bool, jitterbuffer_msec_min?: int, jitterbuffer_msec_max?: int}
   --internal-uac-settings: record # Internal Telnyx-side settings for a UAC connection. (e.g. {destination_uri: 14155550123@acme.sip.telnyx.com}) — shape: {destination_uri?: string}
-  --external-uac-settings: record # External SIP peer settings used by Telnyx when registering to your PBX and routing outbound calls. (e.g. {username: ext8492, password: testtesttest, proxy: sip-pbx.acme.example, auth_username: auth8492, from_user: 8492, outbound_proxy: outbound.sip-pbx.acme.example:5061, expiration_sec: 600, transport: TLS}) — shape: {username?: string, password?: string, proxy?: string, auth_username?: string, from_user?: string, outbound_proxy?: string, expiration_sec?: int, transport?: "UDP"|"TLS"|"TCP"}
+  --external-uac-settings: record # External SIP peer settings used by Telnyx when registering to your PBX and routing outbound calls. (e.g. {username: ext8492, password: testtesttest, proxy: sip-pbx.acme.example, auth_username: auth8492, from_user: 8492, outbound_proxy: outbound.sip-pbx.acme.example:5061, expiration_sec: 600, transport: TLS}) — shape: {username?: string, password?: string, proxy?: string, auth_username?: string, from_user?: string, outbound_proxy?: string, expiration_sec?: int, transport?: "UDP"|"TLS"|"TCP"|""}
 ]: any -> record<data: record<id: string, record_type: string, active: bool, user_name: string, password: string, created_at: string, updated_at: string, anchorsite_override: string, connection_name: string, sip_uri_calling_preference: string, default_on_hold_comfort_noise_enabled: bool, dtmf_type: string, encode_contact_header_enabled: bool, encrypted_media: string, onnet_t38_passthrough_enabled: bool, ios_push_credential_id: string, android_push_credential_id: string, webhook_event_url: string, webhook_event_failover_url: string, webhook_api_version: string, webhook_timeout_secs: int, call_cost_in_webhooks: bool, tags: list<string>, rtcp_settings: record<port: string, capture_enabled: bool, report_frequency_secs: int>, inbound: record<ani_number_format: string, dnis_number_format: string, codecs: list, default_routing_method: string, channel_limit: int, generate_ringback_tone: bool, isup_headers_enabled: bool, prack_enabled: bool, sip_compact_headers_enabled: bool, timeout_1xx_secs: int, timeout_2xx_secs: int, shaken_stir_enabled: bool, simultaneous_ringing: string, sip_subdomain: string, sip_subdomain_receive_settings: string>, outbound: record<call_parking_enabled: bool, ani_override: string, ani_override_type: string, channel_limit: int, instant_ringback_enabled: bool, generate_ringback_tone: bool, localization: string, t38_reinvite_source: string, outbound_voice_profile_id: string>, noise_suppression: string, noise_suppression_details: record<engine: string, attenuation_limit: int>, jitter_buffer: record<enable_jitter_buffer: bool, jitterbuffer_msec_min: int, jitterbuffer_msec_max: int>, authentication: string, registration_status: string, registration_status_updated_at: string, fqdn: string, fqdns: list<record>, fqdn_outbound_authentication: string, internal_uac_settings: record<destination_uri: string>, external_uac_settings: record<username: string, password: string, proxy: string, auth_username: string, from_user: string, outbound_proxy: string, expiration_sec: int, transport: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -27273,7 +27285,7 @@ export def "verifications-actions-verify VerifyVerificationCodeById" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --code: string # This is the code the user submits for verification. (e.g. 17686)
-  --status: string@status-completer-5 # Identifies if the verification code has been accepted or rejected. Only permitted if custom_code was used for the verification. (e.g. accepted)
+  --status: string@status-completer-7 # Identifies if the verification code has been accepted or rejected. Only permitted if custom_code was used for the verification. (e.g. accepted)
 ]: any -> record<data: record<phone_number: string, response_code: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

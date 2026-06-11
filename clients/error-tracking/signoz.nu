@@ -21,17 +21,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -68,13 +69,20 @@ def auth-scheme-completer [] { ["signoz-api-key" "bearer"] }
 # Completers for enum parameters
 def format-completer [] { ["csv" "jsonl"] }
 def requestType-completer [] { ["raw" "raw_stream" "scalar" "time_series" "trace"] }
+def signal-completer [] { ["logs" "metrics" "traces"] }
+def source-completer [] { ["meter"] }
+def fieldContext-completer [] { ["attribute" "body" "log" "metric" "resource" "span"] }
+def fieldDataType-completer [] { ["bool" "float64" "int64" "number" "string"] }
 def kind-completer [] { ["policy" "rule"] }
-def fieldContext-completer [] { ["attribute" "resource"] }
+def fieldContext-completer-1 [] { ["attribute" "resource"] }
+def sort-completer [] { ["created_at" "name" "updated_at"] }
+def order-completer [] { ["asc" "desc"] }
 def temporality-completer [] { ["cumulative" "delta" "unspecified"] }
 def type-completer [] { ["exponentialhistogram" "gauge" "histogram" "sum" "summary"] }
 def mode-completer [] { ["samples" "timeseries"] }
 def alertType-completer [] { ["EXCEPTIONS_BASED_ALERT" "LOGS_BASED_ALERT" "METRIC_BASED_ALERT" "TRACES_BASED_ALERT"] }
 def ruleType-completer [] { ["anomaly_rule" "promql_rule" "threshold_rule"] }
+def state-completer [] { ["disabled" "firing" "inactive" "nodata" "pending" "recovering"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -1198,13 +1206,13 @@ export def "fields-keys GetFieldsKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --signal: string
-  --qp-source: string
+  --signal: string@signal-completer
+  --qp-source: string@source-completer
   --limit: int
   --startUnixMilli: int # format: int64
   --endUnixMilli: int # format: int64
-  --fieldContext: string
-  --fieldDataType: string
+  --fieldContext: string@fieldContext-completer
+  --fieldDataType: string@fieldDataType-completer
   --metricName: string
   --metricNamespace: string
   --searchText: string
@@ -1230,13 +1238,13 @@ export def "fields-values GetFieldsValues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --signal: string
-  --qp-source: string
+  --signal: string@signal-completer
+  --qp-source: string@source-completer
   --limit: int
   --startUnixMilli: int # format: int64
   --endUnixMilli: int # format: int64
-  --fieldContext: string
-  --fieldDataType: string
+  --fieldContext: string@fieldContext-completer
+  --fieldDataType: string@fieldDataType-completer
   --metricName: string
   --metricNamespace: string
   --searchText: string
@@ -2399,7 +2407,7 @@ export def "span-mapper-groups-span-mappers CreateSpanMapper" [
   --allow-errors(-e) # Return full response without error handling
   config: record # shape: {sources: list}
   --enabled: string@bool-completer
-  fieldContext: string@fieldContext-completer
+  fieldContext: string@fieldContext-completer-1
   name: string
 ]: any -> record<data: record<config: record<sources: list>, createdAt: string, createdBy: string, enabled: bool, fieldContext: string, group_id: string, id: string, name: string, updatedAt: string, updatedBy: string>, status: string> {
   let input = $in
@@ -2453,7 +2461,7 @@ export def "span-mapper-groups-span-mappers UpdateSpanMapper" [
   --allow-errors(-e) # Return full response without error handling
   --config: record # shape: {sources: list}
   --enabled: string@bool-completer # nullable
-  --fieldContext: string@fieldContext-completer
+  --fieldContext: string@fieldContext-completer-1
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "signoz-api-key"))
@@ -2760,8 +2768,8 @@ export def "dashboards ListDashboardsV2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string
-  --qp-sort: string
-  --order: string
+  --qp-sort: string@sort-completer
+  --order: string@order-completer
   --limit: int
   --offset: int
 ]: nothing -> record<data: record<dashboards: list<record>, tags: list<record>, total: int>, status: string> {
@@ -4015,7 +4023,7 @@ export def "rules ListRules" [
 # POST /api/v2/rules
 # operationId: CreateRule
 # --condition shape: {absentFor?: int, alertOnAbsent?: bool, algorithm?: string, compositeQuery: record, matchType?: "at_least_once"|"all_the_times"|"on_average"|"in_total"|"last", op?: "above"|"below"|"equal"|"not_equal"|"outside_bounds", requireMinPoints?: bool, requiredNumPoints?: int, seasonality?: "hourly"|"daily"|"weekly", selectedQueryName?: string, target?: float, targetUnit?: string, thresholds?: record}
-# --evaluation shape: {kind: "cumulative"|"rolling", spec?: record}
+# --evaluation shape: {kind: "rolling"|"cumulative", spec?: record}
 # --notificationSettings shape: {groupBy?: list, newGroupEvalDelay?: string, renotify?: record, usePolicy?: bool}
 export def "rules CreateRule" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4032,7 +4040,7 @@ export def "rules CreateRule" [
   --description: string
   --disabled: string@bool-completer
   --evalWindow: string
-  --evaluation: record # shape: {kind: "cumulative"|"rolling", spec?: record}
+  --evaluation: record # shape: {kind: "rolling"|"cumulative", spec?: record}
   --frequency: string
   --labels: record
   --notificationSettings: record # shape: {groupBy?: list, newGroupEvalDelay?: string, renotify?: record, usePolicy?: bool}
@@ -4102,7 +4110,7 @@ export def "rules GetRuleByID" [
 # PATCH /api/v2/rules/{id}
 # operationId: PatchRuleByID
 # --condition shape: {absentFor?: int, alertOnAbsent?: bool, algorithm?: string, compositeQuery: record, matchType?: "at_least_once"|"all_the_times"|"on_average"|"in_total"|"last", op?: "above"|"below"|"equal"|"not_equal"|"outside_bounds", requireMinPoints?: bool, requiredNumPoints?: int, seasonality?: "hourly"|"daily"|"weekly", selectedQueryName?: string, target?: float, targetUnit?: string, thresholds?: record}
-# --evaluation shape: {kind: "cumulative"|"rolling", spec?: record}
+# --evaluation shape: {kind: "rolling"|"cumulative", spec?: record}
 # --notificationSettings shape: {groupBy?: list, newGroupEvalDelay?: string, renotify?: record, usePolicy?: bool}
 export def "rules PatchRuleByID" [
   id: string
@@ -4120,7 +4128,7 @@ export def "rules PatchRuleByID" [
   --description: string
   --disabled: string@bool-completer
   --evalWindow: string
-  --evaluation: record # shape: {kind: "cumulative"|"rolling", spec?: record}
+  --evaluation: record # shape: {kind: "rolling"|"cumulative", spec?: record}
   --frequency: string
   --labels: record
   --notificationSettings: record # shape: {groupBy?: list, newGroupEvalDelay?: string, renotify?: record, usePolicy?: bool}
@@ -4146,7 +4154,7 @@ export def "rules PatchRuleByID" [
 # PUT /api/v2/rules/{id}
 # operationId: UpdateRuleByID
 # --condition shape: {absentFor?: int, alertOnAbsent?: bool, algorithm?: string, compositeQuery: record, matchType?: "at_least_once"|"all_the_times"|"on_average"|"in_total"|"last", op?: "above"|"below"|"equal"|"not_equal"|"outside_bounds", requireMinPoints?: bool, requiredNumPoints?: int, seasonality?: "hourly"|"daily"|"weekly", selectedQueryName?: string, target?: float, targetUnit?: string, thresholds?: record}
-# --evaluation shape: {kind: "cumulative"|"rolling", spec?: record}
+# --evaluation shape: {kind: "rolling"|"cumulative", spec?: record}
 # --notificationSettings shape: {groupBy?: list, newGroupEvalDelay?: string, renotify?: record, usePolicy?: bool}
 export def "rules UpdateRuleByID" [
   id: string
@@ -4164,7 +4172,7 @@ export def "rules UpdateRuleByID" [
   --description: string
   --disabled: string@bool-completer
   --evalWindow: string
-  --evaluation: record # shape: {kind: "cumulative"|"rolling", spec?: record}
+  --evaluation: record # shape: {kind: "rolling"|"cumulative", spec?: record}
   --frequency: string
   --labels: record
   --notificationSettings: record # shape: {groupBy?: list, newGroupEvalDelay?: string, renotify?: record, usePolicy?: bool}
@@ -4198,13 +4206,13 @@ export def "rules-history-filter-keys GetRuleHistoryFilterKeys" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --signal: string
-  --qp-source: string
+  --signal: string@signal-completer
+  --qp-source: string@source-completer
   --limit: int
   --startUnixMilli: int # format: int64
   --endUnixMilli: int # format: int64
-  --fieldContext: string
-  --fieldDataType: string
+  --fieldContext: string@fieldContext-completer
+  --fieldDataType: string@fieldDataType-completer
   --metricName: string
   --metricNamespace: string
   --searchText: string
@@ -4231,13 +4239,13 @@ export def "rules-history-filter-values GetRuleHistoryFilterValues" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --signal: string
-  --qp-source: string
+  --signal: string@signal-completer
+  --qp-source: string@source-completer
   --limit: int
   --startUnixMilli: int # format: int64
   --endUnixMilli: int # format: int64
-  --fieldContext: string
-  --fieldDataType: string
+  --fieldContext: string@fieldContext-completer
+  --fieldDataType: string@fieldDataType-completer
   --metricName: string
   --metricNamespace: string
   --searchText: string
@@ -4318,10 +4326,10 @@ export def "rules-history-timeline GetRuleHistoryTimeline" [
   --allow-errors(-e) # Return full response without error handling
   --start: int # format: int64
   --end: int # format: int64
-  --state: string
+  --state: string@state-completer
   --filterExpression: string
   --limit: int # format: int64
-  --order: string
+  --order: string@order-completer
   --cursor: string
 ]: nothing -> record<data: record<items: list<record>, nextCursor: string, total: int>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "signoz-api-key"))
@@ -4363,7 +4371,7 @@ export def "rules-history-top-contributors GetRuleHistoryTopContributors" [
 # POST /api/v2/rules/test
 # operationId: TestRule
 # --condition shape: {absentFor?: int, alertOnAbsent?: bool, algorithm?: string, compositeQuery: record, matchType?: "at_least_once"|"all_the_times"|"on_average"|"in_total"|"last", op?: "above"|"below"|"equal"|"not_equal"|"outside_bounds", requireMinPoints?: bool, requiredNumPoints?: int, seasonality?: "hourly"|"daily"|"weekly", selectedQueryName?: string, target?: float, targetUnit?: string, thresholds?: record}
-# --evaluation shape: {kind: "cumulative"|"rolling", spec?: record}
+# --evaluation shape: {kind: "rolling"|"cumulative", spec?: record}
 # --notificationSettings shape: {groupBy?: list, newGroupEvalDelay?: string, renotify?: record, usePolicy?: bool}
 export def "rules-test TestRule" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -4380,7 +4388,7 @@ export def "rules-test TestRule" [
   --description: string
   --disabled: string@bool-completer
   --evalWindow: string
-  --evaluation: record # shape: {kind: "cumulative"|"rolling", spec?: record}
+  --evaluation: record # shape: {kind: "rolling"|"cumulative", spec?: record}
   --frequency: string
   --labels: record
   --notificationSettings: record # shape: {groupBy?: list, newGroupEvalDelay?: string, renotify?: record, usePolicy?: bool}
@@ -4738,8 +4746,8 @@ export def "users-me-dashboards ListDashboardsForUserV2" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string
-  --qp-sort: string
-  --order: string
+  --qp-sort: string@sort-completer
+  --order: string@order-completer
   --limit: int
   --offset: int
 ]: nothing -> record<data: record<dashboards: list<record>, tags: list<record>, total: int>, status: string> {

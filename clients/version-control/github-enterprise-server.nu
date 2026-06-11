@@ -19,17 +19,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -68,6 +69,7 @@ def direction-completer [] { ["asc" "desc"] }
 def sort-completer [] { ["accessed" "created" "updated"] }
 def sort-completer-1 [] { ["created" "name" "updated"] }
 def type-completer [] { ["malware" "reviewed" "unreviewed"] }
+def ecosystem-completer [] { ["actions" "composer" "erlang" "go" "maven" "npm" "nuget" "other" "pip" "pub" "rubygems" "rust" "swift"] }
 def severity-completer [] { ["critical" "high" "low" "medium" "unknown"] }
 def sort-completer-2 [] { ["epss_percentage" "epss_percentile" "published" "updated"] }
 def enabled-organizations-completer [] { ["all" "none" "selected"] }
@@ -76,24 +78,26 @@ def default-workflow-permissions-completer [] { ["read" "write"] }
 def visibility-completer [] { ["all" "selected"] }
 def include-completer [] { ["all" "git" "web"] }
 def order-completer [] { ["asc" "desc"] }
+def state-completer [] { ["closed" "dismissed" "fixed" "open"] }
 def sort-completer-3 [] { ["created" "updated"] }
 def scope-completer [] { ["development" "runtime"] }
-def state-completer [] { ["open" "resolved"] }
+def state-completer-1 [] { ["open" "resolved"] }
 def filter-completer [] { ["all" "assigned" "created" "mentioned" "repos" "subscribed"] }
-def state-completer-1 [] { ["all" "closed" "open"] }
+def state-completer-2 [] { ["all" "closed" "open"] }
 def sort-completer-4 [] { ["comments" "created" "updated"] }
 def mode-completer [] { ["gfm" "markdown"] }
 def default-repository-permission-completer [] { ["admin" "none" "read" "write"] }
 def members-allowed-repository-creation-type-completer [] { ["all" "none" "private"] }
 def enabled-repositories-completer [] { ["all" "none" "selected"] }
 def visibility-completer-1 [] { ["all" "private" "selected"] }
+def severity-completer-1 [] { ["critical" "error" "high" "low" "medium" "note" "warning"] }
 def base-role-completer [] { ["maintain" "read" "triage" "write"] }
 def filter-completer-1 [] { ["2fa_disabled" "all"] }
 def role-completer [] { ["admin" "all" "member"] }
 def role-completer-1 [] { ["admin" "member"] }
 def package-type-completer [] { ["container" "docker" "maven" "npm" "nuget" "rubygems"] }
 def visibility-completer-2 [] { ["internal" "private" "public"] }
-def state-completer-2 [] { ["active" "deleted"] }
+def state-completer-3 [] { ["active" "deleted"] }
 def sort-completer-5 [] { ["created_at"] }
 def action-completer [] { ["approve" "deny"] }
 def action-completer-1 [] { ["revoke"] }
@@ -121,26 +125,26 @@ def affiliation-completer [] { ["all" "direct" "outside"] }
 def sort-completer-7 [] { ["created_at" "last_accessed_at" "size_in_bytes"] }
 def access-level-completer [] { ["enterprise" "none" "organization" "user"] }
 def status-completer [] { ["action_required" "cancelled" "completed" "failure" "in_progress" "neutral" "pending" "queued" "requested" "skipped" "stale" "success" "timed_out" "waiting"] }
-def state-completer-3 [] { ["approved" "rejected"] }
+def state-completer-4 [] { ["approved" "rejected"] }
 def filter-completer-2 [] { ["all" "latest"] }
 def time-period-completer [] { ["day" "month" "quarter" "week" "year"] }
 def activity-type-completer [] { ["branch_creation" "branch_deletion" "force_push" "merge_queue_merge" "pr_merge" "push"] }
 def status-completer-1 [] { ["completed" "in_progress" "pending" "queued" "requested" "waiting"] }
 def conclusion-completer [] { ["action_required" "cancelled" "failure" "neutral" "skipped" "stale" "success" "timed_out"] }
 def status-completer-2 [] { ["completed" "in_progress" "queued"] }
-def state-completer-4 [] { ["dismissed" "open"] }
+def state-completer-5 [] { ["dismissed" "open"] }
 def dismissed-reason-completer [] { ["false positive" "used in tests" "won't fix"] }
 def sort-completer-8 [] { ["created"] }
 def accept-completer [] { ["application/json" "application/json+sarif"] }
-def state-completer-5 [] { ["configured" "not-configured"] }
+def state-completer-6 [] { ["configured" "not-configured"] }
 def permission-completer-3 [] { ["admin" "maintain" "pull" "push" "triage"] }
 def accept-completer-1 [] { ["application/json" "application/vnd.github.object"] }
 def dismissed-reason-completer-1 [] { ["fix_started" "inaccurate" "no_bandwidth" "not_used" "tolerable_risk"] }
-def state-completer-6 [] { ["error" "failure" "in_progress" "inactive" "pending" "queued" "success"] }
+def state-completer-7 [] { ["error" "failure" "in_progress" "inactive" "pending" "queued" "success"] }
 def sort-completer-9 [] { ["newest" "oldest" "stargazers" "watchers"] }
 def type-completer-2 [] { ["blob" "commit" "tree"] }
 def permissions-completer [] { ["admin" "maintain" "read" "triage" "write"] }
-def state-completer-7 [] { ["closed" "open"] }
+def state-completer-8 [] { ["closed" "open"] }
 def state-reason-completer [] { ["completed" "not_planned" "reopened"] }
 def lock-reason-completer [] { ["off-topic" "resolved" "spam" "too heated"] }
 def sort-completer-10 [] { ["completeness" "due_on"] }
@@ -157,15 +161,15 @@ def event-completer-1 [] { ["DISMISS"] }
 def make-latest-completer [] { ["false" "legacy" "true"] }
 def content-completer-1 [] { ["+1" "eyes" "heart" "hooray" "laugh" "rocket"] }
 def resolution-completer [] { ["false_positive" "revoked" "used_in_tests" "wont_fix"] }
-def state-completer-8 [] { ["error" "failure" "pending" "success"] }
+def state-completer-9 [] { ["error" "failure" "pending" "success"] }
 def visibility-completer-3 [] { ["all" "public"] }
 def sort-completer-13 [] { ["indexed"] }
 def sort-completer-14 [] { ["author-date" "committer-date"] }
 def sort-completer-15 [] { ["comments" "created" "interactions" "reactions" "reactions-+1" "reactions--1" "reactions-heart" "reactions-smile" "reactions-tada" "reactions-thinking_face" "updated"] }
 def sort-completer-16 [] { ["forks" "help-wanted-issues" "stars" "updated"] }
 def sort-completer-17 [] { ["followers" "joined" "repositories"] }
-def state-completer-9 [] { ["active" "pending"] }
-def state-completer-10 [] { ["active"] }
+def state-completer-10 [] { ["active" "pending"] }
+def state-completer-11 [] { ["active"] }
 def visibility-completer-4 [] { ["all" "private" "public"] }
 def type-completer-3 [] { ["all" "member" "owner" "private" "public"] }
 def accept-completer-2 [] { ["application/json" "application/vnd.github.v3.star+json"] }
@@ -1079,7 +1083,7 @@ export def "advisories security-advisories/list-global-advisories" [
   --ghsa-id: string # If specified, only advisories with this GHSA (GitHub Security Advisory) identifier will be returned.
   --type: string@type-completer # If specified, only advisories of this type will be returned. By default, a request with no other parameters defined will only return reviewed advisories that are not malware. (default: reviewed)
   --cve-id: string # If specified, only advisories with this CVE (Common Vulnerabilities and Exposures) identifier will be returned.
-  --ecosystem: string # If specified, only advisories for these ecosystems will be returned.
+  --ecosystem: string@ecosystem-completer # If specified, only advisories for these ecosystems will be returned.
   --severity: string@severity-completer # If specified, only advisories with these severities will be returned.
   --cwes: string # If specified, only advisories with these Common Weakness Enumerations (CWEs) will be returned.  Example: `cwes=79,284,22` or `cwes[]=79&cwes[]=284&cwes[]=22`
   --is-withdrawn: string@bool-completer # Whether to only return advisories that have been withdrawn.
@@ -3379,7 +3383,7 @@ export def "enterprises-code-scanning-alerts code-scanning/list-alerts-for-enter
   --page: int # The page number of the results to fetch. For more information, see "[Using pagination in the REST API](https://docs.github.com/enterprise-server@3.11/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 1)
   --per-page: int # The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/enterprise-server@3.11/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 30)
   --direction: string@direction-completer # The direction to sort the results by. (default: desc)
-  --state: string # If specified, only code scanning alerts with this state will be returned.
+  --state: string@state-completer # If specified, only code scanning alerts with this state will be returned.
   --qp-sort: string@sort-completer-3 # The property by which to sort the results. (default: created)
 ]: nothing -> table<number: int, created_at: string, updated_at: string, url: string, html_url: string, instances_url: string, state: string, fixed_at: string, dismissed_by: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, dismissed_at: string, dismissed_reason: string, dismissed_comment: string, rule: record<id: string, name: string, severity: string, security_severity_level: string, description: string, tags: list>, tool: record<name: string, version: string, guid: string>, most_recent_instance: record<ref: string, analysis_key: string, environment: string, category: string, state: string, commit_sha: string, message: record, location: record, html_url: string, classifications: list>, repository: record<id: int, node_id: string, name: string, full_name: string, owner: record, private: bool, html_url: string, description: string, fork: bool, url: string, archive_url: string, assignees_url: string, blobs_url: string, branches_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, deployments_url: string, downloads_url: string, events_url: string, forks_url: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, languages_url: string, merges_url: string, milestones_url: string, notifications_url: string, pulls_url: string, releases_url: string, stargazers_url: string, statuses_url: string, subscribers_url: string, subscription_url: string, tags_url: string, teams_url: string, trees_url: string, hooks_url: string>, dismissal_approved_by: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3495,7 +3499,7 @@ export def "enterprises-secret-scanning-alerts secret-scanning/list-alerts-for-e
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --state: string@state-completer # Set to `open` or `resolved` to only list secret scanning alerts in a specific state.
+  --state: string@state-completer-1 # Set to `open` or `resolved` to only list secret scanning alerts in a specific state.
   --secret-type: string # A comma-separated list of secret types to return. By default all secret types are returned. See "[Supported secret scanning patterns](https://docs.github.com/enterprise-server@3.11/enterprise-cloud@latest/code-security/secret-scanning/introduction/supported-secret-scanning-patterns#supported-secrets)" for a complete list of secret types.
   --resolution: string # A comma-separated list of resolutions. Only secret scanning alerts with one of these resolutions are listed. Valid resolutions are `false_positive`, `wont_fix`, `revoked`, `pattern_edited`, `pattern_deleted` or `used_in_tests`.
   --qp-sort: string@sort-completer-3 # The property to sort the results by. `created` means when the alert was created. `updated` means when the alert was updated or resolved. (default: created)
@@ -4194,7 +4198,7 @@ export def "issues issues/list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string@filter-completer # Indicates which sorts of issues to return. `assigned` means issues assigned to you. `created` means issues created by you. `mentioned` means issues mentioning you. `subscribed` means issues you're subscribed to updates for. `all` or `repos` means all issues you can see, regardless of participation or creation. (default: assigned)
-  --state: string@state-completer-1 # Indicates the state of the issues to return. (default: open)
+  --state: string@state-completer-2 # Indicates the state of the issues to return. (default: open)
   --labels: string # A list of comma separated label names. Example: `bug,ui,@high`
   --qp-sort: string@sort-completer-4 # What to sort results by. (default: created)
   --direction: string@direction-completer # The direction to sort the results by. (default: desc)
@@ -6472,9 +6476,9 @@ export def "orgs-code-scanning-alerts code-scanning/list-alerts-for-org" [
   --page: int # The page number of the results to fetch. For more information, see "[Using pagination in the REST API](https://docs.github.com/enterprise-server@3.11/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 1)
   --per-page: int # The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/enterprise-server@3.11/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 30)
   --direction: string@direction-completer # The direction to sort the results by. (default: desc)
-  --state: string # If specified, only code scanning alerts with this state will be returned.
+  --state: string@state-completer # If specified, only code scanning alerts with this state will be returned.
   --qp-sort: string@sort-completer-3 # The property by which to sort the results. (default: created)
-  --severity: string # If specified, only code scanning alerts with this severity will be returned.
+  --severity: string@severity-completer-1 # If specified, only code scanning alerts with this severity will be returned.
 ]: nothing -> table<number: int, created_at: string, updated_at: string, url: string, html_url: string, instances_url: string, state: string, fixed_at: string, dismissed_by: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, dismissed_at: string, dismissed_reason: string, dismissed_comment: string, rule: record<id: string, name: string, severity: string, security_severity_level: string, description: string, tags: list>, tool: record<name: string, version: string, guid: string>, most_recent_instance: record<ref: string, analysis_key: string, environment: string, category: string, state: string, commit_sha: string, message: record, location: record, html_url: string, classifications: list>, repository: record<id: int, node_id: string, name: string, full_name: string, owner: record, private: bool, html_url: string, description: string, fork: bool, url: string, archive_url: string, assignees_url: string, blobs_url: string, branches_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, deployments_url: string, downloads_url: string, events_url: string, forks_url: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, languages_url: string, merges_url: string, milestones_url: string, notifications_url: string, pulls_url: string, releases_url: string, stargazers_url: string, statuses_url: string, subscribers_url: string, subscription_url: string, tags_url: string, teams_url: string, trees_url: string, hooks_url: string>, dismissal_approved_by: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7346,7 +7350,7 @@ export def "orgs-issues issues/list-for-org" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string@filter-completer # Indicates which sorts of issues to return. `assigned` means issues assigned to you. `created` means issues created by you. `mentioned` means issues mentioning you. `subscribed` means issues you're subscribed to updates for. `all` or `repos` means all issues you can see, regardless of participation or creation. (default: assigned)
-  --state: string@state-completer-1 # Indicates the state of the issues to return. (default: open)
+  --state: string@state-completer-2 # Indicates the state of the issues to return. (default: open)
   --labels: string # A list of comma separated label names. Example: `bug,ui,@high`
   --qp-sort: string@sort-completer-4 # What to sort results by. (default: created)
   --direction: string@direction-completer # The direction to sort the results by. (default: desc)
@@ -7905,7 +7909,7 @@ export def "orgs-packages-versions packages/get-all-package-versions-for-package
   --allow-errors(-e) # Return full response without error handling
   --page: int # The page number of the results to fetch. For more information, see "[Using pagination in the REST API](https://docs.github.com/enterprise-server@3.11/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 1)
   --per-page: int # The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/enterprise-server@3.11/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 30)
-  --state: string@state-completer-2 # The state of the package, either active or deleted. (default: active)
+  --state: string@state-completer-3 # The state of the package, either active or deleted. (default: active)
 ]: nothing -> table<id: int, name: string, url: string, package_html_url: string, html_url: string, license: string, description: string, created_at: string, updated_at: string, deleted_at: string, metadata: record<package_type: string, container: record, docker: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8347,7 +8351,7 @@ export def "orgs-projects projects/list-for-org" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --state: string@state-completer-1 # Indicates the state of the projects to return. (default: open)
+  --state: string@state-completer-2 # Indicates the state of the projects to return. (default: open)
   --per-page: int # The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/enterprise-server@3.11/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 30)
   --page: int # The page number of the results to fetch. For more information, see "[Using pagination in the REST API](https://docs.github.com/enterprise-server@3.11/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 1)
 ]: nothing -> table<owner_url: string, url: string, html_url: string, columns_url: string, id: int, node_id: string, name: string, body: string, number: int, state: string, creator: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, created_at: string, updated_at: string, organization_permission: string, private: bool> {
@@ -8747,7 +8751,7 @@ export def "orgs-secret-scanning-alerts secret-scanning/list-alerts-for-org" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --state: string@state-completer # Set to `open` or `resolved` to only list secret scanning alerts in a specific state.
+  --state: string@state-completer-1 # Set to `open` or `resolved` to only list secret scanning alerts in a specific state.
   --secret-type: string # A comma-separated list of secret types to return. By default all secret types are returned. See "[Supported secret scanning patterns](https://docs.github.com/enterprise-server@3.11/enterprise-cloud@latest/code-security/secret-scanning/introduction/supported-secret-scanning-patterns#supported-secrets)" for a complete list of secret types.
   --resolution: string # A comma-separated list of resolutions. Only secret scanning alerts with one of these resolutions are listed. Valid resolutions are `false_positive`, `wont_fix`, `revoked`, `pattern_edited`, `pattern_deleted` or `used_in_tests`.
   --qp-sort: string@sort-completer-3 # The property to sort the results by. `created` means when the alert was created. `updated` means when the alert was updated or resolved. (default: created)
@@ -11765,7 +11769,7 @@ export def "repos-actions-runs-deployment-protection-rule actions/review-custom-
   --allow-errors(-e) # Return full response without error handling
   --environment-name: string # The name of the environment to approve or reject.
   --comment: string # Comment associated with the pending deployment protection rule. **Required when state is not provided.**
-  --state: string@state-completer-3 # Whether to approve or reject deployment to the specified environments.
+  --state: string@state-completer-4 # Whether to approve or reject deployment to the specified environments.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11899,7 +11903,7 @@ export def "repos-actions-runs-pending-deployments actions/review-pending-deploy
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   environment_ids: list # The list of environment ids to approve or reject (e.g. [161171787, 161171795])
-  state: string@state-completer-3 # Whether to approve or reject deployment to the specified environments. (e.g. approved)
+  state: string@state-completer-4 # Whether to approve or reject deployment to the specified environments. (e.g. approved)
   comment: string # A comment to accompany the deployment review (e.g. Ship it!)
 ]: any -> table<url: string, id: int, node_id: string, sha: string, ref: string, task: string, payload: any, original_environment: string, environment: string, description: string, creator: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, created_at: string, updated_at: string, statuses_url: string, repository_url: string, transient_environment: bool, production_environment: bool, performed_via_github_app: record<id: int, slug: string, node_id: string, owner: any, name: string, description: string, external_url: string, html_url: string, created_at: string, updated_at: string, permissions: record, events: list, installations_count: int, client_secret: string, webhook_secret: string, pem: string>> {
   let input = $in
@@ -13927,8 +13931,8 @@ export def "repos-code-scanning-alerts code-scanning/list-alerts-for-repo" [
   --ref: string # The Git reference for the results you want to list. The `ref` for a branch can be formatted either as `refs/heads/<branch name>` or simply `<branch name>`. To reference a pull request use `refs/pull/<number>/merge`.
   --direction: string@direction-completer # The direction to sort the results by. (default: desc)
   --qp-sort: string@sort-completer-3 # The property by which to sort the results. (default: created)
-  --state: string # If specified, only code scanning alerts with this state will be returned.
-  --severity: string # If specified, only code scanning alerts with this severity will be returned.
+  --state: string@state-completer # If specified, only code scanning alerts with this state will be returned.
+  --severity: string@severity-completer-1 # If specified, only code scanning alerts with this severity will be returned.
 ]: nothing -> table<number: int, created_at: string, updated_at: string, url: string, html_url: string, instances_url: string, state: string, fixed_at: string, dismissed_by: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, dismissed_at: string, dismissed_reason: string, dismissed_comment: string, rule: record<id: string, name: string, severity: string, security_severity_level: string, description: string, tags: list>, tool: record<name: string, version: string, guid: string>, most_recent_instance: record<ref: string, analysis_key: string, environment: string, category: string, state: string, commit_sha: string, message: record, location: record, html_url: string, classifications: list>, dismissal_approved_by: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13980,7 +13984,7 @@ export def "repos-code-scanning-alerts code-scanning/update-alert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  state: string@state-completer-4 # Sets the state of the code scanning alert. You must provide `dismissed_reason` when you set the state to `dismissed`.
+  state: string@state-completer-5 # Sets the state of the code scanning alert. You must provide `dismissed_reason` when you set the state to `dismissed`.
   --dismissed-reason: string@dismissed-reason-completer # **Required when the state is dismissed.** The reason for dismissing or closing the alert. (nullable)
   --dismissed-comment: string # The dismissal comment associated with the dismissal of the alert. (nullable)
 ]: any -> record<number: int, created_at: string, updated_at: string, url: string, html_url: string, instances_url: string, state: string, fixed_at: string, dismissed_by: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, dismissed_at: string, dismissed_reason: string, dismissed_comment: string, rule: record<id: string, name: string, severity: string, security_severity_level: string, description: string, full_description: string, tags: list<string>, help: string, help_uri: string>, tool: record<name: string, version: string, guid: string>, most_recent_instance: record<ref: string, analysis_key: string, environment: string, category: string, state: string, commit_sha: string, message: record<text: string>, location: record<path: string, start_line: int, end_line: int, start_column: int, end_column: int>, html_url: string, classifications: list<string>>, dismissal_approved_by: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>> {
@@ -14044,7 +14048,7 @@ export def "repos-code-scanning-analyses code-scanning/list-recent-analyses" [
   --page: int # The page number of the results to fetch. For more information, see "[Using pagination in the REST API](https://docs.github.com/enterprise-server@3.11/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 1)
   --per-page: int # The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/enterprise-server@3.11/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 30)
   --ref: string # The Git reference for the analyses you want to list. The `ref` for a branch can be formatted either as `refs/heads/<branch name>` or simply `<branch name>`. To reference a pull request use `refs/pull/<number>/merge`.
-  --sarif-id: string # Filter analyses belonging to the same SARIF upload.
+  --sarif-id: string # Filter analyses belonging to the same SARIF upload. (e.g. 6c81cd8e-b078-4ac3-a3be-1dad7dbd0b53)
   --direction: string@direction-completer # The direction to sort the results by. (default: desc)
   --qp-sort: string@sort-completer-8 # The property by which to sort the results. (default: created)
 ]: nothing -> table<ref: string, commit_sha: string, analysis_key: string, environment: string, category: string, error: string, created_at: string, results_count: int, rules_count: int, id: int, url: string, sarif_id: string, tool: record<name: string, version: string, guid: string>, deletable: bool, warning: string> {
@@ -14149,7 +14153,7 @@ export def "repos-code-scanning-default-setup code-scanning/update-default-setup
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  state: string@state-completer-5 # The desired state of code scanning default setup.
+  state: string@state-completer-6 # The desired state of code scanning default setup.
   --query-suite: string@query-suite-completer # CodeQL query suite to be used.
   --languages: list # CodeQL languages to be analyzed.
 ]: any -> record {
@@ -15093,7 +15097,7 @@ export def "repos-dependabot-alerts dependabot/update-alert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  state: string@state-completer-4 # The state of the Dependabot alert. A `dismissed_reason` must be provided when setting the state to `dismissed`.
+  state: string@state-completer-5 # The state of the Dependabot alert. A `dismissed_reason` must be provided when setting the state to `dismissed`.
   --dismissed-reason: string@dismissed-reason-completer-1 # **Required when `state` is `dismissed`.** A reason for dismissing the alert.
   --dismissed-comment: string # An optional comment associated with dismissing the alert.
 ]: any -> record<number: int, state: string, dependency: record<package: record<ecosystem: string, name: string>, manifest_path: string, scope: string>, security_advisory: record<ghsa_id: string, cve_id: string, summary: string, description: string, vulnerabilities: list<record>, severity: string, cvss: record<score: float, vector_string: string>, cvss_severities: record<cvss_v3: record, cvss_v4: record>, cwes: list<record>, identifiers: list<record>, references: list<record>, published_at: string, updated_at: string, withdrawn_at: string>, security_vulnerability: record<package: record<ecosystem: string, name: string>, severity: string, vulnerable_version_range: string, first_patched_version: record<identifier: string>>, url: string, html_url: string, created_at: string, updated_at: string, dismissed_at: string, dismissed_by: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, dismissed_reason: string, dismissed_comment: string, fixed_at: string, auto_dismissed_at: string> {
@@ -15488,7 +15492,7 @@ export def "repos-deployments-statuses repos/create-deployment-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  state: string@state-completer-6 # The state of the status. When you set a transient deployment to `inactive`, the deployment will be shown as `destroyed` in GitHub.
+  state: string@state-completer-7 # The state of the status. When you set a transient deployment to `inactive`, the deployment will be shown as `destroyed` in GitHub.
   --target-url: string # The target URL to associate with this status. This URL should contain output to keep the user updated while the task is running or serve as historical information for what happened in the deployment.  > [!NOTE] > It's recommended to use the `log_url` parameter, which replaces `target_url`. (default: )
   --log-url: string # The full URL of the deployment's output. This parameter replaces `target_url`. We will continue to accept `target_url` to support legacy uses, but we recommend replacing `target_url` with `log_url`. Setting `log_url` will automatically set `target_url` to the same value. Default: `""` (default: )
   --description: string # A short description of the status. The maximum description length is 140 characters. (default: )
@@ -17122,7 +17126,7 @@ export def "repos-issues issues/list-for-repo" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --milestone: string # If an `integer` is passed, it should refer to a milestone by its `number` field. If the string `*` is passed, issues with any milestone are accepted. If the string `none` is passed, issues without milestones are returned.
-  --state: string@state-completer-1 # Indicates the state of the issues to return. (default: open)
+  --state: string@state-completer-2 # Indicates the state of the issues to return. (default: open)
   --assignee: string # Can be the name of a user. Pass in `none` for issues with no assigned user, and `*` for issues assigned to any user.
   --creator: string # The user that created the issue.
   --mentioned: string # A user that's mentioned in the issue.
@@ -17464,7 +17468,7 @@ export def "repos-issues issues/update" [
   --title: any # The title of the issue. (nullable)
   --body-body: string # The contents of the issue. (nullable)
   --assignee: string # Username to assign to this issue. **This field is closing down.** (nullable)
-  --state: string@state-completer-7 # The open or closed state of the issue.
+  --state: string@state-completer-8 # The open or closed state of the issue.
   --state-reason: string@state-reason-completer # The reason for the state change. Ignored unless `state` is changed. (nullable, e.g. not_planned)
   --milestone: any # nullable
   --labels: list # Labels to associate with this issue. Pass one or more labels to _replace_ the set of labels on this issue. Send an empty array (`[]`) to clear all labels from the issue. Only users with push access can set labels for issues. Without push access to the repository, label changes are silently dropped.
@@ -18368,7 +18372,7 @@ export def "repos-milestones issues/list-milestones" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --state: string@state-completer-1 # The state of the milestone. Either `open`, `closed`, or `all`. (default: open)
+  --state: string@state-completer-2 # The state of the milestone. Either `open`, `closed`, or `all`. (default: open)
   --qp-sort: string@sort-completer-10 # What to sort results by. Either `due_on` or `completeness`. (default: due_on)
   --direction: string@direction-completer # The direction of the sort. Either `asc` or `desc`. (default: asc)
   --per-page: int # The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/enterprise-server@3.11/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 30)
@@ -18399,7 +18403,7 @@ export def "repos-milestones issues/create-milestone" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   title: string # The title of the milestone.
-  --state: string@state-completer-7 # The state of the milestone. Either `open` or `closed`. (default: open)
+  --state: string@state-completer-8 # The state of the milestone. Either `open` or `closed`. (default: open)
   --description: string # A description of the milestone.
   --due-on: string # The milestone due date. This is a timestamp in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format: `YYYY-MM-DDTHH:MM:SSZ`. (format: date-time)
 ]: any -> record<url: string, html_url: string, labels_url: string, id: int, node_id: string, number: int, state: string, title: string, description: string, creator: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, open_issues: int, closed_issues: int, created_at: string, updated_at: string, closed_at: string, due_on: string> {
@@ -18456,7 +18460,7 @@ export def "repos-milestones issues/update-milestone" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --title: string # The title of the milestone.
-  --state: string@state-completer-7 # The state of the milestone. Either `open` or `closed`. (default: open)
+  --state: string@state-completer-8 # The state of the milestone. Either `open` or `closed`. (default: open)
   --description: string # A description of the milestone.
   --due-on: string # The milestone due date. This is a timestamp in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format: `YYYY-MM-DDTHH:MM:SSZ`. (format: date-time)
 ]: any -> record<url: string, html_url: string, labels_url: string, id: int, node_id: string, number: int, state: string, title: string, description: string, creator: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, open_issues: int, closed_issues: int, created_at: string, updated_at: string, closed_at: string, due_on: string> {
@@ -18946,7 +18950,7 @@ export def "repos-projects projects/list-for-repo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --state: string@state-completer-1 # Indicates the state of the projects to return. (default: open)
+  --state: string@state-completer-2 # Indicates the state of the projects to return. (default: open)
   --per-page: int # The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/enterprise-server@3.11/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 30)
   --page: int # The page number of the results to fetch. For more information, see "[Using pagination in the REST API](https://docs.github.com/enterprise-server@3.11/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 1)
 ]: nothing -> table<owner_url: string, url: string, html_url: string, columns_url: string, id: int, node_id: string, name: string, body: string, number: int, state: string, creator: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, created_at: string, updated_at: string, organization_permission: string, private: bool> {
@@ -19003,7 +19007,7 @@ export def "repos-pulls pulls/list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --state: string@state-completer-1 # Either `open`, `closed`, or `all` to filter by state. (default: open)
+  --state: string@state-completer-2 # Either `open`, `closed`, or `all` to filter by state. (default: open)
   --head: string # Filter pulls by head user or head organization and branch name in the format of `user:ref-name` or `organization:ref-name`. For example: `github:new-script-format` or `octocat:test-branch`.
   --qp-base: string # Filter pulls by base branch name. Example: `gh-pages`.
   --qp-sort: string@sort-completer-11 # What to sort results by. `popularity` will sort by the number of comments. `long-running` will sort by date created and will limit the results to pull requests that have been open for more than a month and have had activity within the past month. (default: created)
@@ -19291,7 +19295,7 @@ export def "repos-pulls pulls/update" [
   --allow-errors(-e) # Return full response without error handling
   --title: string # The title of the pull request.
   --body-body: string # The contents of the pull request.
-  --state: string@state-completer-7 # State of this Pull Request. Either `open` or `closed`.
+  --state: string@state-completer-8 # State of this Pull Request. Either `open` or `closed`.
   --body-base: string # The name of the branch you want your changes pulled into. This should be an existing branch on the current repository. You cannot update the base branch on a pull request to point to another repository.
   --maintainer-can-modify: string@bool-completer # Indicates whether [maintainers can modify](https://docs.github.com/enterprise-server@3.11/articles/allowing-changes-to-a-pull-request-branch-created-from-a-fork/) the pull request.
 ]: any -> record<url: string, id: int, node_id: string, html_url: string, diff_url: string, patch_url: string, issue_url: string, commits_url: string, review_comments_url: string, review_comment_url: string, comments_url: string, statuses_url: string, number: int, state: string, locked: bool, title: string, user: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, body: string, labels: table<id: int, node_id: string, url: string, name: string, description: string, color: string, default: bool>, milestone: record<url: string, html_url: string, labels_url: string, id: int, node_id: string, number: int, state: string, title: string, description: string, creator: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, open_issues: int, closed_issues: int, created_at: string, updated_at: string, closed_at: string, due_on: string>, active_lock_reason: string, created_at: string, updated_at: string, closed_at: string, merged_at: string, merge_commit_sha: string, assignee: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, assignees: table<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, requested_reviewers: table<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, requested_teams: table<id: int, node_id: string, url: string, members_url: string, name: string, description: string, permission: string, privacy: string, notification_setting: string, html_url: string, repositories_url: string, slug: string, ldap_dn: string>, head: record<label: string, ref: string, repo: record<id: int, node_id: string, name: string, full_name: string, license: record, forks: int, permissions: record, owner: record, private: bool, html_url: string, description: string, fork: bool, url: string, archive_url: string, assignees_url: string, blobs_url: string, branches_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, deployments_url: string, downloads_url: string, events_url: string, forks_url: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, languages_url: string, merges_url: string, milestones_url: string, notifications_url: string, pulls_url: string, releases_url: string, ssh_url: string, stargazers_url: string, statuses_url: string, subscribers_url: string, subscription_url: string, tags_url: string, teams_url: string, trees_url: string, clone_url: string, mirror_url: string, hooks_url: string, svn_url: string, homepage: string, language: string, forks_count: int, stargazers_count: int, watchers_count: int, size: int, default_branch: string, open_issues_count: int, is_template: bool, topics: list, has_issues: bool, has_projects: bool, has_wiki: bool, has_pages: bool, has_downloads: bool, has_discussions: bool, archived: bool, disabled: bool, visibility: string, pushed_at: string, created_at: string, updated_at: string, allow_rebase_merge: bool, temp_clone_token: string, allow_squash_merge: bool, allow_auto_merge: bool, delete_branch_on_merge: bool, allow_update_branch: bool, use_squash_pr_title_as_default: bool, squash_merge_commit_title: string, squash_merge_commit_message: string, merge_commit_title: string, merge_commit_message: string, allow_merge_commit: bool, allow_forking: bool, web_commit_signoff_required: bool, open_issues: int, watchers: int, master_branch: string, starred_at: string, anonymous_access_enabled: bool>, sha: string, user: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>>, base: record<label: string, ref: string, repo: record<id: int, node_id: string, name: string, full_name: string, license: record, forks: int, permissions: record, owner: record, private: bool, html_url: string, description: string, fork: bool, url: string, archive_url: string, assignees_url: string, blobs_url: string, branches_url: string, collaborators_url: string, comments_url: string, commits_url: string, compare_url: string, contents_url: string, contributors_url: string, deployments_url: string, downloads_url: string, events_url: string, forks_url: string, git_commits_url: string, git_refs_url: string, git_tags_url: string, git_url: string, issue_comment_url: string, issue_events_url: string, issues_url: string, keys_url: string, labels_url: string, languages_url: string, merges_url: string, milestones_url: string, notifications_url: string, pulls_url: string, releases_url: string, ssh_url: string, stargazers_url: string, statuses_url: string, subscribers_url: string, subscription_url: string, tags_url: string, teams_url: string, trees_url: string, clone_url: string, mirror_url: string, hooks_url: string, svn_url: string, homepage: string, language: string, forks_count: int, stargazers_count: int, watchers_count: int, size: int, default_branch: string, open_issues_count: int, is_template: bool, topics: list, has_issues: bool, has_projects: bool, has_wiki: bool, has_pages: bool, has_downloads: bool, has_discussions: bool, archived: bool, disabled: bool, visibility: string, pushed_at: string, created_at: string, updated_at: string, allow_rebase_merge: bool, temp_clone_token: string, allow_squash_merge: bool, allow_auto_merge: bool, delete_branch_on_merge: bool, allow_update_branch: bool, use_squash_pr_title_as_default: bool, squash_merge_commit_title: string, squash_merge_commit_message: string, merge_commit_title: string, merge_commit_message: string, allow_merge_commit: bool, allow_forking: bool, web_commit_signoff_required: bool, open_issues: int, watchers: int, master_branch: string, starred_at: string, anonymous_access_enabled: bool>, sha: string, user: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>>, _links: record<comments: record<href: string>, commits: record<href: string>, statuses: record<href: string>, html: record<href: string>, issue: record<href: string>, review_comments: record<href: string>, review_comment: record<href: string>, self: record<href: string>>, author_association: string, auto_merge: record<enabled_by: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, merge_method: string, commit_title: string, commit_message: string>, draft: bool, merged: bool, mergeable: bool, rebaseable: bool, mergeable_state: string, merged_by: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, comments: int, review_comments: int, maintainer_can_modify: bool, commits: int, additions: int, deletions: int, changed_files: int> {
@@ -20593,7 +20597,7 @@ export def "repos-secret-scanning-alerts secret-scanning/list-alerts-for-repo" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --state: string@state-completer # Set to `open` or `resolved` to only list secret scanning alerts in a specific state.
+  --state: string@state-completer-1 # Set to `open` or `resolved` to only list secret scanning alerts in a specific state.
   --secret-type: string # A comma-separated list of secret types to return. By default all secret types are returned. See "[Supported secret scanning patterns](https://docs.github.com/enterprise-server@3.11/enterprise-cloud@latest/code-security/secret-scanning/introduction/supported-secret-scanning-patterns#supported-secrets)" for a complete list of secret types.
   --resolution: string # A comma-separated list of resolutions. Only secret scanning alerts with one of these resolutions are listed. Valid resolutions are `false_positive`, `wont_fix`, `revoked`, `pattern_edited`, `pattern_deleted` or `used_in_tests`.
   --qp-sort: string@sort-completer-3 # The property to sort the results by. `created` means when the alert was created. `updated` means when the alert was updated or resolved. (default: created)
@@ -20653,7 +20657,7 @@ export def "repos-secret-scanning-alerts secret-scanning/update-alert" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  state: string@state-completer # Sets the state of the secret scanning alert. You must provide `resolution` when you set the state to `resolved`.
+  state: string@state-completer-1 # Sets the state of the secret scanning alert. You must provide `resolution` when you set the state to `resolved`.
   --resolution: string@resolution-completer # **Required when the `state` is `resolved`.** The reason for resolving the alert. (nullable)
   --resolution-comment: string # An optional comment when closing an alert. Cannot be updated or deleted. Must be `null` when changing `state` to `open`. (nullable)
 ]: any -> record<number: int, created_at: string, updated_at: string, url: string, html_url: string, locations_url: string, state: string, resolution: string, resolved_at: string, resolved_by: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, resolution_comment: string, secret_type: string, secret_type_display_name: string, secret: string, push_protection_bypassed: bool, push_protection_bypassed_by: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, push_protection_bypassed_at: string> {
@@ -20859,7 +20863,7 @@ export def "repos-statuses repos/create-commit-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  state: string@state-completer-8 # The state of the status.
+  state: string@state-completer-9 # The state of the status.
   --target-url: string # The target URL to associate with this status. This URL will be linked from the GitHub UI to allow users to easily see the source of the status.   For example, if your continuous integration system is posting build status, you would want to provide the deep link for the build output for this specific SHA:   `http://ci.example.com/user/repo/build/sha` (nullable)
   --description: string # A short description of the status. (nullable)
   --context: string # A string label to differentiate this status from the status of other systems. This field is case-insensitive. (default: default)
@@ -23613,7 +23617,7 @@ export def "user-issues issues/list-for-authenticated-user" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string@filter-completer # Indicates which sorts of issues to return. `assigned` means issues assigned to you. `created` means issues created by you. `mentioned` means issues mentioning you. `subscribed` means issues you're subscribed to updates for. `all` or `repos` means all issues you can see, regardless of participation or creation. (default: assigned)
-  --state: string@state-completer-1 # Indicates the state of the issues to return. (default: open)
+  --state: string@state-completer-2 # Indicates the state of the issues to return. (default: open)
   --labels: string # A list of comma separated label names. Example: `bug,ui,@high`
   --qp-sort: string@sort-completer-4 # What to sort results by. (default: created)
   --direction: string@direction-completer # The direction to sort the results by. (default: desc)
@@ -23741,7 +23745,7 @@ export def "user-memberships-orgs orgs/list-memberships-for-authenticated-user" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --state: string@state-completer-9 # Indicates the state of the memberships to return. If not specified, the API returns both active and pending memberships.
+  --state: string@state-completer-10 # Indicates the state of the memberships to return. If not specified, the API returns both active and pending memberships.
   --per-page: int # The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/enterprise-server@3.11/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 30)
   --page: int # The page number of the results to fetch. For more information, see "[Using pagination in the REST API](https://docs.github.com/enterprise-server@3.11/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 1)
 ]: nothing -> table<url: string, state: string, role: string, organization_url: string, organization: record<login: string, id: int, node_id: string, url: string, repos_url: string, events_url: string, hooks_url: string, issues_url: string, members_url: string, public_members_url: string, avatar_url: string, description: string>, user: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, permissions: record<can_create_repository: bool>> {
@@ -23791,7 +23795,7 @@ export def "user-memberships-orgs orgs/update-membership-for-authenticated-user"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  state: string@state-completer-10 # The state that the membership should be in. Only `"active"` will be accepted.
+  state: string@state-completer-11 # The state that the membership should be in. Only `"active"` will be accepted.
 ]: any -> record<url: string, state: string, role: string, organization_url: string, organization: record<login: string, id: int, node_id: string, url: string, repos_url: string, events_url: string, hooks_url: string, issues_url: string, members_url: string, public_members_url: string, avatar_url: string, description: string>, user: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, permissions: record<can_create_repository: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -24055,7 +24059,7 @@ export def "user-packages-versions packages/get-all-package-versions-for-package
   --allow-errors(-e) # Return full response without error handling
   --page: int # The page number of the results to fetch. For more information, see "[Using pagination in the REST API](https://docs.github.com/enterprise-server@3.11/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 1)
   --per-page: int # The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/enterprise-server@3.11/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 30)
-  --state: string@state-completer-2 # The state of the package, either active or deleted. (default: active)
+  --state: string@state-completer-3 # The state of the package, either active or deleted. (default: active)
 ]: nothing -> table<id: int, name: string, url: string, package_html_url: string, html_url: string, license: string, description: string, created_at: string, updated_at: string, deleted_at: string, metadata: record<package_type: string, container: record, docker: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -25296,7 +25300,7 @@ export def "users-projects projects/list-for-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --state: string@state-completer-1 # Indicates the state of the projects to return. (default: open)
+  --state: string@state-completer-2 # Indicates the state of the projects to return. (default: open)
   --per-page: int # The number of results per page (max 100). For more information, see "[Using pagination in the REST API](https://docs.github.com/enterprise-server@3.11/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 30)
   --page: int # The page number of the results to fetch. For more information, see "[Using pagination in the REST API](https://docs.github.com/enterprise-server@3.11/rest/using-the-rest-api/using-pagination-in-the-rest-api)." (default: 1)
 ]: nothing -> table<owner_url: string, url: string, html_url: string, columns_url: string, id: int, node_id: string, name: string, body: string, number: int, state: string, creator: record<name: string, email: string, login: string, id: int, node_id: string, avatar_url: string, gravatar_id: string, url: string, html_url: string, followers_url: string, following_url: string, gists_url: string, starred_url: string, subscriptions_url: string, organizations_url: string, repos_url: string, events_url: string, received_events_url: string, type: string, site_admin: bool, starred_at: string, user_view_type: string>, created_at: string, updated_at: string, organization_permission: string, private: bool> {

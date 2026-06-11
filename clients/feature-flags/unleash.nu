@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -66,6 +67,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def status-completer [] { ["discarded" "kept"] }
+def grouping-completer [] { ["daily" "monthly"] }
 def timeRange-completer [] { ["day" "hour" "month" "week"] }
 def yAxisMin-completer [] { ["auto" "zero"] }
 def aggregationMode-completer [] { ["avg" "count" "p50" "p95" "p99" "rps" "sum"] }
@@ -768,7 +770,7 @@ export def "admin-metrics-connection get-connections-for-period" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --grouping: string # Whether to aggregate the data by month or by day
+  --grouping: string@grouping-completer # Whether to aggregate the data by month or by day
   --qp-from: string # The starting date of the traffic data usage search in IS:yyyy-MM-dd format (format: date)
   --qp-to: string # The starting date of the traffic data usage search in IS:yyyy-MM-dd format (format: date)
   --Authorization: string # API key needed to access this API
@@ -796,7 +798,7 @@ export def "admin-metrics-request get-requests-for-period" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --grouping: string # Whether to aggregate the data by month or by day
+  --grouping: string@grouping-completer # Whether to aggregate the data by month or by day
   --qp-from: string # The starting date of the traffic data usage search in IS:yyyy-MM-dd format (format: date)
   --qp-to: string # The starting date of the traffic data usage search in IS:yyyy-MM-dd format (format: date)
   --Authorization: string # API key needed to access this API

@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -65,7 +66,12 @@ def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def order-completer [] { ["ASC" "DESC"] }
+def sortBy-completer [] { ["activationStatus" "name"] }
 def personType-completer [] { ["person" "sdkServiceAccount" "serviceAccount"] }
+def sortOrder-completer [] { ["ASC" "DESC"] }
+def order-completer-1 [] { ["ASC" "DESC" "PRIORITY"] }
+def apiKeyType-completer [] { ["client_eval_only" "server_eval_only"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -131,7 +137,7 @@ export def "mr-api-portfolio findPortfolios" [
   --allow-errors(-e) # Return full response without error handling
   --includeGroups: string@bool-completer # Include groups for this this portfolio in results
   --includeApplications: string@bool-completer # Include applications for this portfolio in results
-  --order: string # how to order the results
+  --order: string@order-completer # how to order the results (nullable)
   --filter: string # What to filter the results by
   --parentPortfolioId: string # The parent portfolio to search under. If none is provided, use the top level one
 ]: nothing -> table<createdBy: record<id: record, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list>, updatedBy: record<id: record, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list>, whenCreated: string, whenUpdated: string, id: string, name: string, description: string, version: int, organizationId: string, groups: list<record>, applications: list<record>, whenArchived: string> {
@@ -327,7 +333,7 @@ export def "mr-api-portfolio-application findApplications" [
   --allow-errors(-e) # Return full response without error handling
   --includeEnvironments: string@bool-completer # Include the environments in the result
   --includeFeatures: string@bool-completer # Include the features in the result
-  --order: string # how to order the results
+  --order: string@order-completer # how to order the results (nullable)
   --filter: string # What to filter the results by
 ]: nothing -> table<createdBy: record<id: record, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list>, updatedBy: record<id: record, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list>, whenCreated: string, whenUpdated: string, id: string, name: string, description: string, portfolioId: string, version: int, groups: list<record>, features: list<record>, environments: list<record>, whenArchived: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -427,7 +433,7 @@ export def "mr-api-portfolio-group findGroups" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --includePeople: string@bool-completer # include people in each group
-  --order: string # how to order the results
+  --order: string@order-completer # how to order the results (nullable)
   --filter: string # What to filter the results by
 ]: nothing -> table<createdBy: record<id: record, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list>, updatedBy: record<id: record, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list>, whenCreated: string, whenUpdated: string, id: string, admin: bool, portfolioId: string, organizationId: string, version: int, name: string, superMembers: list<string>, simpleMembers: list<record>, members: list<record>, applicationRoles: list<record>, environmentRoles: list<record>, whenArchived: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -524,14 +530,14 @@ export def "mr-api-person findPeople" [
   --allow-errors(-e) # Return full response without error handling
   --includeGroups: string@bool-completer # Include groups in result
   --countGroups: string@bool-completer # Return the number of groups
-  --order: string # how to order the results
+  --order: string@order-completer # how to order the results (nullable)
   --filter: string # What to filter the results by
   --startAt: int # Where in the results to start
   --pageSize: int # How many results to return
   --includeLastLoggedIn: string@bool-completer # Include last logged in timestamp
   --includeDeactivated: string@bool-completer # Include people who are no longer active
   --personTypes: list # Filter by person types
-  --sortBy: string
+  --sortBy: string@sortBy-completer
 ]: nothing -> record<max: int, people: table<id: record, name: string, email: string, personType: record, other: string, source: string, version: int, passwordRequiresReset: bool, groups: list, whenArchived: string, whenLastAuthenticated: string, whenLastSeen: string, additional: list>, summarisedPeople: table<id: string, name: string, email: string, version: int, personType: string, whenLastAuthenticated: string, whenLastSeen: string, whenDeactivated: string, groupCount: int>, outstandingRegistrations: table<id: string, token: string, expired: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1317,7 +1323,7 @@ export def "mr-api-application-all-feature-environment findAllFeatureAndFeatureV
   --max: int # The maximum number of features to get for this page
   --page: int # The page number of the results. 0 indexed.
   --featureTypes: list
-  --sortOrder: string
+  --sortOrder: string@sortOrder-completer # nullable
   --featureFilter: list # If specified, limit the feature list by those that have these filters associated
 ]: nothing -> record<applicationId: string, features: table<id: string, key: string, alias: string, link: string, name: string, valueType: any, version: int, whenArchived: string, secret: bool, description: string, metaData: string, featureFilter: list>, environments: table<environmentId: string, environmentName: string, priorEnvironmentId: string, features: list, roles: list>, maxFeatures: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1367,7 +1373,7 @@ export def "mr-api-application-environment findEnvironments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --order: string # how to order the results
+  --order: string@order-completer-1 # how to order the results
   --filter: string # What to filter the results by
   --includeAcls: string@bool-completer # Include the acls attached to this environment
   --includeFeatures: string@bool-completer # Include the features attached to this environment
@@ -2179,7 +2185,7 @@ export def "mr-api-service-account-reset-api-key resetApiKey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --apiKeyType: string # Type of the API key
+  --apiKeyType: string@apiKeyType-completer # Type of the API key
 ]: nothing -> record<id: string, name: string, portfolioId: string, description: string, version: int, apiKeyClientSide: string, apiKeyServerSide: string, featureFilters: list<string>, permsInvalid: bool, permissions: table<id: string, permissions: list, serviceAccount: record, environmentId: string, sdkUrlClientEval: string, sdkUrlServerEval: string>, whenArchived: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

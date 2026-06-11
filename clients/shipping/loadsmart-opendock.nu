@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -1352,7 +1353,7 @@ export def "dock list" [
   --offset: int # Offset amount of resources. <a href="https://github.com/nestjsx/crud/wiki/Requests#offset" target="_blank">Docs</a>
   --page: int # Page portion of resources. <a href="https://github.com/nestjsx/crud/wiki/Requests#page" target="_blank">Docs</a>
   --cache: int # Reset cache (if was enabled). <a href="https://github.com/nestjsx/crud/wiki/Requests#cache" target="_blank">Docs</a>
-]: nothing -> record<count: float, total: float, page: float, pageCount: float, action: string, entity: string, data: table<id: string, createDateTime: string, createdBy: record, lastChangedDateTime: string, schedule: record, org: record, orgId: string, loadTypeIds: list, instructions: string, minCarrierLeadTime_hr: float, minCarrierLeadTimeForUpdates_hr: float, maxCarrierLeadTime_hr: float, ccEmails: list, allowCarrierScheduling: bool, allowOverBooking: bool, capacityParent: record, capacityChildren: record, capacityParentId: string, sortOrder: float>> {
+]: nothing -> record<count: float, total: float, page: float, pageCount: float, action: string, entity: string, data: table<id: string, createDateTime: string, createdBy: record, lastChangedDateTime: string, schedule: record, org: record, orgId: string, loadTypeIds: list, instructions: string, minCarrierLeadTime_hr: float, minCarrierLeadTimeForUpdates_hr: float, maxCarrierLeadTime_hr: float, ccEmails: list, allowCarrierScheduling: bool, allowOverBooking: bool, capacityParent: any, capacityChildren: any, capacityParentId: string, sortOrder: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "s" $s "scalar") (serialize-qp "filter" $filter "multi") (serialize-qp "or" $or "multi") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "join" $join "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "cache" $cache "scalar")] | flatten | str join "&"
@@ -1445,7 +1446,7 @@ export def "dock get" [
   --qp-fields: list # Selects resource fields. <a href="https://github.com/nestjsx/crud/wiki/Requests#select" target="_blank">Docs</a>
   --join: list # Adds relational resources. <a href="https://github.com/nestjsx/crud/wiki/Requests#join" target="_blank">Docs</a>
   --cache: int # Reset cache (if was enabled). <a href="https://github.com/nestjsx/crud/wiki/Requests#cache" target="_blank">Docs</a>
-]: nothing -> record<action: string, entity: string, data: table<id: string, createDateTime: string, createdBy: record, lastChangedDateTime: string, schedule: record, org: record, orgId: string, loadTypeIds: list, instructions: string, minCarrierLeadTime_hr: float, minCarrierLeadTimeForUpdates_hr: float, maxCarrierLeadTime_hr: float, ccEmails: list, allowCarrierScheduling: bool, allowOverBooking: bool, capacityParent: record, capacityChildren: record, capacityParentId: string, sortOrder: float>> {
+]: nothing -> record<action: string, entity: string, data: table<id: string, createDateTime: string, createdBy: record, lastChangedDateTime: string, schedule: record, org: record, orgId: string, loadTypeIds: list, instructions: string, minCarrierLeadTime_hr: float, minCarrierLeadTimeForUpdates_hr: float, maxCarrierLeadTime_hr: float, ccEmails: list, allowCarrierScheduling: bool, allowOverBooking: bool, capacityParent: any, capacityChildren: any, capacityParentId: string, sortOrder: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $qp_fields "csv") (serialize-qp "join" $join "multi") (serialize-qp "cache" $cache "scalar")] | flatten | str join "&"
@@ -1569,7 +1570,7 @@ export def "dock-capacity createCapacityChildDock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<action: string, entity: string, data: table<id: string, createDateTime: string, createdBy: record, lastChangedDateTime: string, schedule: record, org: record, orgId: string, loadTypeIds: list, instructions: string, minCarrierLeadTime_hr: float, minCarrierLeadTimeForUpdates_hr: float, maxCarrierLeadTime_hr: float, ccEmails: list, allowCarrierScheduling: bool, allowOverBooking: bool, capacityParent: record, capacityChildren: record, capacityParentId: string, sortOrder: float>> {
+]: nothing -> record<action: string, entity: string, data: table<id: string, createDateTime: string, createdBy: record, lastChangedDateTime: string, schedule: record, org: record, orgId: string, loadTypeIds: list, instructions: string, minCarrierLeadTime_hr: float, minCarrierLeadTimeForUpdates_hr: float, maxCarrierLeadTime_hr: float, ccEmails: list, allowCarrierScheduling: bool, allowOverBooking: bool, capacityParent: any, capacityChildren: any, capacityParentId: string, sortOrder: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dock/($id)/capacity")
@@ -1592,7 +1593,7 @@ export def "dock-capacity unlinkCapacityDock" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<count: float, total: float, page: float, pageCount: float, action: string, entity: string, data: table<id: string, createDateTime: string, createdBy: record, lastChangedDateTime: string, schedule: record, org: record, orgId: string, loadTypeIds: list, instructions: string, minCarrierLeadTime_hr: float, minCarrierLeadTimeForUpdates_hr: float, maxCarrierLeadTime_hr: float, ccEmails: list, allowCarrierScheduling: bool, allowOverBooking: bool, capacityParent: record, capacityChildren: record, capacityParentId: string, sortOrder: float>> {
+]: nothing -> record<count: float, total: float, page: float, pageCount: float, action: string, entity: string, data: table<id: string, createDateTime: string, createdBy: record, lastChangedDateTime: string, schedule: record, org: record, orgId: string, loadTypeIds: list, instructions: string, minCarrierLeadTime_hr: float, minCarrierLeadTimeForUpdates_hr: float, maxCarrierLeadTime_hr: float, ccEmails: list, allowCarrierScheduling: bool, allowOverBooking: bool, capacityParent: any, capacityChildren: any, capacityParentId: string, sortOrder: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dock/($id)/capacity/($childId)")
@@ -1663,7 +1664,7 @@ export def "loadtype list" [
   --offset: int # Offset amount of resources. <a href="https://github.com/nestjsx/crud/wiki/Requests#offset" target="_blank">Docs</a>
   --page: int # Page portion of resources. <a href="https://github.com/nestjsx/crud/wiki/Requests#page" target="_blank">Docs</a>
   --cache: int # Reset cache (if was enabled). <a href="https://github.com/nestjsx/crud/wiki/Requests#cache" target="_blank">Docs</a>
-]: nothing -> record<count: float, total: float, page: float, pageCount: float, action: string, entity: string, data: table<id: string, createDateTime: string, createdBy: record, lastChangedDateTime: string, org: record, orgId: string, direction: string, operation: string, equipmentType: string, transportationMode: string, allowCarrierScheduling: bool, description: string, settings: record, schedule: record>> {
+]: nothing -> record<count: float, total: float, page: float, pageCount: float, action: string, entity: string, data: table<id: string, createDateTime: string, createdBy: record, lastChangedDateTime: string, org: any, orgId: string, direction: string, operation: string, equipmentType: string, transportationMode: string, allowCarrierScheduling: bool, description: string, settings: record, schedule: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "warehouseId" $warehouseId "scalar") (serialize-qp "includeOrgLoadTypes" $includeOrgLoadTypes "scalar") (serialize-qp "showOnlyAssignedLoadTypes" $showOnlyAssignedLoadTypes "scalar") (serialize-qp "includeHierarchySettings" $includeHierarchySettings "scalar") (serialize-qp "fields" $qp_fields "csv") (serialize-qp "s" $s "scalar") (serialize-qp "filter" $filter "multi") (serialize-qp "or" $or "multi") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "join" $join "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "cache" $cache "scalar")] | flatten | str join "&"

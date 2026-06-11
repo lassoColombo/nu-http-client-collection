@@ -21,17 +21,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -70,12 +71,14 @@ def accept-completer [] { ["application/json" "text/json" "text/plain"] }
 def status-completer [] { ["continuing" "ended"] }
 def monitorNewItems-completer [] { ["all" "new" "none"] }
 def applyTags-completer [] { ["add" "remove" "replace"] }
+def sortDirection-completer [] { ["ascending" "default" "descending"] }
 def priority-completer [] { ["high" "low" "normal"] }
 def status-completer-1 [] { ["aborted" "cancelled" "completed" "failed" "orphaned" "queued" "started"] }
 def result-completer [] { ["successful" "unknown" "unsuccessful"] }
 def trigger-completer [] { ["manual" "scheduled" "unspecified"] }
 def preferredProtocol-completer [] { ["torrent" "unknown" "usenet"] }
 def protocol-completer [] { ["torrent" "unknown" "usenet"] }
+def eventType-completer [] { ["bookFileDeleted" "bookFileImported" "bookFileRenamed" "bookFileRetagged" "bookImportIncomplete" "downloadFailed" "downloadIgnored" "downloadImported" "grabbed" "unknown"] }
 def authenticationMethod-completer [] { ["basic" "external" "forms" "none"] }
 def authenticationRequired-completer [] { ["disabledForLocalAddresses" "enabled"] }
 def updateMechanism-completer [] { ["apt" "builtIn" "docker" "external" "script"] }
@@ -547,7 +550,7 @@ export def "blocklist get" [
   --page: int # format: int32, default: 1
   --pageSize: int # format: int32, default: 10
   --sortKey: string
-  --sortDirection: string
+  --sortDirection: string@sortDirection-completer
 ]: nothing -> record<page: int, pageSize: int, sortKey: string, sortDirection: string, totalRecords: int, records: table<id: int, authorId: int, bookIds: list, sourceTitle: string, quality: record, customFormats: list, date: string, protocol: string, indexer: string, message: string, author: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1485,7 +1488,7 @@ export def "wanted-cutoff list" [
   --page: int # format: int32, default: 1
   --pageSize: int # format: int32, default: 10
   --sortKey: string
-  --sortDirection: string
+  --sortDirection: string@sortDirection-completer
   --includeAuthor: string@bool-completer # default: false
   --monitored: string@bool-completer # default: true
 ]: nothing -> record<page: int, pageSize: int, sortKey: string, sortDirection: string, totalRecords: int, records: table<id: int, title: string, authorTitle: string, seriesTitle: string, disambiguation: string, overview: string, authorId: int, foreignBookId: string, foreignEditionId: string, titleSlug: string, monitored: bool, anyEditionOk: bool, ratings: record, releaseDate: string, pageCount: int, genres: list, author: record, images: list, links: list, statistics: record, added: string, addOptions: record, remoteCover: string, lastSearchTime: string, editions: list>> {
@@ -2244,7 +2247,7 @@ export def "history get" [
   --page: int # format: int32, default: 1
   --pageSize: int # format: int32, default: 10
   --sortKey: string
-  --sortDirection: string
+  --sortDirection: string@sortDirection-completer
   --includeAuthor: string@bool-completer
   --includeBook: string@bool-completer
   --eventType: list
@@ -2271,7 +2274,7 @@ export def "history-since get" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --date: string # format: date-time
-  --eventType: string
+  --eventType: string@eventType-completer
   --includeAuthor: string@bool-completer # default: false
   --includeBook: string@bool-completer # default: false
 ]: nothing -> table<id: int, bookId: int, authorId: int, sourceTitle: string, quality: record<quality: record, revision: record>, customFormats: list<record>, customFormatScore: int, qualityCutoffNotMet: bool, date: string, downloadId: string, eventType: string, data: record, book: record<id: int, title: string, authorTitle: string, seriesTitle: string, disambiguation: string, overview: string, authorId: int, foreignBookId: string, foreignEditionId: string, titleSlug: string, monitored: bool, anyEditionOk: bool, ratings: record, releaseDate: string, pageCount: int, genres: list, author: record, images: list, links: list, statistics: record, added: string, addOptions: record, remoteCover: string, lastSearchTime: string, editions: list>, author: record<id: int, authorMetadataId: int, status: string, ended: bool, authorName: string, authorNameLastFirst: string, foreignAuthorId: string, titleSlug: string, overview: string, disambiguation: string, links: list, nextBook: record, lastBook: record, images: list, remotePoster: string, path: string, qualityProfileId: int, metadataProfileId: int, monitored: bool, monitorNewItems: string, rootFolderPath: string, folder: string, genres: list, cleanName: string, sortName: string, sortNameLastFirst: string, tags: list, added: string, addOptions: record, ratings: record, statistics: record>> {
@@ -2296,7 +2299,7 @@ export def "history-author get" [
   --accept: string@accept-completer # Response content type
   --authorId: int # format: int32
   --bookId: int # format: int32
-  --eventType: string
+  --eventType: string@eventType-completer
   --includeAuthor: string@bool-completer # default: false
   --includeBook: string@bool-completer # default: false
 ]: nothing -> table<id: int, bookId: int, authorId: int, sourceTitle: string, quality: record<quality: record, revision: record>, customFormats: list<record>, customFormatScore: int, qualityCutoffNotMet: bool, date: string, downloadId: string, eventType: string, data: record, book: record<id: int, title: string, authorTitle: string, seriesTitle: string, disambiguation: string, overview: string, authorId: int, foreignBookId: string, foreignEditionId: string, titleSlug: string, monitored: bool, anyEditionOk: bool, ratings: record, releaseDate: string, pageCount: int, genres: list, author: record, images: list, links: list, statistics: record, added: string, addOptions: record, remoteCover: string, lastSearchTime: string, editions: list>, author: record<id: int, authorMetadataId: int, status: string, ended: bool, authorName: string, authorNameLastFirst: string, foreignAuthorId: string, titleSlug: string, overview: string, disambiguation: string, links: list, nextBook: record, lastBook: record, images: list, remotePoster: string, path: string, qualityProfileId: int, metadataProfileId: int, monitored: bool, monitorNewItems: string, rootFolderPath: string, folder: string, genres: list, cleanName: string, sortName: string, sortNameLastFirst: string, tags: list, added: string, addOptions: record, ratings: record, statistics: record>> {
@@ -3356,7 +3359,7 @@ export def "log get" [
   --page: int # format: int32, default: 1
   --pageSize: int # format: int32, default: 10
   --sortKey: string
-  --sortDirection: string
+  --sortDirection: string@sortDirection-completer
   --level: string
 ]: nothing -> record<page: int, pageSize: int, sortKey: string, sortDirection: string, totalRecords: int, records: table<id: int, time: string, exception: string, exceptionType: string, level: string, logger: string, message: string, method: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -4037,7 +4040,7 @@ export def "wanted-missing list" [
   --page: int # format: int32, default: 1
   --pageSize: int # format: int32, default: 10
   --sortKey: string
-  --sortDirection: string
+  --sortDirection: string@sortDirection-completer
   --includeAuthor: string@bool-completer # default: false
   --monitored: string@bool-completer # default: true
 ]: nothing -> record<page: int, pageSize: int, sortKey: string, sortDirection: string, totalRecords: int, records: table<id: int, title: string, authorTitle: string, seriesTitle: string, disambiguation: string, overview: string, authorId: int, foreignBookId: string, foreignEditionId: string, titleSlug: string, monitored: bool, anyEditionOk: bool, ratings: record, releaseDate: string, pageCount: int, genres: list, author: record, images: list, links: list, statistics: record, added: string, addOptions: record, remoteCover: string, lastSearchTime: string, editions: list>> {
@@ -4891,7 +4894,7 @@ export def "queue get" [
   --page: int # format: int32, default: 1
   --pageSize: int # format: int32, default: 10
   --sortKey: string
-  --sortDirection: string
+  --sortDirection: string@sortDirection-completer
   --includeUnknownAuthorItems: string@bool-completer # default: false
   --includeAuthor: string@bool-completer # default: false
   --includeBook: string@bool-completer # default: false

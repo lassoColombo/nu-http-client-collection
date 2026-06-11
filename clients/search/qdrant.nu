@@ -21,17 +21,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -66,6 +67,8 @@ def base-url-completer [] { ["http://localhost:6333" "https://localhost:6333"] }
 def auth-scheme-completer [] { ["api-key" "bearer"] }
 
 # Completers for enum parameters
+def ordering-completer [] { ["medium" "strong" "weak"] }
+def priority-completer [] { ["no_sync" "replica" "snapshot"] }
 def accept-completer [] { ["application/json" "application/octet-stream"] }
 
 # List all available API commands with their parameters
@@ -624,7 +627,7 @@ export def "collections-index index-by-collection_name" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --wait: string@bool-completer # If true, wait for changes to actually happen
-  --ordering: string # define ordering guarantees for the operation
+  --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   field_name: string
   --field-schema: any
@@ -678,7 +681,7 @@ export def "collections-index index-by-collection_name-field_name" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --wait: string@bool-completer # If true, wait for changes to actually happen
-  --ordering: string # define ordering guarantees for the operation
+  --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
 ]: nothing -> record<usage: any, time: float, status: string, result: record<operation_id: int, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -707,7 +710,7 @@ export def "collections-vectors name-by-collection_name-vector_name" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --wait: string@bool-completer # If true, wait for changes to actually happen
-  --ordering: string # define ordering guarantees for the operation
+  --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   --dense: record # Configuration for creating a new dense named vector.  Only includes properties that define the vector space and cannot be changed after creation. Storage type, index type, and quantization are inferred. — shape: {size: int, distance: "Cosine"|"Euclid"|"Dot"|"Manhattan", multivector_config?: any, datatype?: any}
   --sparse: record # Configuration for creating a new sparse named vector.  Only includes properties that define the vector space and cannot be changed after creation. — shape: {modifier?: any, datatype?: any}
@@ -739,7 +742,7 @@ export def "collections-vectors name-by-collection_name-vector_name-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --wait: string@bool-completer # If true, wait for changes to actually happen
-  --ordering: string # define ordering guarantees for the operation
+  --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
 ]: nothing -> record<usage: any, time: float, status: string, result: record<operation_id: int, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
@@ -901,7 +904,7 @@ export def "collections-snapshots-upload snapshot" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --wait: string@bool-completer # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
-  --priority: string # Defines source of truth for snapshot recovery
+  --priority: string@priority-completer # Defines source of truth for snapshot recovery
   --checksum: string # Optional SHA256 checksum to verify snapshot integrity before recovery.
   --snapshot: string # format: binary
 ]: any -> record<time: float, status: string, result: bool> {
@@ -1173,7 +1176,7 @@ export def "collections-shards-snapshots-upload snapshot" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --wait: string@bool-completer # If true, wait for changes to actually happen. If false - let changes happen in background. Default is true.
-  --priority: string # Defines source of truth for snapshot recovery
+  --priority: string@priority-completer # Defines source of truth for snapshot recovery
   --checksum: string # Optional SHA256 checksum to verify snapshot integrity before recovery.
   --snapshot: string # format: binary
 ]: any -> record<time: float, status: string, result: bool> {
@@ -1393,7 +1396,7 @@ export def "collections-points points-by-collection_name-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --wait: string@bool-completer # If true, wait for changes to actually happen
-  --ordering: string # define ordering guarantees for the operation
+  --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   --batch: record # shape: {ids: list, vectors: any, payloads?: list}
   --shard-key: any
@@ -1428,7 +1431,7 @@ export def "collections-points-delete points" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --wait: string@bool-completer # If true, wait for changes to actually happen
-  --ordering: string # define ordering guarantees for the operation
+  --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   --points: list
   --shard-key: any
@@ -1461,7 +1464,7 @@ export def "collections-points-vectors vectors" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --wait: string@bool-completer # If true, wait for changes to actually happen
-  --ordering: string # define ordering guarantees for the operation
+  --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   points: list # Points with named vectors — item shape: {id: any, vector: any}
   --shard-key: any
@@ -1493,7 +1496,7 @@ export def "collections-points-vectors-delete vectors" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --wait: string@bool-completer # If true, wait for changes to actually happen
-  --ordering: string # define ordering guarantees for the operation
+  --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   --points: list # Deletes values from each point in this list (nullable)
   --filter: any # Deletes values from points that satisfy this filter condition
@@ -1526,7 +1529,7 @@ export def "collections-points-payload payload-by-collection_name" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --wait: string@bool-completer # If true, wait for changes to actually happen
-  --ordering: string # define ordering guarantees for the operation
+  --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   payload: record # e.g. {city: London, color: green}
   --points: list # Assigns payload to each point in this list (nullable)
@@ -1560,7 +1563,7 @@ export def "collections-points-payload payload-by-collection_name-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --wait: string@bool-completer # If true, wait for changes to actually happen
-  --ordering: string # define ordering guarantees for the operation
+  --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   payload: record # e.g. {city: London, color: green}
   --points: list # Assigns payload to each point in this list (nullable)
@@ -1594,7 +1597,7 @@ export def "collections-points-payload-delete payload" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --wait: string@bool-completer # If true, wait for changes to actually happen
-  --ordering: string # define ordering guarantees for the operation
+  --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   keys: list # List of payload keys to remove from payload
   --points: list # Deletes values from each point in this list (nullable)
@@ -1628,7 +1631,7 @@ export def "collections-points-payload-clear payload" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --wait: string@bool-completer # If true, wait for changes to actually happen
-  --ordering: string # define ordering guarantees for the operation
+  --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   --points: list
   --shard-key: any
@@ -1660,7 +1663,7 @@ export def "collections-points-batch update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --wait: string@bool-completer # If true, wait for changes to actually happen
-  --ordering: string # define ordering guarantees for the operation
+  --ordering: string@ordering-completer # define ordering guarantees for the operation
   --timeout: int # Timeout for the operation
   operations: list
 ]: any -> record<usage: any, time: float, status: string, result: table<operation_id: int, status: string>> {

@@ -19,17 +19,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -1378,14 +1379,14 @@ export def "occurrence-download-user listOccurrenceDownloadsByUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --page: string
+  --page: record
   --status: list
   --qp-from: string # format: date-time
   --statistics: string@bool-completer # default: true
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: string, doi: string, license: string, request: record, created: string, modified: string, eraseAfter: string, erasureNotification: string, status: string, downloadLink: string, size: int, totalRecords: int, numberDatasets: int, numberOrganizations: int, numberPublishingCountries: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "status" $status "multi") (serialize-qp "from" $qp_from "scalar") (serialize-qp "statistics" $statistics "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "multi") (serialize-qp "status" $status "multi") (serialize-qp "from" $qp_from "scalar") (serialize-qp "statistics" $statistics "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/occurrence/download/user/($user)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1458,11 +1459,11 @@ export def "occurrence-download-countries listCountryUsagesByOccurrenceDownloadK
   --allow-errors(-e) # Return full response without error handling
   --sortBy: string@sortBy-completer
   --sortOrder: string@sortOrder-completer
-  --page: string
+  --page: record
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "page" $page "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/occurrence/download/($key)/countries" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1485,11 +1486,11 @@ export def "occurrence-download-datasets listDatasetUsagesByOccurrenceDownloadKe
   --datasetTitle: string
   --sortBy: string@sortBy-completer-1
   --sortOrder: string@sortOrder-completer
-  --page: string
+  --page: record
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<downloadKey: string, datasetKey: string, datasetTitle: string, datasetDOI: string, datasetCitation: string, numberRecords: int, download: record, publishingCountryCode: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "datasetTitle" $datasetTitle "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "datasetTitle" $datasetTitle "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "page" $page "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/occurrence/download/($key)/datasets" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1512,11 +1513,11 @@ export def "occurrence-download-organizations listOrganizationUsagesByOccurrence
   --organizationTitle: string
   --sortBy: string@sortBy-completer-2
   --sortOrder: string@sortOrder-completer
-  --page: string
+  --page: record
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "organizationTitle" $organizationTitle "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "organizationTitle" $organizationTitle "scalar") (serialize-qp "sortBy" $sortBy "scalar") (serialize-qp "sortOrder" $sortOrder "scalar") (serialize-qp "page" $page "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/occurrence/download/($key)/organizations" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1840,11 +1841,11 @@ export def "geocode-gadm-search gadmRegionSearch" [
   --q: string # Query for (sub)divisions matching a wildcard.
   --gadmLevel: string # Limit to subdivisions at this level. (e.g. 2)
   --gadmGid: string # Limit to subdivisions of this GADM region. (e.g. SLV.4_1)
-  --page: string
+  --page: record
 ]: nothing -> record<offset: int, limit: int, endOfRecords: bool, count: int, results: table<id: string, name: string, gadmLevel: int, variantName: list, nonLatinName: list, type: list, englishType: list, higherRegions: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "gadmLevel" $gadmLevel "scalar") (serialize-qp "gadmGid" $gadmGid "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "gadmLevel" $gadmLevel "scalar") (serialize-qp "gadmGid" $gadmGid "scalar") (serialize-qp "page" $page "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/geocode/gadm/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

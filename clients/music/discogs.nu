@@ -21,17 +21,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -67,6 +68,7 @@ def auth-scheme-completer [] { ["bearer" "oauth"] }
 
 # Completers for enum parameters
 def type-completer [] { ["artist" "label" "master" "release"] }
+def curr-abbr-completer [] { ["AUD" "BRL" "CAD" "CHF" "EUR" "GBP" "JPY" "MXN" "NZD" "SEK" "USD" "ZAR"] }
 def sort-completer [] { ["catno" "country" "format" "label" "released" "title"] }
 def sort-order-completer [] { ["asc" "desc"] }
 def sort-completer-1 [] { ["format" "title" "year"] }
@@ -75,7 +77,6 @@ def sleeve-condition-completer [] { ["Fair (F)" "Generic" "Good (G)" "Good Plus 
 def status-completer [] { ["Draft" "For Sale"] }
 def status-completer-1 [] { ["All" "Deleted" "Draft" "Expired" "For Sale" "Sold" "Suspended" "Violation"] }
 def sort-completer-2 [] { ["artist" "audio" "catno" "item" "label" "listed" "location" "price" "status"] }
-def curr-abbr-completer [] { ["AUD" "BRL" "CAD" "CHF" "EUR" "GBP" "JPY" "MXN" "NZD" "SEK" "USD" "ZAR"] }
 def sort-completer-3 [] { ["added" "artist" "catno" "format" "label" "rating" "title" "year"] }
 
 # List all available API commands with their parameters
@@ -156,7 +157,7 @@ export def "releases get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --curr-abbr: string # Currency for marketplace data.
+  --curr-abbr: string@curr-abbr-completer # Currency for marketplace data.
 ]: nothing -> record<id: int, title: string, resource_url: string, uri: string, status: string, data_quality: string, thumb: string, country: string, year: int, notes: string, released: string, released_formatted: string, date_added: string, date_changed: string, lowest_price: float, num_for_sale: int, estimated_weight: int, format_quantity: int, master_id: int, master_url: string, artists: table<id: int, name: string, resource_url: string, anv: string, join: string, role: string, tracks: string>, labels: table<id: int, name: string, resource_url: string, catno: string, entity_type: string>, extraartists: table<id: int, name: string, resource_url: string, anv: string, join: string, role: string, tracks: string>, formats: table<name: string, qty: string, text: string, descriptions: list>, genres: list<string>, styles: list<string>, community: record<have: int, want: int, rating: record<count: int, average: float>, submitter: record<id: int, username: string, resource_url: string>, contributors: list<record>, data_quality: string, status: string>, companies: table<id: int, name: string, resource_url: string, catno: string, entity_type: string>, tracklist: table<position: string, type_: string, title: string, duration: string, extraartists: list>, videos: table<uri: string, duration: int, title: string, description: string, embed: bool>, identifiers: table<type: string, value: string, description: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -329,7 +330,7 @@ export def "marketplace-listings get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --curr-abbr: string # Currency for marketplace data.
+  --curr-abbr: string@curr-abbr-completer # Currency for marketplace data.
 ]: nothing -> record<id: int, resource_url: string, uri: string, status: string, price: record<currency: string, value: float>, allow_offers: bool, sleeve_condition: string, condition: string, posted: string, ships_from: string, comments: string, seller: record<id: int, username: string, resource_url: string>, release: record<id: int, resource_url: string, description: string, thumbnail: string, artist: string, title: string, year: int, format: string, catalog_number: string>, audio: bool, weight: int, format_quantity: int, external_id: string, location: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

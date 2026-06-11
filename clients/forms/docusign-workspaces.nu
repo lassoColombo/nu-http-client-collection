@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -66,6 +67,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def status-completer [] { ["complete" "draft" "in_progress" "overdue" "unknown"] }
+def sort-completer [] { ["email_asc" "email_desc" "first_name_asc" "first_name_desc" "last_name_asc" "last_name_desc"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -154,8 +156,8 @@ export def "accounts-workspaces-documents list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --count: string # Number of documents to return. Defaults to the maximum which is 100
-  --start-position: string # Position of the first item in the total results. Defaults to 0
+  --count: int # Number of documents to return. Defaults to the maximum which is 100 (format: int32)
+  --start-position: int # Position of the first item in the total results. Defaults to 0 (format: int32)
   --name-filter: string # Filter documents where Name contains the filter. Defaults to null, to not filter
 ]: nothing -> record<documents: table<document_id: string, name: string, owner_id: string, size: int, created_date: string, last_updated_date: string, owner: record>, result_set_size: int, start_position: int, end_position: int, total_row_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -481,10 +483,10 @@ export def "accounts-workspaces-users get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --count: string # Number of workspace users to return. Defaults to the maximum which is 100.
-  --start-position: string # Position of the first item in the total results. Defaults to 0.
+  --count: int # Number of workspace users to return. Defaults to the maximum which is 100. (format: int32)
+  --start-position: int # Position of the first item in the total results. Defaults to 0. (format: int32)
   --filter: string # Returns workspace users filtered by Name and Email
-  --qp-sort: string # Sorts results. Options are `first_name_asc`, `first_name_desc`, `last_name_asc`, `last_name_desc`, `email_asc`, `email_desc`. Defaults to `last_name_desc`
+  --qp-sort: string@sort-completer # Sorts results. Options are `first_name_asc`, `first_name_desc`, `last_name_asc`, `last_name_desc`, `email_asc`, `email_desc`. Defaults to `last_name_desc`
 ]: nothing -> record<users: table<user_id: string, email: string, first_name: string, last_name: string, role_id: string, role_name: string>, result_set_size: int, start_position: int, end_position: int, total_row_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -618,8 +620,8 @@ export def "accounts-workspaces list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --count: string # Number of workspaces to return. Defaults to the maximum which is 100
-  --start-position: string # Position of the first item in the total results. Defaults to 0
+  --count: int # Number of workspaces to return. Defaults to the maximum which is 100 (format: int32)
+  --start-position: int # Position of the first item in the total results. Defaults to 0 (format: int32)
 ]: nothing -> record<workspaces: table<workspace_id: string, name: string, created_date: string, created_by_user_id: string>, result_set_size: int, start_position: int, end_position: int, total_row_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -722,8 +724,8 @@ export def "accounts-workspaces-assignable-roles get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --filter: string # A search filter that returns assignable roles by the beginning of the role name
-  --start-position: string # The index position within the total result set from which to start returning values. The default value is 0
-  --count: string # The number of results to return. This value must be a number between 1 and 100 (default)
+  --start-position: int # The index position within the total result set from which to start returning values. The default value is 0 (format: int32)
+  --count: int # The number of results to return. This value must be a number between 1 and 100 (default) (format: int32)
 ]: nothing -> record<roles: table<role_id: string, name: string, is_external: bool, created_date: string>, result_set_size: int, start_position: int, end_position: int, total_row_count: int, current_role_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

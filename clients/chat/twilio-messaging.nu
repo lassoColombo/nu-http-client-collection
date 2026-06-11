@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -68,6 +69,7 @@ def auth-scheme-completer [] { ["basic"] }
 def FallbackMethod-completer [] { ["DELETE" "GET" "HEAD" "PATCH" "POST" "PUT"] }
 def InboundMethod-completer [] { ["DELETE" "GET" "HEAD" "PATCH" "POST" "PUT"] }
 def ScanMessageContent-completer [] { ["disable" "enable" "inherit"] }
+def Status-completer [] { ["IN_REVIEW" "PENDING_REVIEW" "TWILIO_APPROVED" "TWILIO_REJECTED"] }
 def OptInType-completer [] { ["MOBILE_QR_CODE" "PAPER_FORM" "VERBAL" "VIA_TEXT" "WEB_FORM"] }
 def VettingProvider-completer [] { ["campaign-verify"] }
 
@@ -909,7 +911,7 @@ export def "tollfree-verifications ListTollfreeVerification" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --TollfreePhoneNumberSid: string # The SID of the Phone Number associated with the Tollfree Verification.
-  --Status: string # The compliance status of the Tollfree Verification record.
+  --Status: string@Status-completer # The compliance status of the Tollfree Verification record.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -1119,7 +1121,7 @@ export def "a2p-brand-registrations-vettings ListBrandVetting" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --VettingProvider: string # The third-party provider of the vettings to read
+  --VettingProvider: string@VettingProvider-completer # The third-party provider of the vettings to read
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.

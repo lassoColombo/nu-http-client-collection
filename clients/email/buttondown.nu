@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -67,15 +68,21 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def trigger-completer [] { ["advertising_slot.inquiry" "advertising_slot.purchased" "automation.invoked" "bigcommerce.customer.created" "bigcommerce.customer.updated" "bigcommerce.order.created" "bigcommerce.order.updated" "date.day.started" "date.month.started" "date.week.started" "date.year.started" "email.created" "email.deleted" "email.sent" "email.status.changed" "email.updated" "export.completed" "export.created" "export.failed" "external_feed_item.created" "firewall.blocked" "form.created" "form.deleted" "form.updated" "memberful.member.updated" "memberful.subscription.created" "memberful.subscription.deleted" "mention.created" "note.created" "note.deleted" "patreon.member.updated" "patreon.membership.created" "patreon.membership.deleted" "shopify.customer.created" "shopify.customer.updated" "social_mention.created" "stripe.checkout.session.completed" "stripe.customer.updated" "stripe.subscription.activated" "stripe.subscription.churning" "stripe.subscription.deactivated" "subscriber.bounced" "subscriber.changed_email" "subscriber.churned" "subscriber.clicked" "subscriber.commented" "subscriber.complained" "subscriber.confirmed" "subscriber.created" "subscriber.deleted" "subscriber.delivered" "subscriber.opened" "subscriber.paid" "subscriber.paused" "subscriber.referred" "subscriber.referred.paid" "subscriber.rejected" "subscriber.replied" "subscriber.responded_to_survey" "subscriber.resumed" "subscriber.tags.changed" "subscriber.trial_ended" "subscriber.trial_started" "subscriber.type.changed" "subscriber.unsubscribed" "subscriber.updated" "subscriber.viewed_checkout_page" "survey.cleared_responses" "survey.created" "survey.deleted" "survey.updated"] }
 def type-completer [] { ["add_notes" "apply_metadata" "apply_tags" "ban_subscribers" "cancel_stripe_subscriptions" "change_tags_colors" "delete_attachments" "delete_comments" "delete_emails" "delete_images" "delete_inbox_items" "delete_subscribers" "delete_survey_responses" "delete_surveys" "delete_tags" "gift_subscribers" "mark_comments_as_active" "mark_comments_as_spammy" "mark_inbox_items_read" "mark_subscribers_as_not_spammy" "modify_stripe_subscriptions" "pause_stripe_subscriptions" "reactivate_subscribers" "rename_metadata" "replay_events" "resubscribe_subscribers" "send_emails" "send_reminders" "unban_subscribers" "ungift_subscribers" "unsubscribe_subscribers" "update_archival_modes" "update_commenting_modes" "update_email_types" "update_survey_statuses"] }
-def status-completer [] { ["active" "spammy"] }
+def status-completer [] { ["active" "pending" "spammy"] }
+def status-completer-1 [] { ["active" "spammy"] }
 def ordering-completer [] { ["-creation_date" "creation_date"] }
 def target-completer [] { ["email" "html"] }
+def event-type-completer [] { ["activation_bounced" "activation_clicked" "activation_complained" "activation_deferred" "activation_delivered" "activation_opened" "activation_rejected" "activation_reminder_bounced" "activation_reminder_clicked" "activation_reminder_complained" "activation_reminder_deferred" "activation_reminder_delivered" "activation_reminder_opened" "activation_reminder_rejected" "attempted" "bounced" "clicked" "complained" "deferred" "delivered" "opened" "rejected" "replied" "sent" "subscription_confirmed_bounced" "subscription_confirmed_clicked" "subscription_confirmed_complained" "subscription_confirmed_deferred" "subscription_confirmed_delivered" "subscription_confirmed_opened" "subscription_confirmed_rejected" "unsubscribed"] }
 def behavior-completer [] { ["draft" "emails"] }
 def cadence-completer [] { ["daily" "every" "monthly" "weekly"] }
 def announcement-bar-visibility-completer [] { ["disabled" "everyone" "free_only" "logged_out_only" "paid_only"] }
 def model-type-completer [] { ["automation" "comment" "conversation" "email" "external_feed" "invitation" "socialmention" "stripe_customer" "subscriber" "survey" "tag" "webmention"] }
 def cadence-completer-1 [] { ["email" "month" "one-time" "week" "year"] }
 def style-completer [] { ["fixed" "pay-what-you-want" "usage-based"] }
+def X-Buttondown-Collision-Behavior-completer [] { ["add" "fail" "no_op" "overwrite"] }
+def status-completer-2 [] { ["disabled" "enabled"] }
+def status-completer-3 [] { ["failed" "successful" "unattempted"] }
+def event-type-completer-1 [] { ["advertising_slot.inquiry" "advertising_slot.purchased" "automation.invoked" "bigcommerce.customer.created" "bigcommerce.customer.updated" "bigcommerce.order.created" "bigcommerce.order.updated" "date.day.started" "date.month.started" "date.week.started" "date.year.started" "email.created" "email.deleted" "email.sent" "email.status.changed" "email.updated" "export.completed" "export.created" "export.failed" "external_feed_item.created" "firewall.blocked" "form.created" "form.deleted" "form.updated" "memberful.member.updated" "memberful.subscription.created" "memberful.subscription.deleted" "mention.created" "note.created" "note.deleted" "patreon.member.updated" "patreon.membership.created" "patreon.membership.deleted" "shopify.customer.created" "shopify.customer.updated" "social_mention.created" "stripe.checkout.session.completed" "stripe.customer.updated" "stripe.subscription.activated" "stripe.subscription.churning" "stripe.subscription.deactivated" "subscriber.bounced" "subscriber.changed_email" "subscriber.churned" "subscriber.clicked" "subscriber.commented" "subscriber.complained" "subscriber.confirmed" "subscriber.created" "subscriber.deleted" "subscriber.delivered" "subscriber.opened" "subscriber.paid" "subscriber.paused" "subscriber.referred" "subscriber.referred.paid" "subscriber.rejected" "subscriber.replied" "subscriber.responded_to_survey" "subscriber.resumed" "subscriber.tags.changed" "subscriber.trial_ended" "subscriber.trial_started" "subscriber.type.changed" "subscriber.unsubscribed" "subscriber.updated" "subscriber.viewed_checkout_page" "survey.cleared_responses" "survey.created" "survey.deleted" "survey.updated"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -839,7 +846,7 @@ export def "comments comments" [
   --parent-id: string # If provided, only return comments that are replies to the given parent comment. (e.g. [com_01h8xg4j3k2m1n0p9q8r7s6t5v])
   --expand: list # If provided, expand the given field. (Only supported fields: 'subscriber', 'email').
   --ordering: string # The ordering to apply to the results. (default: -creation_date, e.g. -creation_date)
-  --status: string # If provided, only return comments with the given status. Only the newsletter owner can filter by status; subscribers always see active comments.
+  --status: string@status-completer # If provided, only return comments with the given status. Only the newsletter owner can filter by status; subscribers always see active comments.
   --page: int # The page number of the paginated response. (default: 1, e.g. 1)
 ]: nothing -> record<results: table<id: string, creation_date: string, email_id: string, subscriber_id: any, parent_id: any, text: string, status: string, subscriber: any, email: any>, next: any, previous: any, count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -886,7 +893,7 @@ export def "comments comment-by-id-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  status: string@status-completer # The new status for the comment. Use 'active' to approve or 'spammy' to mark as spam.
+  status: string@status-completer-1 # The new status for the comment. Use 'active' to approve or 'spammy' to mark as spam.
 ]: any -> record<id: string, creation_date: string, email_id: string, subscriber_id: any, parent_id: any, text: string, status: string, subscriber: any, email: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1261,7 +1268,7 @@ export def "events events" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --event-type: string # If provided, only return events of the given type (e.g. `delivered`, `opened`, `clicked`).
+  --event-type: string@event-type-completer # If provided, only return events of the given type (e.g. `delivered`, `opened`, `clicked`).
   --ordering: string # The ordering to apply to the results. (default: -creation_date)
   --expand: list # If provided, expand the given field. (Only supported field: 'subscriber').
   --email-id: string # If provided, only return events for the given email.
@@ -2413,7 +2420,7 @@ export def "subscribers subscriber" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Buttondown-Collision-Behavior: string # The behavior to apply when a subscriber with the same email address already exists. Defaults to "no_op", which will return a 400 error if a subscriber with the same email address already exists. Other values include:  - "overwrite", which will overwrite the existing subscriber's data with the new one. - "add", which will add the new subscriber data to the existing one.         
+  --X-Buttondown-Collision-Behavior: string@X-Buttondown-Collision-Behavior-completer # The behavior to apply when a subscriber with the same email address already exists. Defaults to "no_op", which will return a 400 error if a subscriber with the same email address already exists. Other values include:  - "overwrite", which will overwrite the existing subscriber's data with the new one. - "add", which will add the new subscriber data to the existing one.         
   --X-Buttondown-Bypass-Firewall: string@bool-completer # Bypass the firewall for this subscriber creation. Subject to aggressive rate limiting (5 per hour per newsletter).
   email_address: string # The email address of the subscriber. (format: email, e.g. telemachus@buttondown.email)
   --notes: string # Any notes you want to attach to the subscriber. These are not publicly visible. (default: , e.g. One of our first subscribers!)
@@ -3260,7 +3267,7 @@ export def "webhooks webhook" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --status: any # Whether the webhook is enabled or not. (default: enabled, e.g. [enabled])
-  event_types: list # The types of event for which the webhook will be triggered. (e.g. [email.created, email.sent])
+  event_types: list # The types of event for which the webhook will be triggered. (e.g. [[email.created, email.sent]])
   --body-url: string # The URL to which the webhook will send POST requests. (format: uri, e.g. [https://my.api/webhook])
   --description: string # An optional description of the webhook, for reference. (default: , e.g. [Trigger when an email is created to notify in Slack.])
   --signing-key: string # Optional HMAC signing key for webhook verification. When set, webhook requests will include an X-Buttondown-Signature header with sha256=<signature>. (default: , e.g. [])
@@ -3288,7 +3295,7 @@ export def "webhooks webhooks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string # If provided, only return webhooks with the given status.
+  --status: string@status-completer-2 # If provided, only return webhooks with the given status.
   --page: int # The page number of the paginated response. (default: 1, e.g. 1)
 ]: nothing -> record<results: table<id: string, creation_date: string, status: string, event_types: list, url: string, description: string, signing_key: string>, next: any, previous: any, count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3336,7 +3343,7 @@ export def "webhooks webhook-by-id-1" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --status: any # Whether the webhook is enabled or not. (default: enabled, e.g. [enabled])
-  event_types: list # The types of event for which the webhook will be triggered. (e.g. [email.created, email.sent])
+  event_types: list # The types of event for which the webhook will be triggered. (e.g. [[email.created, email.sent]])
   --body-url: string # The URL to which the webhook will send POST requests. (format: uri, e.g. [https://my.api/webhook])
   --description: string # An optional description of the webhook, for reference. (default: , e.g. [Trigger when an email is created to notify in Slack.])
   --signing-key: string # Optional HMAC signing key for webhook verification. When set, webhook requests will include an X-Buttondown-Signature header with sha256=<signature>. (default: , e.g. [])
@@ -3387,7 +3394,7 @@ export def "webhooks-attempts attempts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string # If provided, only return webhook attempts with the given status.
+  --status: string@status-completer-3 # If provided, only return webhook attempts with the given status.
   --page: int # The page number of the paginated response. (default: 1, e.g. 1)
 ]: nothing -> record<results: table<id: string, creation_date: string, status: string, event_type: any, error_message: any, attempt_count: int, completion_date: any, duration_ms: any>, next: any, previous: any, count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3412,7 +3419,7 @@ export def "webhooks-test webhook" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --event-type: string # The event type to send. Defaults to the webhook's first configured event type.
+  --event-type: string@event-type-completer-1 # The event type to send. Defaults to the webhook's first configured event type.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

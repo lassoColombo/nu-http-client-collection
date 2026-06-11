@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -65,16 +66,19 @@ def base-url-completer [] { ["https://api.pandadoc.com"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def order-by-completer [] { ["-date_completed" "-date_created" "-date_declined" "-date_expiration" "-date_modified" "-date_of_last_action" "-date_sent" "-date_status_changed" "-name" "-status" "date_completed" "date_created" "date_declined" "date_expiration" "date_modified" "date_of_last_action" "date_sent" "date_status_changed" "name" "status"] }
+def status-completer [] { ["0" "1" "10" "11" "12" "13" "2" "3" "4" "5" "6" "7" "8" "9"] }
+def status-ne-completer [] { ["0" "1" "10" "11" "12" "13" "2" "3" "4" "5" "6" "7" "8" "9"] }
 def delivery-method-completer [] { ["email" "sms"] }
-def status-completer [] { ["10" "11" "12" "2"] }
+def status-completer-1 [] { ["10" "11" "12" "2"] }
 def language-completer [] { ["bg-BG" "cs-CZ" "da-DK" "de-DE" "el-GR" "en-US" "es-ES" "fr-FR" "hu-HU" "it-IT" "nb-NO" "nl-NL" "pl-PL" "pt-BR" "pt-PT" "ro-RO" "sv-SE"] }
 def kind-completer [] { ["contact" "contact_group"] }
 def merge-field-scope-completer [] { ["document" "upload"] }
-def order-by-completer [] { ["created_date" "modified_date" "name" "responses" "status"] }
+def order-by-completer-1 [] { ["created_date" "modified_date" "name" "responses" "status"] }
 def environment-type-completer [] { ["PRODUCTION" "SANDBOX"] }
-def order-by-completer-1 [] { ["-email" "-name" "-status" "email" "name" "status"] }
-def order-by-completer-2 [] { ["-date_completed" "-date_created" "-status" "date_completed" "date_created" "status"] }
-def order-by-completer-3 [] { ["-date_modified" "-price" "-sku" "-title" "date_modified" "price" "sku" "title"] }
+def order-by-completer-2 [] { ["-email" "-name" "-status" "email" "name" "status"] }
+def order-by-completer-3 [] { ["-date_completed" "-date_created" "-status" "date_completed" "date_created" "status"] }
+def order-by-completer-4 [] { ["-date_modified" "-price" "-sku" "-title" "date_modified" "price" "sku" "title"] }
 def type-completer [] { ["bundle" "regular"] }
 def license-completer [] { ["Creator" "Full" "Guest" "Read-only" "eSign"] }
 def role-completer [] { ["Admin" "Collaborator" "Manager" "Member"] }
@@ -153,7 +157,7 @@ export def "public-documents listDocuments" [
   --contact-id: string # Filters by recipient or approver with this 'contact_id'. (e.g. 9FeAY2NB3C9qDdtQRb4tTL)
   --count: int # Limits the size of the response. Default is 50 documents, maximum is 100 documents. (e.g. 50)
   --page: int # Paginates the search result. Increase value to get the next page of results. (e.g. 1)
-  --order-by: string # Defines the sorting of the result. Use `date_created` for ASC and `-date_created` for DESC sorting.
+  --order-by: string@order-by-completer # Defines the sorting of the result. Use `date_created` for ASC and `-date_created` for DESC sorting. (default: date_status_changed)
   --created-from: string # Limits results to the documents with the `date_created` greater than or equal to this value. (format: datetime, e.g. 2024-10-27T15:22:23.132757Z)
   --created-to: string # Limits results to the documents with the `date_created` less than this value. (format: datetime, e.g. 2024-10-27T15:22:23.132757Z)
   --deleted: string@bool-completer # Returns only the deleted documents. (e.g. false)
@@ -165,8 +169,8 @@ export def "public-documents listDocuments" [
   --modified-from: string # Limits results to the documents with the `date_modified` greater than or equal to this value. (format: datetime, e.g. 2024-10-27T15:22:23.132757Z)
   --modified-to: string # Limits results to the documents with the `date_modified` less than this value. (format: datetime, e.g. 2024-10-27T15:22:23.132757Z)
   --q: string # Filters documents by name or reference number (stored on the template level). (e.g. Sample Document)
-  --status: string # Filters documents by the status.   * 0: document.draft   * 1: document.sent   * 2: document.completed   * 3: document.uploaded   * 4: document.error   * 5: document.viewed   * 6: document.waiting_approval   * 7: document.approved   * 8: document.rejected   * 9: document.waiting_pay   * 10: document.paid   * 11: document.voided   * 12: document.declined   * 13: document.external_review  (e.g. 5)
-  --status-ne: string # Exludes documents with this status.   * 0: document.draft   * 1: document.sent   * 2: document.completed   * 3: document.uploaded   * 4: document.error   * 5: document.viewed   * 6: document.waiting_approval   * 7: document.approved   * 8: document.rejected   * 9: document.waiting_pay   * 10: document.paid   * 11: document.voided   * 12: document.declined   * 13: document.external_review  (e.g. 5)
+  --status: int@status-completer # Filters documents by the status.   * 0: document.draft   * 1: document.sent   * 2: document.completed   * 3: document.uploaded   * 4: document.error   * 5: document.viewed   * 6: document.waiting_approval   * 7: document.approved   * 8: document.rejected   * 9: document.waiting_pay   * 10: document.paid   * 11: document.voided   * 12: document.declined   * 13: document.external_review  (e.g. 12)
+  --status-ne: int@status-ne-completer # Exludes documents with this status.   * 0: document.draft   * 1: document.sent   * 2: document.completed   * 3: document.uploaded   * 4: document.error   * 5: document.viewed   * 6: document.waiting_approval   * 7: document.approved   * 8: document.rejected   * 9: document.waiting_pay   * 10: document.paid   * 11: document.voided   * 12: document.declined   * 13: document.external_review  (e.g. 12)
   --tag: string # Filters documents by tag. (e.g. tag_1)
 ]: nothing -> record<results: table<id: string, name: string, status: string, date_created: string, date_modified: string, date_completed: string, expiration_date: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -503,7 +507,7 @@ export def "public-documents-status changeDocumentStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  status: int@status-completer # Number code for the target document status. See notes for the codes corresponding to each status. (e.g. 12)
+  status: int@status-completer-1 # Number code for the target document status. See notes for the codes corresponding to each status. (e.g. 12)
   --note: string # Provide “private notes” regarding the manual status change. (e.g. A private note)
   --notify-recipients: string@bool-completer # Send a notification email about the status change to all recipients.
 ]: any -> any {
@@ -1952,7 +1956,7 @@ export def "public-forms listForm" [
   --count: int # Specify how many forms to return. Default is 50 forms, maximum is 100 forms. (format: int32, e.g. 10)
   --page: int # Specify which page of the dataset to return. (format: int32, e.g. 1)
   --status: list # Specify which status of the forms dataset to return. (e.g. [draft, active])
-  --order-by: string@order-by-completer # Specify the form dataset order to return. (e.g. name)
+  --order-by: string@order-by-completer-1 # Specify the form dataset order to return. (e.g. name)
   --asc: string@bool-completer # Specify sorting the result-set in ascending or descending order. (e.g. true)
   --name: string # Specify the form name. (e.g. New Form)
 ]: nothing -> record<results: table<id: string, name: string, date_created: string, date_modified: string, status: string>, has_next_page: bool> {
@@ -2666,7 +2670,7 @@ export def "public-notary-notaries listNotaries" [
   --commission-state: list # Filter by commission state (comma-separated values supported) (e.g. [California, Arizona])
   --offset: int # Number of results to skip (default: 0, e.g. 0)
   --limit: int # Maximum number of results to return (default: 50, e.g. 50)
-  --order-by: string@order-by-completer-1 # Sort by name, email, or status (default is email). Use a - prefix for descending order (e.g., -email) (default: email, e.g. email)
+  --order-by: string@order-by-completer-2 # Sort by name, email, or status (default is email). Use a - prefix for descending order (e.g., -email) (default: email, e.g. email)
 ]: nothing -> record<results: table<id: string, email: string, name: string, status: string, commission_state: string>, count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2694,7 +2698,7 @@ export def "public-notary-notarization-requests listNotarizationRequests" [
   --document-id: list # Filter by document ID (comma-separated values supported). (e.g. [D3okRfgHRX7NEhavcACReB])
   --offset: int # Number of results to skip. (default: 0, e.g. 0)
   --limit: int # Maximum number of results to return. (default: 50, e.g. 50)
-  --order-by: string@order-by-completer-2 # Sort field. Use a `-` prefix for descending order (e.g., `-date_created`). When omitted, results are sorted by `date_created` ascending (oldest first).  (default: date_created, e.g. -date_created)
+  --order-by: string@order-by-completer-3 # Sort field. Use a `-` prefix for descending order (e.g., `-date_created`). When omitted, results are sorted by `date_created` ascending (oldest first).  (default: date_created, e.g. -date_created)
 ]: nothing -> record<results: table<id: string, status: string, name: string, document_id: string, date_created: string, date_started: string, date_completed: string, created_by_user_id: string>, count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2794,7 +2798,7 @@ export def "public-product-catalog-items-search searchCatalogItems" [
   --page: float # Page number. (e.g. 1)
   --per-page: float # Items per page. (e.g. 10)
   --qp-query: string # Search query. Searches the following fields: Title, SKU, description, category name, custom fields name and value.  (e.g. coffee)
-  --order-by: string@order-by-completer-3 # Ordering principle for displaying search results. (e.g. -date_modified)
+  --order-by: string@order-by-completer-4 # Ordering principle for displaying search results. (e.g. -date_modified)
   --types: list # Filter by catalog item types. (e.g. [regular])
   --billing-types: list # Filter by billing types. (e.g. [one_time])
   --exclude-uuids: list # A list of item uuids to be excluded from search. (e.g. [1725f759-3a1c-64e3-2daa-f67eafa589d7, 06cb0ce9-094b-1f38-2fe6-0a9d226cd22c])

@@ -21,17 +21,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -83,7 +84,7 @@ def groupStatsPeriod-completer [] { ["" "14d" "24h" "auto"] }
 def shortIdLookup-completer [] { ["0" "1"] }
 def sort-completer [] { ["date" "freq" "inbox" "new" "recommended" "trends" "user"] }
 def status-completer [] { ["ignored" "muted" "resolved" "resolvedInNextRelease" "unresolved"] }
-def substatus-completer [] { ["archived_forever" "archived_until_condition_met" "archived_until_escalating" "escalating" "new" "ongoing" "regressed"] }
+def substatus-completer [] { ["" "archived_forever" "archived_until_condition_met" "archived_until_escalating" "escalating" "new" "ongoing" "regressed"] }
 def priority-completer [] { ["high" "low" "medium"] }
 def orgRole-completer [] { ["admin" "billing" "manager" "member" "owner"] }
 def teamRole-completer [] { ["admin" "contributor"] }
@@ -299,7 +300,7 @@ export def "0-organizations-dashboards listOrganizationDashboards" [
 #
 # POST /api/0/organizations/{organization_id_or_slug}/dashboards/
 # operationId: createOrganizationDashboard
-# --widgets item shape: {id?: string, title?: string, description?: string, thresholds?: record, display_type?: "line"|"area"|"bar"|"table"|"big_number"|"details"|"categorical_bar"|"wheel"|"rage_and_dead_clicks"|"server_tree"|"text"|"agents_traces_table", interval?: string, queries?: list, widget_type?: "discover"|"issue"|"metrics"|"error-events"|"transaction-like"|"spans"|"logs"|"tracemetrics"|"preprod-app-size", limit?: int, layout?: any, axis_range?: "auto"|"dataMin", legend_type?: "default"|"breakdown"}
+# --widgets item shape: {id?: string, title?: string, description?: string, thresholds?: record, display_type?: "line"|"area"|"bar"|"table"|"big_number"|"details"|"categorical_bar"|"wheel"|"rage_and_dead_clicks"|"server_tree"|"text"|"agents_traces_table", interval?: string, queries?: list, widget_type?: "discover"|"issue"|"metrics"|"error-events"|"transaction-like"|"spans"|"logs"|"tracemetrics"|"preprod-app-size"|"", limit?: int, layout?: any, axis_range?: "auto"|"dataMin"|"", legend_type?: "default"|"breakdown"|""}
 export def "0-organizations-dashboards createOrganizationDashboard" [
   organization_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -311,7 +312,7 @@ export def "0-organizations-dashboards createOrganizationDashboard" [
   --allow-errors(-e) # Return full response without error handling
   title: string # The user defined title for this dashboard.
   --id: string # A dashboard's unique id.
-  --widgets: list # A json list of widgets saved in this dashboard. — item shape: {id?: string, title?: string, description?: string, thresholds?: record, display_type?: "line"|"area"|"bar"|"table"|"big_number"|"details"|"categorical_bar"|"wheel"|"rage_and_dead_clicks"|"server_tree"|"text"|"agents_traces_table", interval?: string, queries?: list, widget_type?: "discover"|"issue"|"metrics"|"error-events"|"transaction-like"|"spans"|"logs"|"tracemetrics"|"preprod-app-size", limit?: int, layout?: any, axis_range?: "auto"|"dataMin", legend_type?: "default"|"breakdown"}
+  --widgets: list # A json list of widgets saved in this dashboard. — item shape: {id?: string, title?: string, description?: string, thresholds?: record, display_type?: "line"|"area"|"bar"|"table"|"big_number"|"details"|"categorical_bar"|"wheel"|"rage_and_dead_clicks"|"server_tree"|"text"|"agents_traces_table", interval?: string, queries?: list, widget_type?: "discover"|"issue"|"metrics"|"error-events"|"transaction-like"|"spans"|"logs"|"tracemetrics"|"preprod-app-size"|"", limit?: int, layout?: any, axis_range?: "auto"|"dataMin"|"", legend_type?: "default"|"breakdown"|""}
   --projects: list # The saved projects filter for this dashboard.
   --environment: list # The saved environment filter for this dashboard. (nullable)
   --period: string # The saved time range period for this dashboard. (nullable)
@@ -360,7 +361,7 @@ export def "0-organizations-dashboards get" [
 #
 # PUT /api/0/organizations/{organization_id_or_slug}/dashboards/{dashboard_id}/
 # operationId: updateOrganizationDashboard
-# --widgets item shape: {id?: string, title?: string, description?: string, thresholds?: record, display_type?: "line"|"area"|"bar"|"table"|"big_number"|"details"|"categorical_bar"|"wheel"|"rage_and_dead_clicks"|"server_tree"|"text"|"agents_traces_table", interval?: string, queries?: list, widget_type?: "discover"|"issue"|"metrics"|"error-events"|"transaction-like"|"spans"|"logs"|"tracemetrics"|"preprod-app-size", limit?: int, layout?: any, axis_range?: "auto"|"dataMin", legend_type?: "default"|"breakdown"}
+# --widgets item shape: {id?: string, title?: string, description?: string, thresholds?: record, display_type?: "line"|"area"|"bar"|"table"|"big_number"|"details"|"categorical_bar"|"wheel"|"rage_and_dead_clicks"|"server_tree"|"text"|"agents_traces_table", interval?: string, queries?: list, widget_type?: "discover"|"issue"|"metrics"|"error-events"|"transaction-like"|"spans"|"logs"|"tracemetrics"|"preprod-app-size"|"", limit?: int, layout?: any, axis_range?: "auto"|"dataMin"|"", legend_type?: "default"|"breakdown"|""}
 export def "0-organizations-dashboards updateOrganizationDashboard" [
   organization_id_or_slug: string
   dashboard_id: int
@@ -373,7 +374,7 @@ export def "0-organizations-dashboards updateOrganizationDashboard" [
   --allow-errors(-e) # Return full response without error handling
   --id: string # A dashboard's unique id.
   --title: string # The user-defined dashboard title.
-  --widgets: list # A json list of widgets saved in this dashboard. — item shape: {id?: string, title?: string, description?: string, thresholds?: record, display_type?: "line"|"area"|"bar"|"table"|"big_number"|"details"|"categorical_bar"|"wheel"|"rage_and_dead_clicks"|"server_tree"|"text"|"agents_traces_table", interval?: string, queries?: list, widget_type?: "discover"|"issue"|"metrics"|"error-events"|"transaction-like"|"spans"|"logs"|"tracemetrics"|"preprod-app-size", limit?: int, layout?: any, axis_range?: "auto"|"dataMin", legend_type?: "default"|"breakdown"}
+  --widgets: list # A json list of widgets saved in this dashboard. — item shape: {id?: string, title?: string, description?: string, thresholds?: record, display_type?: "line"|"area"|"bar"|"table"|"big_number"|"details"|"categorical_bar"|"wheel"|"rage_and_dead_clicks"|"server_tree"|"text"|"agents_traces_table", interval?: string, queries?: list, widget_type?: "discover"|"issue"|"metrics"|"error-events"|"transaction-like"|"spans"|"logs"|"tracemetrics"|"preprod-app-size"|"", limit?: int, layout?: any, axis_range?: "auto"|"dataMin"|"", legend_type?: "default"|"breakdown"|""}
   --projects: list # The saved projects filter for this dashboard.
   --environment: list # The saved environment filter for this dashboard. (nullable)
   --period: string # The saved time range period for this dashboard. (nullable)

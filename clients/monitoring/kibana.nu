@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -71,19 +72,26 @@ def sort-order-completer [] { ["asc" "desc"] }
 def execution-mode-completer [] { ["local" "task_manager"] }
 def action-completer [] { ["regenerate"] }
 def type-completer [] { ["esql" "index_search" "mcp" "workflow"] }
-def notify-when-completer [] { ["onActionGroupChange" "onActiveAlert" "onThrottleInterval"] }
+def notify-when-completer [] { ["" "onActionGroupChange" "onActiveAlert" "onThrottleInterval"] }
 def mode-completer [] { ["build" "execute"] }
 def default-search-operator-completer [] { ["AND" "OR"] }
 def initiator-completer [] { ["system" "user"] }
 def sort-field-completer-1 [] { ["createdAt" "start"] }
 def elastic-api-version-completer [] { ["2023-10-31"] }
+def id-field-completer [] { ["entity.id" "host.name" "service.name" "user.name"] }
 def refresh-completer [] { ["wait_for"] }
 def sort-field-completer-2 [] { ["@timestamp" "criticality_level" "id_field" "id_value"] }
 def sort-direction-completer [] { ["asc" "desc"] }
+def sort-field-completer-3 [] { ["@timestamp"] }
 def subAction-completer [] { ["invokeAI" "invokeStream"] }
 def action-completer-1 [] { ["delete"] }
+def sort-field-completer-4 [] { ["createdAt" "created_at" "enabled" "execution_summary.last_execution.date" "execution_summary.last_execution.metrics.execution_gap_duration_s" "execution_summary.last_execution.metrics.total_indexing_duration_ms" "execution_summary.last_execution.metrics.total_search_duration_ms" "execution_summary.last_execution.status" "name" "riskScore" "risk_score" "severity" "updatedAt" "updated_at"] }
 def type-completer-1 [] { ["simple"] }
+def agentTypes-completer [] { ["crowdstrike" "endpoint" "microsoft_defender_endpoint" "sentinel_one"] }
 def agent-type-completer [] { ["crowdstrike" "endpoint" "microsoft_defender_endpoint" "sentinel_one"] }
+def sortField-completer [] { ["enrolled_at" "host_status" "last_checkin" "metadata.Endpoint.policy.applied.name" "metadata.Endpoint.policy.applied.status" "metadata.agent.version" "metadata.host.hostname" "metadata.host.ip" "metadata.host.os.name"] }
+def sortDirection-completer [] { ["asc" "desc"] }
+def sortField-completer-1 [] { ["createdAt" "createdBy" "fileSize" "name" "updatedAt" "updatedBy"] }
 def fileType-completer [] { ["archive" "script"] }
 def namespace-type-completer [] { ["agnostic" "single"] }
 def type-completer-2 [] { ["detection" "endpoint" "endpoint_blocklists" "endpoint_events" "endpoint_host_isolation_exceptions" "endpoint_trusted_apps" "endpoint_trusted_devices" "rule_default"] }
@@ -108,8 +116,13 @@ def required-acks-completer [] { ["-1" "0" "1"] }
 def type-completer-5 [] { ["elasticsearch"] }
 def type-completer-6 [] { ["binary" "boolean" "byte" "date" "date_nanos" "date_range" "double" "double_range" "float" "float_range" "geo_point" "geo_shape" "half_float" "integer" "integer_range" "ip" "ip_range" "keyword" "long" "long_range" "shape" "short" "text"] }
 def refresh-completer-1 [] { ["false" "true" "wait_for"] }
+def associatedFilter-completer [] { ["all" "document_and_saved_object" "document_only" "orphan" "saved_object_only"] }
 def schedule-type-completer [] { ["interval" "rrule"] }
+def sort-field-completer-5 [] { ["allowed" "anonymized" "created_at" "field" "updated_at"] }
 def category-completer [] { ["assistant" "insights"] }
+def sort-field-completer-6 [] { ["created_at" "title" "updated_at"] }
+def sort-field-completer-7 [] { ["created_at" "is_default" "title" "updated_at"] }
+def sort-field-completer-8 [] { ["created_at" "is_default" "name" "updated_at"] }
 def purpose-completer [] { ["any" "copySavedObjectsIntoSpace" "shareSavedObjectsIntoSpace"] }
 def status-completer [] { ["disabled" "enabled"] }
 def searchMode-completer [] { ["hybrid" "keyword" "semantic"] }
@@ -117,11 +130,12 @@ def status-completer-1 [] { ["active" "draft" "immutable"] }
 def timelineType-completer [] { ["default" "template"] }
 def isImmutable-completer [] { ["false" "true"] }
 def only-user-favorite-completer [] { ["false" "true"] }
+def timeline-type-completer [] { ["default" "template"] }
+def sort-field-completer-9 [] { ["created" "description" "title" "updated"] }
 def managed-completer [] { ["all" "managed" "unmanaged"] }
 def collapse-completer [] { ["concurrencyGroupKey" "executedBy" "status" "triggeredBy"] }
-def sortField-completer [] { ["createdAt" "finishedAt"] }
+def sortField-completer-2 [] { ["createdAt" "finishedAt"] }
 def sortBy-completer [] { ["error_budget_consumed" "error_budget_remaining" "sli_value" "status"] }
-def sortDirection-completer [] { ["asc" "desc"] }
 def budgetingMethod-completer [] { ["occurrences" "timeslices"] }
 
 # List all available API commands with their parameters
@@ -2338,7 +2352,7 @@ export def "asset-criticality DeleteAssetCriticalityRecord" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id-value: string # The ID value of the asset. (e.g. my_host)
-  --id-field: string # The field representing the ID. (e.g. host.name)
+  --id-field: string@id-field-completer # The field representing the ID. (e.g. host.name)
   --refresh: string@refresh-completer # If 'wait_for' the request will wait for the index refresh.
 ]: nothing -> record<deleted: bool, record: record<asset: record<criticality: string>, entity: record<asset: record, id: string>, host: record<asset: record, name: string>, service: record<asset: record, name: string>, user: record<asset: record, name: string>, _timestamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2363,7 +2377,7 @@ export def "asset-criticality GetAssetCriticalityRecord" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id-value: string # The ID value of the asset. (e.g. my_host)
-  --id-field: string # The field representing the ID. (e.g. host.name)
+  --id-field: string@id-field-completer # The field representing the ID. (e.g. host.name)
 ]: nothing -> record<asset: record<criticality: string>, entity: record<asset: record<criticality: string>, id: string>, host: record<asset: record<criticality: string>, name: string>, service: record<asset: record<criticality: string>, name: string>, user: record<asset: record<criticality: string>, name: string>, _timestamp: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2502,8 +2516,8 @@ export def "attack-discovery-find AttackDiscoveryFind" [
   --shared: string@bool-completer # Whether to filter by shared visibility. If omitted, both shared and privately visible Attack discoveries are returned. Use `true` to return only shared discoveries, `false` to return only those visible to the current user. Mutually exclusive with `include_all_authors`.
   --include-all-authors: string@bool-completer # If `true`, the response will include all attack discoveries matching other criteria regardless of who created them. Mutually exclusive with `shared`.
   --scheduled: string@bool-completer # Whether to filter by scheduled or ad-hoc attack discoveries. If omitted, both types of attack discoveries are returned. Use `true` to return only scheduled discoveries or `false` to return only ad-hoc discoveries.
-  --sort-field: string # Field used to sort results. See `AttackDiscoveryFindSortField` for allowed values. (default: @timestamp, e.g. @timestamp)
-  --sort-order: string # Sort order direction `asc` for ascending or `desc` for descending. Defaults to `desc`. (default: desc, e.g. desc)
+  --sort-field: string@sort-field-completer-3 # Field used to sort results. See `AttackDiscoveryFindSortField` for allowed values. (e.g. @timestamp)
+  --sort-order: string@sort-order-completer # Sort order direction `asc` for ascending or `desc` for descending. Defaults to `desc`. (e.g. asc)
   --start: string # Start of the time range for the search. Accepts absolute timestamps (ISO 8601) or relative date math (e.g. "now-7d"). (e.g. now-24h)
   --status: list # Filter by alert workflow status. Provide one or more of the allowed workflow states. (e.g. [open, acknowledged])
   --with-replacements: string@bool-completer # When true, return the created Attack discoveries with text replacements applied to the detailsMarkdown, entitySummaryMarkdown, summaryMarkdown, and title fields. Defaults to `true`. (default: true, e.g. true)
@@ -2746,7 +2760,7 @@ export def "attack-discovery-schedules-find FindAttackDiscoverySchedules" [
   --allow-errors(-e) # Return full response without error handling
   --page: float # Page number to return (used for pagination). Defaults to 1. (e.g. 1)
   --per-page: float # Number of Attack Discovery schedules to return per page (used for pagination). Defaults to 10. (e.g. 10)
-  --sort-field: string # Field used to sort results. Common fields include 'name', 'created_at', 'updated_at', and 'enabled'. (e.g. name)
+  --sort-field: string # Field used to sort results. Common fields include 'name', 'created_at', 'updated_at', and 'enabled'. (format: nonempty, e.g. I am a string)
   --sort-direction: string@sort-direction-completer # Sort order direction. Use 'asc' for ascending or 'desc' for descending. Defaults to 'asc'. (e.g. asc)
 ]: nothing -> record<data: table<actions: list, created_at: string, created_by: string, enabled: bool, id: string, last_execution: record, name: string, params: record, schedule: record, updated_at: string, updated_by: string>, page: float, per_page: float, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3426,7 +3440,7 @@ export def "detection-engine-rules DeleteRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --id: string # The rule's `id` value.
+  --id: string # The rule's `id` value. (format: uuid)
   --rule-id: string # The rule's `rule_id` value.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3451,7 +3465,7 @@ export def "detection-engine-rules ReadRule" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --id: string # The rule's `id` value.
+  --id: string # The rule's `id` value. (format: uuid)
   --rule-id: string # The rule's `rule_id` value.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -3621,8 +3635,8 @@ export def "detection-engine-rules-find FindRules" [
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: list # List of `alert.attributes` field names to return for each rule (for example `name`, `enabled`). If omitted, the default field set is returned. Repeat the parameter to pass multiple field names, or use comma-separated values when supported by your client.
   --filter: string # Search query  Filters the returned results according to the value of the specified field, using the alert.attributes.<field name>:<field value> syntax, where <field name> can be: - name - enabled - tags - createdBy - interval - updatedBy > info > Even though the JSON rule object uses created_by and updated_by fields, you must use createdBy and updatedBy fields in the filter.
-  --sort-field: string # Field to sort by
-  --sort-order: string # Sort order
+  --sort-field: string@sort-field-completer-4 # Field to sort by
+  --sort-order: string@sort-order-completer # Sort order
   --page: int # Page number (default: 1)
   --per-page: int # Rules per page (default: 20)
   --gaps-range-start: string # Gaps range start
@@ -3887,8 +3901,8 @@ export def "endpoint-list-items DeleteEndpointListItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --id: string # Either `id` or `item_id` must be specified
-  --item-id: string # Either `id` or `item_id` must be specified
+  --id: string # Either `id` or `item_id` must be specified (format: nonempty, e.g. 71a9f4b2-c85c-49b4-866f-c71eb9e67da2)
+  --item-id: string # Either `id` or `item_id` must be specified (format: nonempty, e.g. simple_list_item)
 ]: nothing -> record<_version: string, comments: table<comment: string, created_at: string, created_by: string, id: string, updated_at: string, updated_by: string>, created_at: string, created_by: string, description: string, entries: list<any>, expire_time: string, id: string, item_id: string, list_id: string, meta: record, name: string, namespace_type: string, os_types: list<string>, tags: list<string>, tie_breaker_id: string, type: string, updated_at: string, updated_by: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3911,8 +3925,8 @@ export def "endpoint-list-items ReadEndpointListItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --id: string # Either `id` or `item_id` must be specified
-  --item-id: string # Either `id` or `item_id` must be specified
+  --id: string # Either `id` or `item_id` must be specified (format: nonempty, e.g. 71a9f4b2-c85c-49b4-866f-c71eb9e67da2)
+  --item-id: string # Either `id` or `item_id` must be specified (format: nonempty, e.g. simple_list_item)
 ]: nothing -> record<_version: string, comments: table<comment: string, created_at: string, created_by: string, id: string, updated_at: string, updated_by: string>, created_at: string, created_by: string, description: string, entries: list<any>, expire_time: string, id: string, item_id: string, list_id: string, meta: record, name: string, namespace_type: string, os_types: list<string>, tags: list<string>, tie_breaker_id: string, type: string, updated_at: string, updated_by: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4005,10 +4019,10 @@ export def "endpoint-list-items-find FindEndpointListItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --filter: string # Filters the returned results according to the value of the specified field, using the `<field name>:<field value>` syntax.
+  --filter: string # Filters the returned results according to the value of the specified field, using the `<field name>:<field value>` syntax.  (format: nonempty)
   --page: int # The page number to return
   --per-page: int # The number of exception list items to return per page
-  --sort-field: string # Determines which field is used to sort the results
+  --sort-field: string # Determines which field is used to sort the results (format: nonempty)
   --sort-order: string@sort-order-completer # Determines the sort order, which can be `desc` or `asc`
 ]: nothing -> record<data: table<_version: string, comments: list, created_at: string, created_by: string, description: string, entries: list, expire_time: string, id: string, item_id: string, list_id: string, meta: record, name: string, namespace_type: string, os_types: list, tags: list, tie_breaker_id: string, type: string, updated_at: string, updated_by: string>, page: int, per_page: int, pit: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4032,20 +4046,20 @@ export def "endpoint-action EndpointGetActionsList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --page: string # The page number to return.
-  --pageSize: string # The number of response actions to return per page.
-  --commands: string # A list of response action command names to filter by.
-  --agentIds: string # A list of Elastic Agent IDs to filter the response actions by.
-  --userIds: string # A list of user IDs that submitted the response actions.
-  --startDate: string # A start date in ISO 8601 format or Date Math format (for example, `now-24h`).
-  --endDate: string # An end date in ISO 8601 format or Date Math format (for example, `now`).
-  --agentTypes: string # The agent type to filter response actions by. Defaults to `endpoint`.
-  --withOutputs: string # A list of response action IDs whose outputs should be included in the response.
-  --types: string # A list of response action types to filter by (`automated`, `manual`).
+  --page: int # The page number to return. (default: 1, e.g. 1)
+  --pageSize: int # The number of response actions to return per page. (default: 10, e.g. 10)
+  --commands: list # A list of response action command names to filter by. (e.g. [isolate, unisolate])
+  --agentIds: string # A list of Elastic Agent IDs to filter the response actions by. (e.g. [agent-id-1, agent-id-2])
+  --userIds: string # A list of user IDs that submitted the response actions. (e.g. [user-id-1, user-id-2])
+  --startDate: string # A start date in ISO 8601 format or Date Math format (for example, `now-24h`). (e.g. 2023-10-31T00:00:00.000Z)
+  --endDate: string # An end date in ISO 8601 format or Date Math format (for example, `now`). (e.g. 2023-10-31T23:59:59.999Z)
+  --agentTypes: string@agentTypes-completer # The agent type to filter response actions by. Defaults to `endpoint`. (e.g. endpoint)
+  --withOutputs: string # A list of response action IDs whose outputs should be included in the response. (e.g. [action-id-1, action-id-2])
+  --types: list # A list of response action types to filter by (`automated`, `manual`). (e.g. [automated, manual])
 ]: nothing -> record<agentTypes: list<string>, commands: list<string>, data: table<agents: list, agentState: record, agentType: string, command: string, completedAt: string, createdBy: string, hosts: record, id: string, isComplete: bool, isExpired: bool, outputs: record, parameters: record, startedAt: string, status: string, wasSuccessful: bool>, elasticAgentIds: list<string>, endDate: string, page: int, pageSize: int, startDate: string, statuses: list<string>, total: int, userIds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "commands" $commands "scalar") (serialize-qp "agentIds" $agentIds "scalar") (serialize-qp "userIds" $userIds "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "agentTypes" $agentTypes "scalar") (serialize-qp "withOutputs" $withOutputs "scalar") (serialize-qp "types" $types "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "commands" $commands "multi") (serialize-qp "agentIds" $agentIds "scalar") (serialize-qp "userIds" $userIds "scalar") (serialize-qp "startDate" $startDate "scalar") (serialize-qp "endDate" $endDate "scalar") (serialize-qp "agentTypes" $agentTypes "scalar") (serialize-qp "withOutputs" $withOutputs "scalar") (serialize-qp "types" $types "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/api/endpoint/action" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4064,7 +4078,7 @@ export def "endpoint-action-status EndpointGetActionsStatus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --agent-ids: string # A list of agent IDs to get the action status for.
+  --agent-ids: string # A list of agent IDs to get the action status for. (e.g. [agent-id-1, agent-id-2])
 ]: nothing -> record<data: table<agent_id: string, pending_actions: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4543,16 +4557,16 @@ export def "endpoint-metadata GetEndpointMetadataList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --page: string # The page number to return.
-  --pageSize: string # The number of endpoints to return per page.
-  --kuery: string # A KQL string to filter the endpoint metadata results.
-  --hostStatuses: string # A set of host statuses to filter the results by (for example, `healthy`, `updating`).
-  --sortField: string # The field used to sort the results.
-  --sortDirection: string # The sort order, either `asc` or `desc`.
+  --page: int # The page number to return. (default: 1, e.g. 1)
+  --pageSize: int # The number of endpoints to return per page. (default: 10, e.g. 10)
+  --kuery: string # A KQL string to filter the endpoint metadata results. (e.g. united.endpoint.host.os.name : 'Windows')
+  --hostStatuses: list # A set of host statuses to filter the results by (for example, `healthy`, `updating`). (e.g. [healthy, updating])
+  --sortField: string@sortField-completer # The field used to sort the results. (e.g. enrolled_at)
+  --sortDirection: string@sortDirection-completer # The sort order, either `asc` or `desc`. (e.g. desc)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "kuery" $kuery "scalar") (serialize-qp "hostStatuses" $hostStatuses "scalar") (serialize-qp "sortField" $sortField "scalar") (serialize-qp "sortDirection" $sortDirection "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $pageSize "scalar") (serialize-qp "kuery" $kuery "scalar") (serialize-qp "hostStatuses" $hostStatuses "multi") (serialize-qp "sortField" $sortField "scalar") (serialize-qp "sortDirection" $sortDirection "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/endpoint/metadata" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -4664,10 +4678,10 @@ export def "endpoint-scripts-library EndpointScriptLibraryListScripts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --page: string # Page number of the results to return. Defaults to 1.
-  --pageSize: string # Number of results to return per page. Defaults to 10. Max value is 1000.
-  --sortField: string # The field to sort the results by. Defaults to name.
-  --sortDirection: string # The direction to sort the results by. Defaults to asc (ascending).
+  --page: int # Page number of the results to return. Defaults to 1. (default: 1, e.g. 1)
+  --pageSize: int # Number of results to return per page. Defaults to 10. Max value is 1000. (default: 10, e.g. 10)
+  --sortField: string@sortField-completer-1 # The field to sort the results by. Defaults to name. (e.g. updatedAt)
+  --sortDirection: string@sortDirection-completer # The direction to sort the results by. Defaults to asc (ascending). (e.g. desc)
   --kuery: string # A KQL query string to filter the list of scripts. Nearly all fields in the script object are searchable.
 ]: nothing -> record<data: table<createdAt: string, createdBy: string, description: string, downloadUri: string, example: string, fileHash: string, fileName: string, fileSize: int, id: string, instructions: string, name: string, pathToExecutable: string, platform: list, requiresInput: bool, tags: list, updatedAt: string, updatedBy: string, version: string>, page: int, pageSize: int, sortDirection: string, sortField: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5681,9 +5695,9 @@ export def "exception-lists DeleteExceptionList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --id: string # Exception list's identifier. Either `id` or `list_id` must be specified.
-  --list-id: string # Human readable exception list string identifier, e.g. `trusted-linux-processes`. Either `id` or `list_id` must be specified.
-  --namespace-type: string # `single` deletes the list in the current Kibana space; `agnostic` deletes a global list. Must match the list you are removing when using `list_id` or `id`.  (default: single)
+  --id: string # Exception list's identifier. Either `id` or `list_id` must be specified. (format: nonempty, e.g. 9e5fc75a-a3da-46c5-96e3-a2ec59c6bb85)
+  --list-id: string # Human readable exception list string identifier, e.g. `trusted-linux-processes`. Either `id` or `list_id` must be specified. (format: nonempty, e.g. simple_list)
+  --namespace-type: string@namespace-type-completer # `single` deletes the list in the current Kibana space; `agnostic` deletes a global list. Must match the list you are removing when using `list_id` or `id`.
 ]: nothing -> record<_version: string, created_at: string, created_by: string, description: string, id: string, immutable: bool, list_id: string, meta: record, name: string, namespace_type: string, os_types: list<string>, tags: list<string>, tie_breaker_id: string, type: string, updated_at: string, updated_by: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5706,9 +5720,9 @@ export def "exception-lists ReadExceptionList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --id: string # Exception list's identifier. Either `id` or `list_id` must be specified.
-  --list-id: string # Human readable exception list string identifier, e.g. `trusted-linux-processes`. Either `id` or `list_id` must be specified.
-  --namespace-type: string # When `single`, the list is resolved in the current Kibana space. When `agnostic`, the list is a global (space-agnostic) container. Required for looking up the correct list when `list_id` is not unique.  (default: single)
+  --id: string # Exception list's identifier. Either `id` or `list_id` must be specified. (format: nonempty, e.g. 9e5fc75a-a3da-46c5-96e3-a2ec59c6bb85)
+  --list-id: string # Human readable exception list string identifier, e.g. `trusted-linux-processes`. Either `id` or `list_id` must be specified. (format: nonempty, e.g. simple_list)
+  --namespace-type: string@namespace-type-completer # When `single`, the list is resolved in the current Kibana space. When `agnostic`, the list is a global (space-agnostic) container. Required for looking up the correct list when `list_id` is not unique.
 ]: nothing -> record<_version: string, created_at: string, created_by: string, description: string, id: string, immutable: bool, list_id: string, meta: record, name: string, namespace_type: string, os_types: list<string>, tags: list<string>, tie_breaker_id: string, type: string, updated_at: string, updated_by: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5799,8 +5813,8 @@ export def "exception-lists-duplicate DuplicateExceptionList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --list-id: string # The `list_id` of the existing exception list to copy (source list).
-  --namespace-type: string # Scope in which the source list is defined (`single` = current space, `agnostic` = all spaces).
+  --list-id: string # The `list_id` of the existing exception list to copy (source list). (format: nonempty, e.g. simple_list)
+  --namespace-type: string@namespace-type-completer # Scope in which the source list is defined (`single` = current space, `agnostic` = all spaces).
   --include-expired-exceptions: string@include-expired-exceptions-completer # Determines whether to include expired exceptions in the duplicated list. Expiration date defined by `expire_time`. (default: true, e.g. true)
 ]: nothing -> record<_version: string, created_at: string, created_by: string, description: string, id: string, immutable: bool, list_id: string, meta: record, name: string, namespace_type: string, os_types: list<string>, tags: list<string>, tie_breaker_id: string, type: string, updated_at: string, updated_by: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5824,9 +5838,9 @@ export def "exception-lists-export ExportExceptionList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --id: string # Exception list's internal `id` (UUID) returned on create; use with `list_id` and `namespace_type` for an unambiguous target.
-  --list-id: string # Human-readable `list_id` of the exception list to export, as shown in the UI and API responses.
-  --namespace-type: string # `single` exports a list in the current Kibana space; `agnostic` exports a global (space-agnostic) list.
+  --id: string # Exception list's internal `id` (UUID) returned on create; use with `list_id` and `namespace_type` for an unambiguous target. (format: nonempty, e.g. 9e5fc75a-a3da-46c5-96e3-a2ec59c6bb85)
+  --list-id: string # Human-readable `list_id` of the exception list to export, as shown in the UI and API responses. (format: nonempty, e.g. simple_list)
+  --namespace-type: string@namespace-type-completer # `single` exports a list in the current Kibana space; `agnostic` exports a global (space-agnostic) list.
   --include-expired-exceptions: string@include-expired-exceptions-completer # Determines whether to include expired exceptions in the exported list. Expiration date defined by `expire_time`. (default: true, e.g. true)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5850,7 +5864,7 @@ export def "exception-lists-find FindExceptionLists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --filter: string # Filters the returned results according to the value of the specified field.  Uses the `so type.field name:field` value syntax, where `so type` can be:  - `exception-list`: Specify a space-aware exception list. - `exception-list-agnostic`: Specify an exception list that is shared across spaces.
+  --filter: string # Filters the returned results according to the value of the specified field.  Uses the `so type.field name:field` value syntax, where `so type` can be:  - `exception-list`: Specify a space-aware exception list. - `exception-list-agnostic`: Specify an exception list that is shared across spaces.  (e.g. exception-list.attributes.name:%Detection%20List)
   --namespace-type: list # Determines whether the returned containers are Kibana associated with a Kibana space or available in all spaces (`agnostic` or `single`)  (default: [single])
   --page: int # The page number to return (e.g. 1)
   --per-page: int # The number of exception lists to return per page (e.g. 20)
@@ -5906,9 +5920,9 @@ export def "exception-lists-items DeleteExceptionListItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --id: string # Exception item's identifier. Either `id` or `item_id` must be specified
-  --item-id: string # Human readable exception item string identifier, e.g. `trusted-linux-processes`. Either `id` or `item_id` must be specified
-  --namespace-type: string # `single` deletes the item in the current Kibana space; `agnostic` deletes an item in a space-agnostic list. Must match the list that owns the item.  (default: single)
+  --id: string # Exception item's identifier. Either `id` or `item_id` must be specified (format: nonempty, e.g. 71a9f4b2-c85c-49b4-866f-c71eb9e67da2)
+  --item-id: string # Human readable exception item string identifier, e.g. `trusted-linux-processes`. Either `id` or `item_id` must be specified (format: nonempty, e.g. simple_list_item)
+  --namespace-type: string@namespace-type-completer # `single` deletes the item in the current Kibana space; `agnostic` deletes an item in a space-agnostic list. Must match the list that owns the item.
 ]: nothing -> record<_version: string, comments: table<comment: string, created_at: string, created_by: string, id: string, updated_at: string, updated_by: string>, created_at: string, created_by: string, description: string, entries: list<any>, expire_time: string, id: string, item_id: string, list_id: string, meta: record, name: string, namespace_type: string, os_types: list<string>, tags: list<string>, tie_breaker_id: string, type: string, updated_at: string, updated_by: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5931,9 +5945,9 @@ export def "exception-lists-items ReadExceptionListItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --id: string # Exception list item's identifier. Either `id` or `item_id` must be specified.
-  --item-id: string # Human readable exception item string identifier, e.g. `trusted-linux-processes`. Either `id` or `item_id` must be specified.
-  --namespace-type: string # `single` fetches the item in the current space; `agnostic` fetches a global (space-agnostic) item. Must match how the list was created.  (default: single)
+  --id: string # Exception list item's identifier. Either `id` or `item_id` must be specified. (format: nonempty, e.g. 71a9f4b2-c85c-49b4-866f-c71eb9e67da2)
+  --item-id: string # Human readable exception item string identifier, e.g. `trusted-linux-processes`. Either `id` or `item_id` must be specified. (format: nonempty, e.g. simple_list_item)
+  --namespace-type: string@namespace-type-completer # `single` fetches the item in the current space; `agnostic` fetches a global (space-agnostic) item. Must match how the list was created.
 ]: nothing -> record<_version: string, comments: table<comment: string, created_at: string, created_by: string, id: string, updated_at: string, updated_by: string>, created_at: string, created_by: string, description: string, entries: list<any>, expire_time: string, id: string, item_id: string, list_id: string, meta: record, name: string, namespace_type: string, os_types: list<string>, tags: list<string>, tie_breaker_id: string, type: string, updated_at: string, updated_by: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6010,7 +6024,7 @@ export def "exception-lists-items-find FindExceptionListItems" [
   --search: string # Free-text search term applied to exception list item fields (for example a hostname or file path fragment).  (e.g. host.name)
   --page: int # The page number to return (e.g. 1)
   --per-page: int # The number of exception list items to return per page (e.g. 20)
-  --sort-field: string # Determines which field is used to sort the results. (e.g. name)
+  --sort-field: string # Determines which field is used to sort the results. (format: nonempty, e.g. name)
   --sort-order: string@sort-order-completer # Determines the sort order, which can be `desc` or `asc`. (e.g. desc)
 ]: nothing -> record<data: table<_version: string, comments: list, created_at: string, created_by: string, description: string, entries: list, expire_time: string, id: string, item_id: string, list_id: string, meta: record, name: string, namespace_type: string, os_types: list, tags: list, tie_breaker_id: string, type: string, updated_at: string, updated_by: string>, page: int, per_page: int, pit: string, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6034,9 +6048,9 @@ export def "exception-lists-summary ReadExceptionListSummary" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --id: string # Exception list's identifier generated upon creation.
-  --list-id: string # Exception list's human readable identifier.
-  --namespace-type: string # `single` returns summary for a list in the current space; `agnostic` for a space-agnostic list. Must line up with `id` / `list_id` used to look up the list.  (default: single)
+  --id: string # Exception list's identifier generated upon creation. (format: nonempty, e.g. 9e5fc75a-a3da-46c5-96e3-a2ec59c6bb85)
+  --list-id: string # Exception list's human readable identifier. (format: nonempty, e.g. simple_list)
+  --namespace-type: string@namespace-type-completer # `single` returns summary for a list in the current space; `agnostic` for a space-agnostic list. Must line up with `id` / `list_id` used to look up the list.
   --filter: string # Search filter clause (e.g. exception-list-agnostic.attributes.tags:"policy:policy-1" OR exception-list-agnostic.attributes.tags:"policy:all")
 ]: nothing -> record<linux: int, macos: int, total: int, windows: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10283,7 +10297,7 @@ export def "lists DeleteList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --id: string # Value list identifier to delete, including all of its list items.
+  --id: string # Value list identifier to delete, including all of its list items. (format: nonempty, e.g. 21b01cfb-058d-44b9-838c-282be16c91cd)
   --deleteReferences: string@bool-completer # Determines whether exception items referencing this value list should be deleted. (default: false, e.g. false)
   --ignoreReferences: string@bool-completer # Determines whether to delete value list without performing any additional checks of where this list may be utilized. (default: false, e.g. false)
 ]: nothing -> record<_version: string, _timestamp: string, created_at: string, created_by: string, description: string, id: string, immutable: bool, meta: record, name: string, tie_breaker_id: string, type: string, updated_at: string, updated_by: string, version: int> {
@@ -10308,7 +10322,7 @@ export def "lists ReadList" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --id: string # Value list identifier (`id`) returned when the list was created.
+  --id: string # Value list identifier (`id`) returned when the list was created. (format: nonempty, e.g. 21b01cfb-058d-44b9-838c-282be16c91cd)
 ]: nothing -> record<_version: string, _timestamp: string, created_at: string, created_by: string, description: string, id: string, immutable: bool, meta: record, name: string, tie_breaker_id: string, type: string, updated_at: string, updated_by: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10425,8 +10439,8 @@ export def "lists-find FindLists" [
   --per-page: int # The number of value lists to return per page. (e.g. 20)
   --sort-field: string # Determines which field is used to sort the results. (format: nonempty, e.g. name)
   --sort-order: string@sort-order-completer # Determines the sort order, which can be `desc` or `asc` (e.g. asc)
-  --cursor: string # Returns the lists that come after the last lists returned in the previous call (use the `cursor` value returned in the previous call). This parameter uses the `tie_breaker_id` field to ensure all lists are sorted and returned correctly.
-  --filter: string # Filters the returned results according to the value of the specified field, using the <field name>:<field value> syntax.
+  --cursor: string # Returns the lists that come after the last lists returned in the previous call (use the `cursor` value returned in the previous call). This parameter uses the `tie_breaker_id` field to ensure all lists are sorted and returned correctly. (format: nonempty, e.g. WzIwLFsiYjU3Yzc2MmMtMzAzNi00NjVjLTliZmItN2JmYjVlNmU1MTVhIl1d)
+  --filter: string # Filters the returned results according to the value of the specified field, using the <field name>:<field value> syntax.  (e.g. value:127.0.0.1)
 ]: nothing -> record<cursor: string, data: table<_version: string, _timestamp: string, created_at: string, created_by: string, description: string, id: string, immutable: bool, meta: record, name: string, tie_breaker_id: string, type: string, updated_at: string, updated_by: string, version: int>, page: int, per_page: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10514,8 +10528,8 @@ export def "lists-items DeleteListItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --id: string # Value list item's identifier. Required if `list_id` and `value` are not specified.
-  --list-id: string # Value list's identifier. Required if `id` is not specified.
+  --id: string # Value list item's identifier. Required if `list_id` and `value` are not specified. (format: nonempty, e.g. 54b01cfb-058d-44b9-838c-282be16c91cd)
+  --list-id: string # Value list's identifier. Required if `id` is not specified. (format: nonempty, e.g. 21b01cfb-058d-44b9-838c-282be16c91cd)
   --value: string # The value used to evaluate exceptions. Required if `id` is not specified. (e.g. 255.255.255.255)
   --refresh: string@refresh-completer-1 # Determines when changes made by the request are made visible to search. (default: false, e.g. false)
 ]: nothing -> any {
@@ -10540,8 +10554,8 @@ export def "lists-items ReadListItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --id: string # Value list item identifier. Required if `list_id` and `value` are not specified.
-  --list-id: string # Value list item list's `id` identfier. Required if `id` is not specified.
+  --id: string # Value list item identifier. Required if `list_id` and `value` are not specified. (format: nonempty, e.g. 21b01cfb-058d-44b9-838c-282be16c91cd)
+  --list-id: string # Value list item list's `id` identfier. Required if `id` is not specified. (format: nonempty, e.g. 21b01cfb-058d-44b9-838c-282be16c91cd)
   --value: string # The value used to evaluate exceptions. Required if `id` is not specified. (e.g. 127.0.0.2)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -10651,7 +10665,7 @@ export def "lists-items-export ExportListItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --list-id: string # Value list's `id` to export.
+  --list-id: string # Value list's `id` to export. (format: nonempty, e.g. 21b01cfb-058d-44b9-838c-282be16c91cd)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10674,13 +10688,13 @@ export def "lists-items-find FindListItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --list-id: string # Parent value list's `id` to page through items for.
+  --list-id: string # Parent value list's `id` to page through items for. (format: nonempty, e.g. 21b01cfb-058d-44b9-838c-282be16c91cd)
   --page: int # The page number to return. (e.g. 1)
   --per-page: int # The number of list items to return per page. (e.g. 20)
   --sort-field: string # Determines which field is used to sort the results. (format: nonempty, e.g. value)
   --sort-order: string@sort-order-completer # Determines the sort order, which can be `desc` or `asc` (e.g. asc)
-  --cursor: string # Opaque cursor returned in a previous response; pass it to continue listing from the next page. Omit on the first request.
-  --filter: string # Filters the returned results according to the value of the specified field, using the <field name>:<field value> syntax.
+  --cursor: string # Opaque cursor returned in a previous response; pass it to continue listing from the next page. Omit on the first request.  (format: nonempty, e.g. WzIwLFsiYjU3Yzc2MmMtMzAzNi00NjVjLTliZmItN2JmYjVlNmU1MTVhIl1d)
+  --filter: string # Filters the returned results according to the value of the specified field, using the <field name>:<field value> syntax.  (e.g. value:127.0.0.1)
 ]: nothing -> record<cursor: string, data: table<_version: string, _timestamp: string, created_at: string, created_by: string, id: string, list_id: string, meta: record, tie_breaker_id: string, type: string, updated_at: string, updated_by: string, value: string>, page: int, per_page: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10703,8 +10717,8 @@ export def "lists-items-import ImportListItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --list-id: string # List's id.  Required when importing to an existing list.
-  --type: string # Type of the importing list.  Required when importing a new list whose list `id` is not specified.
+  --list-id: string # List's id.  Required when importing to an existing list.  (format: nonempty, e.g. 21b01cfb-058d-44b9-838c-282be16c91cd)
+  --type: string@type-completer-6 # Type of the importing list.  Required when importing a new list whose list `id` is not specified.
   --refresh: string@refresh-completer-1 # Determines when changes made by the request are made visible to search. (e.g. true)
   --file: string # A `.txt` or `.csv` file containing newline separated list items. (format: binary, e.g. 127.0.0.1 127.0.0.2 127.0.0.3 127.0.0.4 127.0.0.5 127.0.0.6 127.0.0.7 127.0.0.8 127.0.0.9 )
 ]: any -> record<_version: string, _timestamp: string, created_at: string, created_by: string, description: string, id: string, immutable: bool, meta: record, name: string, tie_breaker_id: string, type: string, updated_at: string, updated_by: string, version: int> {
@@ -11050,7 +11064,7 @@ export def "note GetNotes" [
   --sortOrder: string # Sort order (`asc` or `desc`) for saved-objects find (list mode only). (nullable, e.g. desc)
   --filter: string # Kuery filter string combined with other list-mode filters (for example `createdByFilter` or `associatedFilter`). Typed as a string for API compatibility; interpreted by the saved-objects layer (list mode only).  (nullable)
   --createdByFilter: string # Kibana user profile **UID** (UUID). The server resolves the user's display identifiers and returns notes whose `createdBy` matches any of them (list mode only).  (nullable, e.g. f1c2d3e4-5b6a-7890-abcd-ef1234567890)
-  --associatedFilter: string # Restricts notes by how they relate to a Timeline and/or an event document (list mode only). Some values apply extra filtering after the query. Ignored when `documentIds` or `savedObjectIds` is used.
+  --associatedFilter: string@associatedFilter-completer # Restricts notes by how they relate to a Timeline and/or an event document (list mode only). Some values apply extra filtering after the query. Ignored when `documentIds` or `savedObjectIds` is used.
 ]: nothing -> record<notes: table<noteId: string, version: string>, totalCount: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11164,11 +11178,11 @@ export def "osquery-live-queries OsqueryFindLiveQueries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --kuery: string # A KQL search string to filter live queries.
-  --page: string # The page number to return.
-  --pageSize: string # The number of results to return per page.
-  --qp-sort: string # The field to sort results by.
-  --sortOrder: string # The sort order.
+  --kuery: string # A KQL search string to filter live queries. (nullable, e.g. agent.id: 16d7caf5-efd2-4212-9b62-73dafc91fa13)
+  --page: int # The page number to return. (nullable, e.g. 1)
+  --pageSize: int # The number of results to return per page. (nullable, e.g. 20)
+  --qp-sort: string # The field to sort results by. (nullable, default: createdAt, e.g. createdAt)
+  --sortOrder: string@sortOrder-completer # The sort order. (e.g. desc)
 ]: nothing -> record<data: record<items: list<record>, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11253,11 +11267,11 @@ export def "osquery-live-queries-results OsqueryGetLiveQueryResults" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --kuery: string # A KQL search string to filter results.
-  --page: string # The page number to return.
-  --pageSize: string # The number of results to return per page.
-  --qp-sort: string # The field to sort results by.
-  --sortOrder: string # The sort order.
+  --kuery: string # A KQL search string to filter results. (nullable, e.g. agent.id: 16d7caf5-efd2-4212-9b62-73dafc91fa13)
+  --page: int # The page number to return. (nullable, e.g. 1)
+  --pageSize: int # The number of results to return per page. (nullable, e.g. 20)
+  --qp-sort: string # The field to sort results by. (nullable, default: createdAt, e.g. createdAt)
+  --sortOrder: string@sortOrder-completer # The sort order. (e.g. desc)
 ]: nothing -> record<data: record<edges: list<record>, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11280,10 +11294,10 @@ export def "osquery-packs OsqueryFindPacks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --page: string # The page number to return.
-  --pageSize: string # The number of results to return per page.
-  --qp-sort: string # The field to sort results by.
-  --sortOrder: string # The sort order.
+  --page: int # The page number to return. (nullable, e.g. 1)
+  --pageSize: int # The number of results to return per page. (nullable, e.g. 20)
+  --qp-sort: string # The field to sort results by. (nullable, default: createdAt, e.g. createdAt)
+  --sortOrder: string@sortOrder-completer # The sort order. (e.g. desc)
 ]: nothing -> record<data: table<created_at: string, created_by: string, created_by_profile_uid: string, description: string, enabled: bool, interval: int, name: string, policy_ids: list, queries: list, read_only: bool, rrule_schedule: record, saved_object_id: string, schedule_type: string, updated_at: string, updated_by: string, updated_by_profile_uid: string, version: int>, page: int, per_page: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11441,10 +11455,10 @@ export def "osquery-saved-queries OsqueryFindSavedQueries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --page: string # The page number to return.
-  --pageSize: string # The number of results to return per page.
-  --qp-sort: string # The field to sort results by.
-  --sortOrder: string # The sort order.
+  --page: int # The page number to return. (nullable, e.g. 1)
+  --pageSize: int # The number of results to return per page. (nullable, e.g. 20)
+  --qp-sort: string # The field to sort results by. (nullable, default: createdAt, e.g. createdAt)
+  --sortOrder: string@sortOrder-completer # The sort order. (e.g. desc)
 ]: nothing -> record<data: table<created_at: string, created_by: string, created_by_profile_uid: string, description: string, ecs_mapping: record, id: string, interval: any, platform: string, prebuilt: bool, query: string, removed: bool, saved_object_id: string, snapshot: bool, timeout: int, updated_at: string, updated_by: string, updated_by_profile_uid: string, version: any>, page: int, per_page: int, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11602,11 +11616,11 @@ export def "osquery-scheduled-results OsqueryGetScheduledActionResults" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --kuery: string # The kuery to filter the results by.
-  --page: string # The page number to return. The default is 1.
-  --pageSize: string # The number of results to return per page. The default is 20.
-  --qp-sort: string # The field that is used to sort the results.
-  --sortOrder: string # Specifies the sort order.
+  --kuery: string # The kuery to filter the results by. (nullable, e.g. agent.id: 16d7caf5-efd2-4212-9b62-73dafc91fa13)
+  --page: int # The page number to return. The default is 1. (nullable, e.g. 1)
+  --pageSize: int # The number of results to return per page. The default is 20. (nullable, e.g. 20)
+  --qp-sort: string # The field that is used to sort the results. (nullable, default: createdAt, e.g. createdAt)
+  --sortOrder: string@sortOrder-completer # Specifies the sort order. (e.g. desc)
 ]: nothing -> record<aggregations: record<failed: int, pending: int, successful: int, totalResponded: int, totalRowCount: int>, currentPage: int, edges: list<record>, inspect: record, metadata: record<executionCount: int, packId: string, packName: string, queryName: string, queryText: string, scheduleId: string, timestamp: string>, pageSize: int, total: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11631,11 +11645,11 @@ export def "osquery-scheduled-results-results OsqueryGetScheduledQueryResults" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --kuery: string # The kuery to filter the results by.
-  --page: string # The page number to return. The default is 1.
-  --pageSize: string # The number of results to return per page. The default is 20.
-  --qp-sort: string # The field that is used to sort the results.
-  --sortOrder: string # Specifies the sort order.
+  --kuery: string # The kuery to filter the results by. (nullable, e.g. agent.id: 16d7caf5-efd2-4212-9b62-73dafc91fa13)
+  --page: int # The page number to return. The default is 1. (nullable, e.g. 1)
+  --pageSize: int # The number of results to return per page. The default is 20. (nullable, e.g. 20)
+  --qp-sort: string # The field that is used to sort the results. (nullable, default: createdAt, e.g. createdAt)
+  --sortOrder: string@sortOrder-completer # Specifies the sort order. (e.g. desc)
   --startDate: string # The start date filter (ISO 8601) to narrow down results. (e.g. 2024-01-01T00:00:00Z)
 ]: nothing -> record<data: record<edges: list<record>, inspect: record, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -11894,8 +11908,8 @@ export def "security-ai-assistant-anonymization-fields-find FindAnonymizationFie
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: list # Fields to return (e.g. [id, field, anonymized, allowed])
   --filter: string # Search query (e.g. field: "user.name")
-  --sort-field: string # Field to sort by (e.g. created_at)
-  --sort-order: string # Sort order (e.g. asc)
+  --sort-field: string@sort-field-completer-5 # Field to sort by (e.g. created_at)
+  --sort-order: string@sort-order-completer # Sort order (e.g. asc)
   --page: int # Page number (default: 1, e.g. 1)
   --per-page: int # AnonymizationFields per page (default: 20, e.g. 20)
   --all-data: string@bool-completer # If true, additionally fetch all anonymization fields, otherwise fetch only the provided page
@@ -12018,8 +12032,8 @@ export def "security-ai-assistant-current-user-conversations-find FindConversati
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: list # A list of fields to include in the response. If omitted, all fields are returned. (e.g. [id, title, createdAt])
   --filter: string # A search query to filter the conversations. Can match against titles, messages, or other conversation attributes. (e.g. Security Issue)
-  --sort-field: string # The field by which to sort the results. Valid fields are `created_at`, `title`, and `updated_at`. (e.g. created_at)
-  --sort-order: string # The order in which to sort the results. Can be either `asc` for ascending or `desc` for descending. (e.g. desc)
+  --sort-field: string@sort-field-completer-6 # The field by which to sort the results. Valid fields are `created_at`, `title`, and `updated_at`. (e.g. created_at)
+  --sort-order: string@sort-order-completer # The order in which to sort the results. Can be either `asc` for ascending or `desc` for descending. (e.g. asc)
   --page: int # The page number of the results to retrieve. Default is 1. (default: 1, e.g. 1)
   --per-page: int # The number of conversations to return per page. Default is 20. (default: 20, e.g. 20)
   --is-owner: string@bool-completer # Whether to return conversations that the current user owns. If true, only conversations owned by the user are returned. (default: false, e.g. true)
@@ -12272,8 +12286,8 @@ export def "security-ai-assistant-knowledge-base-entries-find FindKnowledgeBaseE
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: list # A list of fields to include in the response. If not provided, all fields will be included. (e.g. [name, created_at])
   --filter: string # Search query to filter Knowledge Base Entries by specific criteria. (e.g. error handling)
-  --sort-field: string # Field to sort the Knowledge Base Entries by. (e.g. created_at)
-  --sort-order: string # Sort order for the results, either asc or desc. (e.g. asc)
+  --sort-field: string@sort-field-completer-7 # Field to sort the Knowledge Base Entries by. (e.g. title)
+  --sort-order: string@sort-order-completer # Sort order for the results, either asc or desc. (e.g. asc)
   --page: int # Page number for paginated results. Defaults to 1. (default: 1, e.g. 2)
   --per-page: int # Number of Knowledge Base Entries to return per page. Defaults to 20. (default: 20, e.g. 10)
 ]: nothing -> record<data: list<any>, page: int, perPage: int, total: int> {
@@ -12401,8 +12415,8 @@ export def "security-ai-assistant-prompts-find FindPrompts" [
   --allow-errors(-e) # Return full response without error handling
   --qp-fields: list # List of specific fields to include in each returned prompt. (e.g. [id, name, content])
   --filter: string # Search query string to filter prompts by matching fields. (e.g. error handling)
-  --sort-field: string # Field to sort prompts by.
-  --sort-order: string # Sort order, either asc or desc.
+  --sort-field: string@sort-field-completer-8 # Field to sort prompts by. (e.g. created_at)
+  --sort-order: string@sort-order-completer # Sort order, either asc or desc. (e.g. asc)
   --page: int # Page number for pagination. (default: 1, e.g. 1)
   --per-page: int # Number of prompts per page. (default: 20, e.g. 20)
 ]: nothing -> record<data: table<categories: list, color: string, consumer: string, content: string, createdAt: string, createdBy: string, id: string, isDefault: bool, isNewConversationDefault: bool, name: string, namespace: string, promptType: string, timestamp: string, updatedAt: string, updatedBy: string, users: list>, page: int, perPage: int, total: int> {
@@ -14023,7 +14037,7 @@ export def "timeline-draft GetDraftTimelines" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --timelineType: string # Which draft to load (`default` investigation timeline or `template` timeline template).
+  --timelineType: string@timelineType-completer # Which draft to load (`default` investigation timeline or `template` timeline template).
 ]: nothing -> record<columns: table<aggregatable: bool, category: string, columnHeaderType: string, description: string, example: string, id: string, indexes: list, name: string, placeholder: string, searchable: bool, type: string>, created: float, createdBy: string, dataProviders: table<and: list, enabled: bool, excluded: bool, id: string, kqlQuery: string, name: string, queryMatch: record, type: string>, dataViewId: string, dateRange: record<end: any, start: any>, description: string, eqlOptions: record<eventCategoryField: string, query: string, size: any, tiebreakerField: string, timestampField: string>, eventType: string, excludedRowRendererIds: list<string>, favorite: table<favoriteDate: float, fullName: string, userName: string>, filters: table<exists: string, match_all: string, meta: record, missing: string, query: string, range: string, script: string>, indexNames: list<string>, kqlMode: string, kqlQuery: record<filterQuery: record<kuery: record, serializedQuery: string>>, savedQueryId: string, savedSearchId: string, sort: any, status: string, templateTimelineId: string, templateTimelineVersion: float, timelineType: string, title: string, updated: float, updatedBy: string, eventIdToNoteIds: table<noteId: string, version: string>, noteIds: list<string>, notes: table<noteId: string, version: string>, pinnedEventIds: list<string>, pinnedEventsSaveObject: table<pinnedEventId: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14207,13 +14221,13 @@ export def "timelines GetTimelines" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --only-user-favorite: string@only-user-favorite-completer # If `true`, only Timelines that the current user has marked as favorite are returned. (nullable)
-  --timeline-type: string # Restrict results to `default` investigation timelines or `template` timeline templates. (nullable)
-  --sort-field: string # Field used to sort the list (`title`, `description`, `updated`, or `created`).
+  --timeline-type: string@timeline-type-completer # Restrict results to `default` investigation timelines or `template` timeline templates.
+  --sort-field: string@sort-field-completer-9 # Field used to sort the list (`title`, `description`, `updated`, or `created`).
   --sort-order: string@sort-order-completer # Whether to sort the results `ascending` or `descending`
   --page-size: string # How many results should returned at once (nullable)
   --page-index: string # How many pages should be skipped (nullable)
   --search: string # Allows to search for timelines by their title (nullable)
-  --status: string # Filter by timeline lifecycle state (`active`, `draft`, or `immutable`). (nullable)
+  --status: string@status-completer-1 # Filter by timeline lifecycle state (`active`, `draft`, or `immutable`).
 ]: nothing -> record<customTemplateTimelineCount: float, defaultTimelineCount: float, elasticTemplateTimelineCount: float, favoriteCount: float, templateTimelineCount: float, timeline: table<columns: list, created: float, createdBy: string, dataProviders: list, dataViewId: string, dateRange: record, description: string, eqlOptions: record, eventType: string, excludedRowRendererIds: list, favorite: list, filters: list, indexNames: list, kqlMode: string, kqlQuery: record, savedQueryId: string, savedSearchId: string, sort: any, status: string, templateTimelineId: string, templateTimelineVersion: float, timelineType: string, title: string, updated: float, updatedBy: string, eventIdToNoteIds: list, noteIds: list, notes: list, pinnedEventIds: list, pinnedEventsSaveObject: list>, totalCount: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15002,7 +15016,7 @@ export def "workflows-workflow-executions get-workflows-workflow-workflowid-exec
   --finishedAfter: string # Datemath lower bound for filtering executions by finishedAt (inclusive when parsed).
   --finishedBefore: string # Datemath upper bound for filtering executions by finishedAt (inclusive when parsed with roundUp).
   --collapse: string@collapse-completer # Field to collapse execution results by.
-  --sortField: string@sortField-completer # Field to sort executions by.
+  --sortField: string@sortField-completer-2 # Field to sort executions by.
   --sortOrder: string@sortOrder-completer # Sort order.
   --page: float # Page number.
   --size: float # Number of results per page.
@@ -15128,7 +15142,7 @@ export def "s-observability-slos createSloOp" [
   --artifacts: record # Links to related assets for the SLO — shape: {dashboards?: list}
   budgetingMethod: string@budgetingMethod-completer # The budgeting method to use when computing the rollup data. (e.g. occurrences)
   description: string # A description for the SLO.
-  --groupBy: any # optional group by field or fields to use to generate an SLO per distinct value (e.g. [service.name, service.name, service.name, service.environment])
+  --groupBy: any # optional group by field or fields to use to generate an SLO per distinct value (e.g. [[service.name], service.name, [service.name, service.environment]])
   --id: string # A optional and unique identifier for the SLO. Must be between 8 and 36 chars (e.g. my-super-slo-id)
   indicator: any
   name: string # A name for the SLO.
@@ -15342,7 +15356,7 @@ export def "s-observability-slos updateSloOp" [
   --artifacts: record # Links to related assets for the SLO — shape: {dashboards?: list}
   --budgetingMethod: string@budgetingMethod-completer # The budgeting method to use when computing the rollup data. (e.g. occurrences)
   --description: string # A description for the SLO.
-  --groupBy: any # optional group by field or fields to use to generate an SLO per distinct value (e.g. [service.name, service.name, service.name, service.environment])
+  --groupBy: any # optional group by field or fields to use to generate an SLO per distinct value (e.g. [[service.name], service.name, [service.name, service.environment]])
   --indicator: any
   --name: string # A name for the SLO.
   --objective: record # Defines properties for the SLO objective — shape: {target: float, timesliceTarget?: float, timesliceWindow?: string}

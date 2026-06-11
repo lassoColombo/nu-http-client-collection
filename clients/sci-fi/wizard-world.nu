@@ -19,17 +19,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -64,8 +65,10 @@ def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def Difficulty-completer [] { ["Advanced" "Beginner" "Moderate" "OneOfAKind" "OrdinaryWizardingLevel" "Unknown"] }
 def accept-completer [] { ["application/json" "text/json" "text/plain"] }
 def feedbackType-completer [] { ["Bug" "DataError" "General" "Suggestion"] }
+def Type-completer [] { ["BindingMagicalContract" "Charm" "Conjuration" "CounterCharm" "CounterJinx" "CounterSpell" "Curse" "DarkArts" "DarkCharm" "HealingSpell" "Hex" "Jinx" "MagicalTransportation" "None" "Spell" "Transfiguration" "Untransfiguration" "Vanishment"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -101,7 +104,7 @@ export def "elixirs list" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --Name: string
-  --Difficulty: string
+  --Difficulty: string@Difficulty-completer
   --Ingredient: string
   --InventorFullName: string
   --Manufacturer: string
@@ -169,11 +172,11 @@ export def "houses list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --qp-query: string
+  --qp-query: record
 ]: nothing -> table<id: string, name: string, houseColours: string, founder: string, animal: string, element: string, ghost: string, commonRoom: string, heads: list<record>, traits: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $qp_query "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/Houses" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -251,11 +254,11 @@ export def "magical-creature list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
-  --qp-query: string
+  --qp-query: record
 ]: nothing -> table<id: string, name: string, description: string, classification: string, status: string, dangerousnessLevel: string, creatureRelations: list<string>, nativeTo: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "query" $qp_query "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/MagicalCreature" $qp)
   let accept_val = ($accept | default "text/plain")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -293,7 +296,7 @@ export def "spells list" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer # Response content type
   --Name: string
-  --Type: string
+  --Type: string@Type-completer
   --Incantation: string
 ]: nothing -> table<id: string, name: string, incantation: string, effect: string, canBeVerbal: bool, type: string, light: string, creator: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

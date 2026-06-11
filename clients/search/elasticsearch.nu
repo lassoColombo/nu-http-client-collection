@@ -19,17 +19,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -72,18 +73,27 @@ def health-completer [] { ["GREEN" "RED" "YELLOW" "green" "red" "unavailable" "u
 def level-completer [] { ["cluster" "indices" "shards"] }
 def wait-for-events-completer [] { ["high" "immediate" "languid" "low" "normal" "urgent"] }
 def wait-for-status-completer [] { ["GREEN" "RED" "YELLOW" "green" "red" "unavailable" "unknown" "yellow"] }
+def status-completer [] { ["canceled" "canceling" "completed" "error" "in_progress" "pending" "suspended"] }
 def version-type-completer [] { ["external" "external_gte" "internal"] }
 def op-type-completer [] { ["create" "index"] }
+def conflicts-completer [] { ["abort" "proceed"] }
+def format-completer [] { ["arrow" "cbor" "csv" "json" "smile" "tsv" "txt" "yaml"] }
 def include-completer [] { ["definition" "definition_status" "feature_importance_baseline" "hyperparameters" "total_feature_importance"] }
+def priority-completer [] { ["low" "normal"] }
+def wait-for-completer [] { ["fully_allocated" "started" "starting"] }
 def type-completer [] { ["block" "cpu" "gpu" "mem" "wait"] }
 def sort-completer [] { ["block" "cpu" "gpu" "mem" "wait"] }
 def level-completer-1 [] { ["indices" "node" "shards"] }
+def group-by-completer [] { ["nodes" "none" "parents"] }
 def grid-agg-completer [] { ["geohex" "geotile"] }
 def grid-type-completer [] { ["centroid" "grid" "point"] }
+def storage-completer [] { ["full_copy" "shared_cache"] }
 def merge-type-completer [] { ["index" "template"] }
-def format-completer [] { ["cbor" "csv" "json" "smile" "tsv" "txt" "yaml"] }
+def order-completer [] { ["asc" "desc"] }
+def sort-completer-1 [] { ["duration" "failed_shard_count" "index_count" "name" "repository" "shard_count" "start_time"] }
+def format-completer-1 [] { ["cbor" "csv" "json" "smile" "tsv" "txt" "yaml"] }
 def ecs-compatibility-completer [] { ["disabled" "v1"] }
-def format-completer-1 [] { ["delimited" "ndjson" "semi_structured_text" "xml"] }
+def format-completer-2 [] { ["delimited" "ndjson" "semi_structured_text" "xml"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -3449,7 +3459,7 @@ export def "connector-sync-job connector-sync-job-list" [
   --allow-errors(-e) # Return full response without error handling
   --qp-from: float # Starting offset
   --size: float # Specifies a max number of results to get
-  --status: string # A sync job status to fetch connector sync jobs for
+  --status: string@status-completer # A sync job status to fetch connector sync jobs for
   --connector-id: string # A connector id to fetch connector sync jobs for
   --job-type: string # A comma-separated list of job types to fetch the sync jobs for
 ]: nothing -> record<count: float, results: table<cancelation_requested_at: record, canceled_at: record, completed_at: record, connector: record, created_at: record, deleted_document_count: float, error: string, id: record, indexed_document_count: float, indexed_document_volume: float, job_type: record, last_seen: record, metadata: record, started_at: record, status: record, total_document_count: float, trigger_method: record, worker_hostname: string>> {
@@ -4225,8 +4235,8 @@ export def "doc get" [
   --source-exclude-vectors: string@bool-completer # Whether vectors should be excluded from _source
   --source-includes: string # A comma-separated list of source fields to include in the response. If this parameter is specified, only these source fields are returned. You can exclude fields from this subset using the `_source_excludes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
   --stored-fields: string # A comma-separated list of stored fields to return as part of a hit. If no fields are specified, no stored fields are included in the response. If this field is specified, the `_source` parameter defaults to `false`. Only leaf fields can be retrieved with the `stored_fields` option. Object fields can't be returned; if specified, the request fails.
-  --version: string # The version number for concurrency control. It must match the current version of the document for the request to succeed.
-  --version-type: string # The version type.
+  --version: float # The version number for concurrency control. It must match the current version of the document for the request to succeed.
+  --version-type: string@version-type-completer # The version type.
 ]: nothing -> record<_index: record, fields: record, _ignored: list<string>, found: bool, _id: record, _primary_term: float, _routing: string, _seq_no: record, _source: record, _version: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4334,12 +4344,12 @@ export def "doc delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --if-primary-term: float # Only perform the operation if the document has this primary term.
-  --if-seq-no: string # Only perform the operation if the document has this sequence number.
-  --refresh: string # If `true`, Elasticsearch refreshes the affected shards to make this operation visible to search. If `wait_for`, it waits for a refresh to make this operation visible to search. If `false`, it does nothing with refreshes.
+  --if-seq-no: float # Only perform the operation if the document has this sequence number.
+  --refresh: string@refresh-completer # If `true`, Elasticsearch refreshes the affected shards to make this operation visible to search. If `wait_for`, it waits for a refresh to make this operation visible to search. If `false`, it does nothing with refreshes.
   --routing: string # A custom value used to route operations to a specific shard.
   --timeout: string # The period to wait for active shards.  This parameter is useful for situations where the primary shard assigned to perform the delete operation might not be available when the delete operation runs. Some reasons for this might be that the primary shard is currently recovering from a store or undergoing relocation. By default, the delete operation will wait on the primary shard to become available for up to 1 minute before failing and responding with an error.
-  --version: string # An explicit version number for concurrency control. It must match the current version of the document for the request to succeed.
-  --version-type: string # The version type.
+  --version: float # An explicit version number for concurrency control. It must match the current version of the document for the request to succeed.
+  --version-type: string@version-type-completer # The version type.
   --wait-for-active-shards: string # The minimum number of shard copies that must be active before proceeding with the operation. You can set it to `all` or any positive integer up to the total number of shards in the index (`number_of_replicas+1`). The default value of `1` means it waits for each primary shard to be active.
 ]: nothing -> record<_id: record, _index: record, _primary_term: float, result: record, _seq_no: record, _shards: record<failed: record, successful: record, total: record, failures: list<record>, skipped: record>, _version: record, failure_store: record, forced_refresh: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -4373,8 +4383,8 @@ export def "doc exists" [
   --source-excludes: string # A comma-separated list of source fields to exclude from the response. You can also use this parameter to exclude fields from the subset specified in `_source_includes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
   --source-includes: string # A comma-separated list of source fields to include in the response. If this parameter is specified, only these source fields are returned. You can exclude fields from this subset using the `_source_excludes` query parameter. If the `_source` parameter is `false`, this parameter is ignored.
   --stored-fields: string # A comma-separated list of stored fields to return as part of a hit. If no fields are specified, no stored fields are included in the response. If this field is specified, the `_source` parameter defaults to `false`.
-  --version: string # Explicit version number for concurrency control. The specified version must match the current version of the document for the request to succeed.
-  --version-type: string # The version type.
+  --version: float # Explicit version number for concurrency control. The specified version must match the current version of the document for the request to succeed.
+  --version-type: string@version-type-completer # The version type.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4402,8 +4412,8 @@ export def "delete-by-query delete-by-query" [
   --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --analyzer: string # Analyzer to use for the query string. This parameter can be used only when the `q` query string parameter is specified.
   --analyze-wildcard: string@bool-completer # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
-  --conflicts: string # What to do if delete by query hits version conflicts: `abort` or `proceed`.
-  --default-operator: string # The default operator for query string query: `and` or `or`. This parameter can be used only when the `q` query string parameter is specified.
+  --conflicts: string@conflicts-completer # What to do if delete by query hits version conflicts: `abort` or `proceed`.
+  --default-operator: string@default-operator-completer # The default operator for query string query: `and` or `or`. This parameter can be used only when the `q` query string parameter is specified.
   --df: string # The field to use as default where no field prefix is given in the query string. This parameter can be used only when the `q` query string parameter is specified.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. It supports comma-separated values, such as `open,hidden`.
   --qp-from: float # Skips the specified number of documents.
@@ -4419,7 +4429,7 @@ export def "delete-by-query delete-by-query" [
   --scroll: string # The period to retain the search context for scrolling.
   --scroll-size: float # The size of the scroll request that powers the operation.
   --search-timeout: string # The explicit timeout for each search request. It defaults to no timeout.
-  --search-type: string # The type of the search operation. Available options include `query_then_fetch` and `dfs_query_then_fetch`.
+  --search-type: string@search-type-completer # The type of the search operation. Available options include `query_then_fetch` and `dfs_query_then_fetch`.
   --slices: string # The number of slices this task should be divided into.
   --qp-sort: list # A comma-separated list of `<field>:<direction>` pairs. (DEPRECATED)
   --stats: list # The specific `tag` of the request for logging and statistical purposes.
@@ -4920,7 +4930,7 @@ export def "query-async esql-async-query" [
   --allow-partial-results: string@bool-completer # If `true`, partial results will be returned if there are shard failures, but the query can continue to execute on other clusters and shards. If `false`, the query will fail if there are any failures.  To override the default behavior, you can set the `esql.query.allow_partial_results` cluster setting to `false`.
   --delimiter: string # The character to use between values within a CSV row. It is valid only for the CSV format.
   --drop-null-columns: string@bool-completer # Indicates whether columns that are entirely `null` will be removed from the `columns` and `values` portion of the results. If `true`, the response will include an extra section under the name `all_columns` which has the name of all the columns.
-  --format: string # A short version of the Accept header, e.g. json, yaml.  `csv`, `tsv`, and `txt` formats will return results in a tabular format, excluding other metadata fields from the response.  For async requests, nothing will be returned if the async query doesn't finish within the timeout. The query ID and running status are available in the `X-Elasticsearch-Async-Id` and `X-Elasticsearch-Async-Is-Running` HTTP headers of the response, respectively.
+  --format: string@format-completer # A short version of the Accept header, e.g. json, yaml.  `csv`, `tsv`, and `txt` formats will return results in a tabular format, excluding other metadata fields from the response.  For async requests, nothing will be returned if the async query doesn't finish within the timeout. The query ID and running status are available in the `X-Elasticsearch-Async-Id` and `X-Elasticsearch-Async-Is-Running` HTTP headers of the response, respectively.
   --columnar: string@bool-completer # By default, ES|QL returns results as rows. For example, FROM returns each individual document as one row. For the JSON, YAML, CBOR and smile formats, ES|QL can return the results in a columnar fashion where one row represents all the values of a certain column in the results.
   --filter: any # Specify a Query DSL query in the filter parameter to filter the set of documents that an ES|QL query runs on.
   --time-zone: string # Sets the default timezone of the query.
@@ -4962,7 +4972,7 @@ export def "query-async esql-async-query-get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --drop-null-columns: string@bool-completer # Indicates whether columns that are entirely `null` will be removed from the `columns` and `values` portion of the results. If `true`, the response will include an extra section under the name `all_columns` which has the name of all the columns.
-  --format: string # A short version of the Accept header, for example `json` or `yaml`.
+  --format: string@format-completer # A short version of the Accept header, for example `json` or `yaml`.
   --keep-alive: string # The period for which the query and its results are stored in the cluster. When this period expires, the query and its results are deleted, even if the query is still ongoing.
   --wait-for-completion-timeout: string # The period to wait for the request to finish. By default, the request waits for complete query results. If the request completes during the period specified in this parameter, complete query results are returned. Otherwise, the response returns an `is_running` value of `true` and no results.
 ]: nothing -> record<took: record, is_partial: bool, all_columns: table<name: string, type: string>, columns: table<name: string, type: string>, values: list<list<any>>, _clusters: record<total: float, successful: float, running: float, skipped: float, partial: float, failed: float, details: record>, profile: record, id: string, is_running: bool> {
@@ -5170,7 +5180,7 @@ export def "query esql-query" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --format: string # A short version of the Accept header, e.g. json, yaml.  `csv`, `tsv`, and `txt` formats will return results in a tabular format, excluding other metadata fields from the response.
+  --format: string@format-completer # A short version of the Accept header, e.g. json, yaml.  `csv`, `tsv`, and `txt` formats will return results in a tabular format, excluding other metadata fields from the response.
   --delimiter: string # The character to use between values within a CSV row. Only valid for the CSV format.
   --drop-null-columns: string@bool-completer # Should columns that are entirely `null` be removed from the `columns` and `values` portion of the results? Defaults to `false`. If `true` then the response will include an extra section under the name `all_columns` which has the name of all columns.
   --allow-partial-results: string@bool-completer # If `true`, partial results will be returned if there are shard failures, but the query can continue to execute on other clusters and shards. If `false`, the query will fail if there are any failures.  To override the default behavior, you can set the `esql.query.allow_partial_results` cluster setting to `false`.
@@ -5219,8 +5229,8 @@ export def "source get-source" [
   --qp-source: string # Indicates whether to return the `_source` field (`true` or `false`) or lists the fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude in the response.
   --source-includes: string # A comma-separated list of source fields to include in the response.
-  --version: string # The version number for concurrency control. It must match the current version of the document for the request to succeed.
-  --version-type: string # The version type.
+  --version: float # The version number for concurrency control. It must match the current version of the document for the request to succeed.
+  --version-type: string@version-type-completer # The version type.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5253,8 +5263,8 @@ export def "source exists-source" [
   --qp-source: string # Indicates whether to return the `_source` field (`true` or `false`) or lists the fields to return.
   --source-excludes: string # A comma-separated list of source fields to exclude in the response.
   --source-includes: string # A comma-separated list of source fields to include in the response.
-  --version: string # The version number for concurrency control. It must match the current version of the document for the request to succeed.
-  --version-type: string # The version type.
+  --version: float # The version number for concurrency control. It must match the current version of the document for the request to succeed.
+  --version-type: string@version-type-completer # The version type.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15589,11 +15599,11 @@ export def "ml-trained-models-deployment-start ml-start-trained-model-deployment
   --cache-size: string # The inference cache size (in memory outside the JVM heap) per node for the model. The default value is the same size as the `model_size_bytes`. To disable the cache, `0b` can be provided.
   --deployment-id: string # A unique identifier for the deployment of the model.
   --number-of-allocations: float # The number of model allocations on each node where the model is deployed. All allocations on a node share the same copy of the model in memory but use a separate set of threads to evaluate the model. Increasing this value generally increases the throughput. If this setting is greater than the number of hardware threads it will automatically be changed to a value less than the number of hardware threads. If adaptive_allocations is enabled, do not set this value, because it’s automatically set.
-  --priority: string # The deployment priority
+  --priority: string@priority-completer # The deployment priority
   --queue-capacity: float # Specifies the number of inference requests that are allowed in the queue. After the number of requests exceeds this value, new requests are rejected with a 429 error.
   --threads-per-allocation: float # Sets the number of threads used by each model allocation during inference. This generally increases the inference speed. The inference process is a compute-bound process; any number greater than the number of available hardware threads on the machine does not increase the inference speed. If this setting is greater than the number of hardware threads it will automatically be changed to a value less than the number of hardware threads.
   --timeout: string # Specifies the amount of time to wait for the model to deploy.
-  --wait-for: string # Specifies the allocation status to wait for before returning.
+  --wait-for: string@wait-for-completer # Specifies the allocation status to wait for before returning.
   --adaptive-allocations: any # Adaptive allocations configuration. When enabled, the number of allocations is set based on the current load. If adaptive_allocations is enabled, do not set the number of allocations manually.
 ]: any -> record<assignment: record<adaptive_allocations: any, assignment_state: record, max_assigned_allocations: float, reason: string, routing_table: record, start_time: record, task_parameters: record<model_bytes: record, model_id: record, deployment_id: record, cache_size: record, number_of_allocations: float, priority: record, per_deployment_memory_bytes: record, per_allocation_memory_bytes: record, queue_capacity: float, threads_per_allocation: float>>> {
   let input = $in
@@ -17380,7 +17390,7 @@ export def "reindex-rethrottle reindex-rethrottle" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --requests-per-second: float # The maximum number of documents to index per second, across the entire reindex operation (including slices). It can be either `-1` to turn off throttling or any decimal number like `1.7` or `12` to throttle to that level.
-  --group-by: string # The way to group the tasks in the response. We recommend setting this to `none`, which provides the cleanest response format.
+  --group-by: string@group-by-completer # The way to group the tasks in the response. We recommend setting this to `none`, which provides the cleanest response format.
 ]: nothing -> record<node_failures: table<type: string, reason: any, stack_trace: string, caused_by: record, root_cause: list, suppressed: list>, task_failures: table<task_id: float, node_id: record, status: string, reason: record>, nodes: record, tasks: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -19113,7 +19123,7 @@ export def "snapshot-mount searchable-snapshots-mount" [
   --allow-errors(-e) # Return full response without error handling
   --master-timeout: string # The period to wait for the master node. If the master node is not available before the timeout expires, the request fails and returns an error. To indicate that the request should never timeout, set it to `-1`.
   --wait-for-completion: string@bool-completer # If true, the request blocks until the operation is complete.
-  --storage: string # The mount option for the searchable snapshot index. For further information on mount options, refer to: [Mount options](https://www.elastic.co/docs/deploy-manage/tools/snapshot-and-restore/searchable-snapshots#searchable-snapshot-mount-storage-options)
+  --storage: string@storage-completer # The mount option for the searchable snapshot index. For further information on mount options, refer to: [Mount options](https://www.elastic.co/docs/deploy-manage/tools/snapshot-and-restore/searchable-snapshots#searchable-snapshot-mount-storage-options)
   index: any # The name of the index contained in the snapshot whose data is to be mounted. If no `renamed_index` is specified, this name will also be used to create the new index.
   --renamed-index: any # The name of the index that will be created.
   --index-settings: record # The settings that should be added to the index when it is mounted.
@@ -19262,7 +19272,7 @@ export def "security-role security-bulk-put-role" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --refresh: string # If `true` (the default) then refresh the affected shards to make this operation visible to search, if `wait_for` then wait for a refresh to make this operation visible to search, if `false` then do nothing with refreshes.
+  --refresh: string@refresh-completer # If `true` (the default) then refresh the affected shards to make this operation visible to search, if `wait_for` then wait for a refresh to make this operation visible to search, if `false` then do nothing with refreshes.
   roles: record # A dictionary of role name to RoleDescriptor objects to add or update
 ]: any -> record<created: list<string>, updated: list<string>, noop: list<string>, errors: record<count: float, details: record>> {
   let input = $in
@@ -19289,7 +19299,7 @@ export def "security-role security-bulk-delete-role" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --refresh: string # If `true` (the default) then refresh the affected shards to make this operation visible to search, if `wait_for` then wait for a refresh to make this operation visible to search, if `false` then do nothing with refreshes.
+  --refresh: string@refresh-completer # If `true` (the default) then refresh the affected shards to make this operation visible to search, if `wait_for` then wait for a refresh to make this operation visible to search, if `false` then do nothing with refreshes.
   names: list # An array of role names to delete
 ]: any -> record<deleted: list<string>, not_found: list<string>, errors: record<count: float, details: record>> {
   let input = $in
@@ -19844,7 +19854,7 @@ export def "security-service-credential-token security-delete-service-token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --refresh: string # If `true` (the default) then refresh the affected shards to make this operation visible to search, if `wait_for` then wait for a refresh to make this operation visible to search, if `false` then do nothing with refreshes.
+  --refresh: string@refresh-completer # If `true` (the default) then refresh the affected shards to make this operation visible to search, if `wait_for` then wait for a refresh to make this operation visible to search, if `false` then do nothing with refreshes.
 ]: nothing -> record<found: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -19946,7 +19956,7 @@ export def "security-privilege security-delete-privileges" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --refresh: string # If `true` (the default) then refresh the affected shards to make this operation visible to search, if `wait_for` then wait for a refresh to make this operation visible to search, if `false` then do nothing with refreshes.
+  --refresh: string@refresh-completer # If `true` (the default) then refresh the affected shards to make this operation visible to search, if `wait_for` then wait for a refresh to make this operation visible to search, if `false` then do nothing with refreshes.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -20078,7 +20088,7 @@ export def "security-role security-delete-role" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --refresh: string # If `true` (the default) then refresh the affected shards to make this operation visible to search, if `wait_for` then wait for a refresh to make this operation visible to search, if `false` then do nothing with refreshes.
+  --refresh: string@refresh-completer # If `true` (the default) then refresh the affected shards to make this operation visible to search, if `wait_for` then wait for a refresh to make this operation visible to search, if `false` then do nothing with refreshes.
 ]: nothing -> record<found: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -20196,7 +20206,7 @@ export def "security-role-mapping security-delete-role-mapping" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --refresh: string # If `true` (the default) then refresh the affected shards to make this operation visible to search, if `wait_for` then wait for a refresh to make this operation visible to search, if `false` then do nothing with refreshes.
+  --refresh: string@refresh-completer # If `true` (the default) then refresh the affected shards to make this operation visible to search, if `wait_for` then wait for a refresh to make this operation visible to search, if `false` then do nothing with refreshes.
 ]: nothing -> record<found: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -20314,7 +20324,7 @@ export def "security-user security-delete-user" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --refresh: string # If `true` (the default) then refresh the affected shards to make this operation visible to search, if `wait_for` then wait for a refresh to make this operation visible to search, if `false` then do nothing with refreshes.
+  --refresh: string@refresh-completer # If `true` (the default) then refresh the affected shards to make this operation visible to search, if `wait_for` then wait for a refresh to make this operation visible to search, if `false` then do nothing with refreshes.
 ]: nothing -> record<found: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -21008,7 +21018,7 @@ export def "security-api-key-grant security-grant-api-key" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --refresh: string # If 'true', Elasticsearch refreshes the affected shards to make this operation visible to search. If 'wait_for', it waits for a refresh to make this operation visible to search. If 'false', nothing is done with refreshes.
+  --refresh: string@refresh-completer # If 'true', Elasticsearch refreshes the affected shards to make this operation visible to search. If 'wait_for', it waits for a refresh to make this operation visible to search. If 'false', nothing is done with refreshes.
   api_key: any # The API key.
   grant_type: any # The type of grant. Supported grant types are: `access_token`, `password`.
   --access-token: string # The user's access token. If you specify the `access_token` grant type, this parameter is required. It is not valid with other grant types.
@@ -22282,11 +22292,11 @@ export def "snapshot snapshot-get" [
   --index-names: string@bool-completer # If `true`, the response includes the name of each index in each snapshot.
   --include-repository: string@bool-completer # If `true`, the response includes the repository name in each snapshot.
   --master-timeout: string # The period to wait for a connection to the master node. If no response is received before the timeout expires, the request fails and returns an error.
-  --order: string # The sort order. Valid values are `asc` for ascending and `desc` for descending order. The default behavior is ascending order.
+  --order: string@order-completer # The sort order. Valid values are `asc` for ascending and `desc` for descending order. The default behavior is ascending order.
   --offset: float # Numeric offset to start pagination from based on the snapshots matching this request. Using a non-zero value for this parameter is mutually exclusive with using the after parameter. Defaults to 0.
   --size: float # The maximum number of snapshots to return. The default is -1, which means to return all that match the request without limit.
   --slm-policy-filter: string # Filter snapshots by a comma-separated list of snapshot lifecycle management (SLM) policy names that snapshots belong to.  You can use wildcards (`*`) and combinations of wildcards followed by exclude patterns starting with `-`. For example, the pattern `*,-policy-a-\*` will return all snapshots except for those that were created by an SLM policy with a name starting with `policy-a-`. Note that the wildcard pattern `*` matches all snapshots created by an SLM policy but not those snapshots that were not created by an SLM policy. To include snapshots that were not created by an SLM policy, you can use the special pattern `_none` that will match all snapshots without an SLM policy.
-  --qp-sort: string # The sort order for the result. The default behavior is sorting by snapshot start time stamp.
+  --qp-sort: string@sort-completer-1 # The sort order for the result. The default behavior is sorting by snapshot start time stamp.
   --state: string # Only return snapshots with a state found in the given comma-separated list of snapshot states. The default is all snapshot states.
   --verbose: string@bool-completer # If `true`, returns additional information about each snapshot such as the version of Elasticsearch which took the snapshot, the start and end times of the snapshot, and the number of shards snapshotted.  NOTE: The parameters `size`, `order`, `after`, `from_sort_value`, `offset`, `slm_policy_filter`, and `sort` are not supported when you set `verbose=false` and the sort order for requests with `verbose=false` is undefined.
 ]: nothing -> record<remaining: float, total: float, next: string, responses: table<repository: record, snapshots: list, error: record>, snapshots: table<data_streams: list, duration: record, duration_in_millis: record, end_time: record, end_time_in_millis: record, failures: list, include_global_state: bool, indices: list, index_details: record, metadata: record, reason: string, repository: record, snapshot: record, shards: record, start_time: record, start_time_in_millis: record, state: string, uuid: record, version: record, version_id: record, feature_states: list>> {
@@ -22851,7 +22861,7 @@ export def "sql sql-query-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --format: string@format-completer # The format for the response. You can also specify a format using the `Accept` HTTP header. If you specify both this parameter and the `Accept` HTTP header, this parameter takes precedence.
+  --format: string@format-completer-1 # The format for the response. You can also specify a format using the `Accept` HTTP header. If you specify both this parameter and the `Accept` HTTP header, this parameter takes precedence.
   --allow-partial-search-results: string@bool-completer # If `true`, the response has partial results when there are shard request timeouts or shard failures. If `false`, the API returns an error with no partial results. (default: false)
   --catalog: string # The default catalog (cluster) for queries. If unspecified, the queries execute on the data in the local cluster only.
   --columnar: string@bool-completer # If `true`, the results are in a columnar fashion: one row represents all the values of a certain column from the current page of results. The API supports this parameter only for CBOR, JSON, SMILE, and YAML responses. (default: false)
@@ -22894,7 +22904,7 @@ export def "sql sql-query" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --format: string@format-completer # The format for the response. You can also specify a format using the `Accept` HTTP header. If you specify both this parameter and the `Accept` HTTP header, this parameter takes precedence.
+  --format: string@format-completer-1 # The format for the response. You can also specify a format using the `Accept` HTTP header. If you specify both this parameter and the `Accept` HTTP header, this parameter takes precedence.
   --allow-partial-search-results: string@bool-completer # If `true`, the response has partial results when there are shard request timeouts or shard failures. If `false`, the API returns an error with no partial results. (default: false)
   --catalog: string # The default catalog (cluster) for queries. If unspecified, the queries execute on the data in the local cluster only.
   --columnar: string@bool-completer # If `true`, the results are in a columnar fashion: one row represents all the values of a certain column from the current page of results. The API supports this parameter only for CBOR, JSON, SMILE, and YAML responses. (default: false)
@@ -23347,7 +23357,7 @@ export def "tasks tasks-list" [
   --allow-errors(-e) # Return full response without error handling
   --actions: string # A comma-separated list or wildcard expression of actions used to limit the request. For example, you can use `cluser:*` to retrieve all cluster-related tasks.
   --detailed: string@bool-completer # If `true`, the response includes detailed information about the running tasks. This information is useful to distinguish tasks from each other but is more costly to run.
-  --group-by: string # A key that is used to group tasks in the response. The task lists can be grouped either by nodes or by parent tasks.
+  --group-by: string@group-by-completer # A key that is used to group tasks in the response. The task lists can be grouped either by nodes or by parent tasks.
   --nodes: string # A comma-separated list of node IDs or names that is used to limit the returned information.
   --parent-task-id: string # A parent task identifier that is used to limit returned information. To return all tasks, omit this parameter or use a value of `-1`. If the parent task is not found, the API does not return a 404 response code.
   --timeout: string # The period to wait for each node to respond. If a node does not respond before its timeout expires, the response does not include its information. However, timed out nodes are included in the `node_failures` property.
@@ -23642,11 +23652,11 @@ export def "text-structure-find-field-structure text-structure-find-field-struct
   --allow-errors(-e) # Return full response without error handling
   --column-names: string # If `format` is set to `delimited`, you can specify the column names in a comma-separated list. If this parameter is not specified, the structure finder uses the column names from the header row of the text. If the text does not have a header row, columns are named "column1", "column2", "column3", for example.
   --delimiter: string # If you have set `format` to `delimited`, you can specify the character used to delimit the values in each row. Only a single character is supported; the delimiter cannot have multiple characters. By default, the API considers the following possibilities: comma, tab, semi-colon, and pipe (`|`). In this default scenario, all rows must have the same number of fields for the delimited format to be detected. If you specify a delimiter, up to 10% of the rows can have a different number of columns than the first row.
-  --documents-to-sample: string # The number of documents to include in the structural analysis. The minimum value is 2.
-  --ecs-compatibility: string # The mode of compatibility with ECS compliant Grok patterns. Use this parameter to specify whether to use ECS Grok patterns instead of legacy ones when the structure finder creates a Grok pattern. This setting primarily has an impact when a whole message Grok pattern such as `%{CATALINALOG}` matches the input. If the structure finder identifies a common structure but has no idea of the meaning then generic field names such as `path`, `ipaddress`, `field1`, and `field2` are used in the `grok_pattern` output. The intention in that situation is that a user who knows the meanings will rename the fields before using them.
+  --documents-to-sample: float # The number of documents to include in the structural analysis. The minimum value is 2.
+  --ecs-compatibility: string@ecs-compatibility-completer # The mode of compatibility with ECS compliant Grok patterns. Use this parameter to specify whether to use ECS Grok patterns instead of legacy ones when the structure finder creates a Grok pattern. This setting primarily has an impact when a whole message Grok pattern such as `%{CATALINALOG}` matches the input. If the structure finder identifies a common structure but has no idea of the meaning then generic field names such as `path`, `ipaddress`, `field1`, and `field2` are used in the `grok_pattern` output. The intention in that situation is that a user who knows the meanings will rename the fields before using them.
   --explain: string@bool-completer # If `true`, the response includes a field named `explanation`, which is an array of strings that indicate how the structure finder produced its result.
   --field: string # The field that should be analyzed.
-  --format: string # The high level structure of the text. By default, the API chooses the format. In this default scenario, all rows must have the same number of fields for a delimited format to be detected. If the format is set to delimited and the delimiter is not set, however, the API tolerates up to 5% of rows that have a different number of columns than the first row.
+  --format: string@format-completer-2 # The high level structure of the text. By default, the API chooses the format. In this default scenario, all rows must have the same number of fields for a delimited format to be detected. If the format is set to delimited and the delimiter is not set, however, the API tolerates up to 5% of rows that have a different number of columns than the first row.
   --grok-pattern: string # If the format is `semi_structured_text`, you can specify a Grok pattern that is used to extract fields from every message in the text. The name of the timestamp field in the Grok pattern must match what is specified in the `timestamp_field` parameter. If that parameter is not specified, the name of the timestamp field in the Grok pattern must match "timestamp". If `grok_pattern` is not specified, the structure finder creates a Grok pattern.
   --index: string # The name of the index that contains the analyzed field.
   --quote: string # If the format is `delimited`, you can specify the character used to quote the values in each row if they contain newlines or the delimiter character. Only a single character is supported. If this parameter is not specified, the default value is a double quote (`"`). If your delimited text format does not use quoting, a workaround is to set this argument to a character that does not appear anywhere in the sample.
@@ -23681,7 +23691,7 @@ export def "text-structure-find-message-structure text-structure-find-message-st
   --delimiter: string # If you the format is `delimited`, you can specify the character used to delimit the values in each row. Only a single character is supported; the delimiter cannot have multiple characters. By default, the API considers the following possibilities: comma, tab, semi-colon, and pipe (`|`). In this default scenario, all rows must have the same number of fields for the delimited format to be detected. If you specify a delimiter, up to 10% of the rows can have a different number of columns than the first row.
   --ecs-compatibility: string@ecs-compatibility-completer # The mode of compatibility with ECS compliant Grok patterns. Use this parameter to specify whether to use ECS Grok patterns instead of legacy ones when the structure finder creates a Grok pattern. This setting primarily has an impact when a whole message Grok pattern such as `%{CATALINALOG}` matches the input. If the structure finder identifies a common structure but has no idea of meaning then generic field names such as `path`, `ipaddress`, `field1`, and `field2` are used in the `grok_pattern` output, with the intention that a user who knows the meanings rename these fields before using it.
   --explain: string@bool-completer # If this parameter is set to true, the response includes a field named `explanation`, which is an array of strings that indicate how the structure finder produced its result.
-  --format: string@format-completer-1 # The high level structure of the text. By default, the API chooses the format. In this default scenario, all rows must have the same number of fields for a delimited format to be detected. If the format is `delimited` and the delimiter is not set, however, the API tolerates up to 5% of rows that have a different number of columns than the first row.
+  --format: string@format-completer-2 # The high level structure of the text. By default, the API chooses the format. In this default scenario, all rows must have the same number of fields for a delimited format to be detected. If the format is `delimited` and the delimiter is not set, however, the API tolerates up to 5% of rows that have a different number of columns than the first row.
   --grok-pattern: string # If the format is `semi_structured_text`, you can specify a Grok pattern that is used to extract fields from every message in the text. The name of the timestamp field in the Grok pattern must match what is specified in the `timestamp_field` parameter. If that parameter is not specified, the name of the timestamp field in the Grok pattern must match "timestamp". If `grok_pattern` is not specified, the structure finder creates a Grok pattern.
   --quote: string # If the format is `delimited`, you can specify the character used to quote the values in each row if they contain newlines or the delimiter character. Only a single character is supported. If this parameter is not specified, the default value is a double quote (`"`). If your delimited text format does not use quoting, a workaround is to set this argument to a character that does not appear anywhere in the sample.
   --should-trim-fields: string@bool-completer # If the format is `delimited`, you can specify whether values between delimiters should have whitespace trimmed from them. If this parameter is not specified and the delimiter is pipe (`|`), the default value is true. Otherwise, the default value is `false`.
@@ -23719,7 +23729,7 @@ export def "text-structure-find-message-structure text-structure-find-message-st
   --delimiter: string # If you the format is `delimited`, you can specify the character used to delimit the values in each row. Only a single character is supported; the delimiter cannot have multiple characters. By default, the API considers the following possibilities: comma, tab, semi-colon, and pipe (`|`). In this default scenario, all rows must have the same number of fields for the delimited format to be detected. If you specify a delimiter, up to 10% of the rows can have a different number of columns than the first row.
   --ecs-compatibility: string@ecs-compatibility-completer # The mode of compatibility with ECS compliant Grok patterns. Use this parameter to specify whether to use ECS Grok patterns instead of legacy ones when the structure finder creates a Grok pattern. This setting primarily has an impact when a whole message Grok pattern such as `%{CATALINALOG}` matches the input. If the structure finder identifies a common structure but has no idea of meaning then generic field names such as `path`, `ipaddress`, `field1`, and `field2` are used in the `grok_pattern` output, with the intention that a user who knows the meanings rename these fields before using it.
   --explain: string@bool-completer # If this parameter is set to true, the response includes a field named `explanation`, which is an array of strings that indicate how the structure finder produced its result.
-  --format: string@format-completer-1 # The high level structure of the text. By default, the API chooses the format. In this default scenario, all rows must have the same number of fields for a delimited format to be detected. If the format is `delimited` and the delimiter is not set, however, the API tolerates up to 5% of rows that have a different number of columns than the first row.
+  --format: string@format-completer-2 # The high level structure of the text. By default, the API chooses the format. In this default scenario, all rows must have the same number of fields for a delimited format to be detected. If the format is `delimited` and the delimiter is not set, however, the API tolerates up to 5% of rows that have a different number of columns than the first row.
   --grok-pattern: string # If the format is `semi_structured_text`, you can specify a Grok pattern that is used to extract fields from every message in the text. The name of the timestamp field in the Grok pattern must match what is specified in the `timestamp_field` parameter. If that parameter is not specified, the name of the timestamp field in the Grok pattern must match "timestamp". If `grok_pattern` is not specified, the structure finder creates a Grok pattern.
   --quote: string # If the format is `delimited`, you can specify the character used to quote the values in each row if they contain newlines or the delimiter character. Only a single character is supported. If this parameter is not specified, the default value is a double quote (`"`). If your delimited text format does not use quoting, a workaround is to set this argument to a character that does not appear anywhere in the sample.
   --should-trim-fields: string@bool-completer # If the format is `delimited`, you can specify whether values between delimiters should have whitespace trimmed from them. If this parameter is not specified and the delimiter is pipe (`|`), the default value is true. Otherwise, the default value is `false`.
@@ -23759,11 +23769,11 @@ export def "text-structure-find-structure text-structure-find-structure" [
   --delimiter: string # If you have set `format` to `delimited`, you can specify the character used to delimit the values in each row. Only a single character is supported; the delimiter cannot have multiple characters. By default, the API considers the following possibilities: comma, tab, semi-colon, and pipe (`|`). In this default scenario, all rows must have the same number of fields for the delimited format to be detected. If you specify a delimiter, up to 10% of the rows can have a different number of columns than the first row.
   --ecs-compatibility: string # The mode of compatibility with ECS compliant Grok patterns. Use this parameter to specify whether to use ECS Grok patterns instead of legacy ones when the structure finder creates a Grok pattern. Valid values are `disabled` and `v1`. This setting primarily has an impact when a whole message Grok pattern such as `%{CATALINALOG}` matches the input. If the structure finder identifies a common structure but has no idea of meaning then generic field names such as `path`, `ipaddress`, `field1`, and `field2` are used in the `grok_pattern` output, with the intention that a user who knows the meanings rename these fields before using it.
   --explain: string@bool-completer # If this parameter is set to `true`, the response includes a field named explanation, which is an array of strings that indicate how the structure finder produced its result. If the structure finder produces unexpected results for some text, use this query parameter to help you determine why the returned structure was chosen.
-  --format: string # The high level structure of the text. Valid values are `ndjson`, `xml`, `delimited`, and `semi_structured_text`. By default, the API chooses the format. In this default scenario, all rows must have the same number of fields for a delimited format to be detected. If the format is set to `delimited` and the delimiter is not set, however, the API tolerates up to 5% of rows that have a different number of columns than the first row.
+  --format: string@format-completer-2 # The high level structure of the text. Valid values are `ndjson`, `xml`, `delimited`, and `semi_structured_text`. By default, the API chooses the format. In this default scenario, all rows must have the same number of fields for a delimited format to be detected. If the format is set to `delimited` and the delimiter is not set, however, the API tolerates up to 5% of rows that have a different number of columns than the first row.
   --grok-pattern: string # If you have set `format` to `semi_structured_text`, you can specify a Grok pattern that is used to extract fields from every message in the text. The name of the timestamp field in the Grok pattern must match what is specified in the `timestamp_field` parameter. If that parameter is not specified, the name of the timestamp field in the Grok pattern must match "timestamp". If `grok_pattern` is not specified, the structure finder creates a Grok pattern.
   --has-header-row: string@bool-completer # If you have set `format` to `delimited`, you can use this parameter to indicate whether the column names are in the first row of the text. If this parameter is not specified, the structure finder guesses based on the similarity of the first row of the text to other rows.
-  --line-merge-size-limit: string # The maximum number of characters in a message when lines are merged to form messages while analyzing semi-structured text. If you have extremely long messages you may need to increase this, but be aware that this may lead to very long processing times if the way to group lines into messages is misdetected.
-  --lines-to-sample: string # The number of lines to include in the structural analysis, starting from the beginning of the text. The minimum is 2. If the value of this parameter is greater than the number of lines in the text, the analysis proceeds (as long as there are at least two lines in the text) for all of the lines.  NOTE: The number of lines and the variation of the lines affects the speed of the analysis. For example, if you upload text where the first 1000 lines are all variations on the same message, the analysis will find more commonality than would be seen with a bigger sample. If possible, however, it is more efficient to upload sample text with more variety in the first 1000 lines than to request analysis of 100000 lines to achieve some variety.
+  --line-merge-size-limit: float # The maximum number of characters in a message when lines are merged to form messages while analyzing semi-structured text. If you have extremely long messages you may need to increase this, but be aware that this may lead to very long processing times if the way to group lines into messages is misdetected.
+  --lines-to-sample: float # The number of lines to include in the structural analysis, starting from the beginning of the text. The minimum is 2. If the value of this parameter is greater than the number of lines in the text, the analysis proceeds (as long as there are at least two lines in the text) for all of the lines.  NOTE: The number of lines and the variation of the lines affects the speed of the analysis. For example, if you upload text where the first 1000 lines are all variations on the same message, the analysis will find more commonality than would be seen with a bigger sample. If possible, however, it is more efficient to upload sample text with more variety in the first 1000 lines than to request analysis of 100000 lines to achieve some variety.
   --quote: string # If you have set `format` to `delimited`, you can specify the character used to quote the values in each row if they contain newlines or the delimiter character. Only a single character is supported. If this parameter is not specified, the default value is a double quote (`"`). If your delimited text format does not use quoting, a workaround is to set this argument to a character that does not appear anywhere in the sample.
   --should-trim-fields: string@bool-completer # If you have set `format` to `delimited`, you can specify whether values between delimiters should have whitespace trimmed from them. If this parameter is not specified and the delimiter is pipe (`|`), the default value is `true`. Otherwise, the default value is `false`.
   --should-parse-recursively: string@bool-completer # If the format is `ndjson`, you can specify whether to parse nested JSON objects recursively. The nested objects are parsed to a maximum depth equal to the default value of the `index.mapping.depth.limit` setting. Anything beyond that depth is parsed as an `object` type field. For formats other than `ndjson`, this parameter is ignored.
@@ -24351,10 +24361,10 @@ export def "update update" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --if-primary-term: float # Only perform the operation if the document has this primary term.
-  --if-seq-no: string # Only perform the operation if the document has this sequence number.
+  --if-seq-no: float # Only perform the operation if the document has this sequence number.
   --include-source-on-error: string@bool-completer # True or false if to include the document source in the error message in case of parsing errors.
   --lang: string # The script language.
-  --refresh: string # If 'true', Elasticsearch refreshes the affected shards to make this operation visible to search. If 'wait_for', it waits for a refresh to make this operation visible to search. If 'false', it does nothing with refreshes.
+  --refresh: string@refresh-completer # If 'true', Elasticsearch refreshes the affected shards to make this operation visible to search. If 'wait_for', it waits for a refresh to make this operation visible to search. If 'false', it does nothing with refreshes.
   --require-alias: string@bool-completer # If `true`, the destination must be an index alias.
   --retry-on-conflict: float # The number of times the operation should be retried when a conflict occurs.
   --routing: string # A custom value used to route operations to a specific shard.
@@ -24400,8 +24410,8 @@ export def "update-by-query update-by-query" [
   --allow-no-indices: string@bool-completer # A setting that does two separate checks on the index expression. If `false`, the request returns an error (1) if any wildcard expression (including `_all` and `*`) resolves to zero matching indices or (2) if the complete set of resolved indices, aliases or data streams is empty after all expressions are evaluated. If `true`, index expressions that resolve to no indices are allowed and the request returns an empty result.
   --analyzer: string # The analyzer to use for the query string. This parameter can be used only when the `q` query string parameter is specified.
   --analyze-wildcard: string@bool-completer # If `true`, wildcard and prefix queries are analyzed. This parameter can be used only when the `q` query string parameter is specified.
-  --conflicts: string # The preferred behavior when update by query hits version conflicts: `abort` or `proceed`.
-  --default-operator: string # The default operator for query string query: `and` or `or`. This parameter can be used only when the `q` query string parameter is specified.
+  --conflicts: string@conflicts-completer # The preferred behavior when update by query hits version conflicts: `abort` or `proceed`.
+  --default-operator: string@default-operator-completer # The default operator for query string query: `and` or `or`. This parameter can be used only when the `q` query string parameter is specified.
   --df: string # The field to use as default where no field prefix is given in the query string. This parameter can be used only when the `q` query string parameter is specified.
   --expand-wildcards: string # The type of index that wildcard patterns can match. If the request can target data streams, this argument determines whether wildcard expressions match hidden data streams. It supports comma-separated values, such as `open,hidden`.
   --qp-from: float # Skips the specified number of documents.
@@ -24418,7 +24428,7 @@ export def "update-by-query update-by-query" [
   --scroll: string # The period to retain the search context for scrolling.
   --scroll-size: float # The size of the scroll request that powers the operation.
   --search-timeout: string # An explicit timeout for each search request. By default, there is no timeout.
-  --search-type: string # The type of the search operation. Available options include `query_then_fetch` and `dfs_query_then_fetch`.
+  --search-type: string@search-type-completer # The type of the search operation. Available options include `query_then_fetch` and `dfs_query_then_fetch`.
   --slices: string # The number of slices this task should be divided into.
   --qp-sort: list # A comma-separated list of <field>:<direction> pairs.
   --stats: list # The specific `tag` of the request for logging and statistical purposes.

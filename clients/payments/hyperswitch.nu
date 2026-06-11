@@ -21,17 +21,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -78,9 +79,12 @@ def connector-name-completer [] { ["absa_sanlam" "aci" "adyen" "adyen_test" "ady
 def status-completer [] { ["active" "inactive"] }
 def connector-completer [] { ["absa_sanlam" "aci" "adyen" "adyen_test" "adyenplatform" "affirm" "airwallex" "amazonpay" "archipel" "authipay" "authorizedotnet" "bambora" "bamboraapac" "bankofamerica" "barclaycard" "billwerk" "bitpay" "blackhawknetwork" "bluesnap" "boku" "braintree" "breadpay" "calida" "cardinal" "cashtocode" "celero" "chargebee" "checkbook" "checkout" "checkout_test" "coinbase" "coingate" "cryptopay" "ctp_mastercard" "ctp_visa" "custombilling" "cybersource" "cybersourcedecisionmanager" "datatrans" "deutschebank" "digitalvirgo" "dlocal" "dwolla" "ebanx" "elavon" "envoy" "facilitapay" "fauxpay" "finix" "fiserv" "fiservcommercehub" "fiservemea" "fiuu" "flexiti" "forte" "getnet" "gigadat" "globalpay" "globepay" "gocardless" "gpayments" "helcim" "hipay" "hyperpg" "hyperswitch_vault" "iatapay" "imerchantsolutions" "inespay" "interpayments" "itaubank" "jpmorgan" "juspaythreedsserver" "klarna" "loonio" "mifinity" "mollie" "moneris" "multisafepay" "netcetera" "nexinets" "nexixpay" "nmi" "nomupay" "noon" "nordea" "novalnet" "nuvei" "opennode" "paybox" "payconex" "payjustnow" "payjustnowinstore" "payload" "payme" "payone" "paypal" "paypal_test" "paysafe" "paystack" "paytm" "payu" "peachpayments" "phonepe" "phonypay" "placetopay" "plaid" "powertranz" "pretendpay" "prophetpay" "rapyd" "razorpay" "recurly" "redsys" "revolv3" "riskified" "santander" "shift4" "signifyd" "silverflow" "square" "stax" "stripe" "stripe_billing_test" "stripe_test" "stripebilling" "taxjar" "tesouro" "threedsecureio" "tokenex" "tokenio" "truelayer" "trustly" "trustpay" "trustpayments" "tsys" "vgs" "volt" "wellsfargo" "wise" "worldline" "worldpay" "worldpaymodular" "worldpayvantiv" "worldpayxml" "xendit" "zen" "zift" "zsl"] }
 def decision-completer [] { ["do_default" "retry"] }
+def enable-completer [] { ["dynamic_connector_selection" "metrics" "none"] }
 def status-completer-1 [] { ["AUTHENTICATION_FAILED" "AUTHORIZATION_FAILED" "AUTHORIZED" "AUTHORIZING" "AUTO_REFUNDED" "CAPTURE_FAILED" "CAPTURE_INITIATED" "CHARGED" "C_O_D_INITIATED" "DECLINED" "FAILURE" "JUSPAY_DECLINED" "NOP" "PARTIAL_CHARGED" "PENDING" "PENDING_VBV" "STARTED" "TO_BE_CHARGED" "VOIDED" "VOIDED_POST_CHARGE" "VOID_FAILED" "VOID_INITIATED" "V_B_V_SUCCESSFUL"] }
 def type-completer-1 [] { ["card_bin"] }
+def data-kind-completer [] { ["card_bin" "extended_card_bin" "payment_method"] }
 def entity-type-completer [] { ["Company" "Individual" "NaturalPerson" "NonProfit" "Personal" "PublicSector" "lowercase"] }
+def item-type-completer [] { ["addon" "plan"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -2587,7 +2591,7 @@ export def "account-business-profile-dynamic-routing-success-based-toggle Toggle
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable: string # Feature to enable for success based routing
+  --enable: string@enable-completer # Feature to enable for success based routing
 ]: nothing -> record<id: string, profile_id: string, name: string, kind: string, description: string, created_at: int, modified_at: int, algorithm_for: record, decision_engine_routing_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2612,7 +2616,7 @@ export def "account-business-profile-dynamic-routing-elimination-toggle Toggle-e
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable: string # Feature to enable for elimination based routing
+  --enable: string@enable-completer # Feature to enable for elimination based routing
 ]: nothing -> record<id: string, profile_id: string, name: string, kind: string, description: string, created_at: int, modified_at: int, algorithm_for: record, decision_engine_routing_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2639,7 +2643,7 @@ export def "account-business-profile-dynamic-routing-success-based-create Create
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable: string # Feature to enable for success based routing
+  --enable: string@enable-completer # Feature to enable for success based routing
   --params: list # DEPRECATED, nullable
   --config: any # nullable
   decision_engine_configs: record # Configuration for Decision Engine success rate based routing — shape: {defaultLatencyThreshold?: float, defaultBucketSize?: int, defaultHedgingPercent?: float, defaultLowerResetFactor?: float, defaultUpperResetFactor?: float, defaultGatewayExtraScore?: list, subLevelInputConfig?: list}
@@ -2672,7 +2676,7 @@ export def "account-business-profile-dynamic-routing-elimination-create Create-e
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable: string # Feature to enable for elimination based routing
+  --enable: string@enable-completer # Feature to enable for elimination based routing
   --params: list # DEPRECATED, nullable
   --elimination-analyser-config: any # nullable
   decision_engine_configs: record # shape: {threshold: float}
@@ -2704,7 +2708,7 @@ export def "account-business-profile-dynamic-routing-contracts-toggle Toggle-con
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --enable: string # Feature to enable for contract based routing
+  --enable: string@enable-completer # Feature to enable for contract based routing
   --config: any # nullable
   --label-info: list # nullable — item shape: {label: string, target_count: int, target_time: int, mca_id: string}
 ]: any -> record<id: string, profile_id: string, name: string, kind: string, description: string, created_at: int, modified_at: int, algorithm_for: record, decision_engine_routing_id: string> {
@@ -2874,7 +2878,7 @@ export def "blocklist List-Blocked-fingerprints-of-a-particular-kind" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --data-kind: string # Kind of the fingerprint list requested
+  --data-kind: string@data-kind-completer # Kind of the fingerprint list requested
 ]: nothing -> record<fingerprint_id: string, data_kind: string, created_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4143,7 +4147,7 @@ export def "subscriptions-items Get-Subscription-Items" [
   --limit: int # Number of items to retrieve (nullable, format: int32)
   --offset: int # Number of items to skip (nullable, format: int32)
   --product-id: string # Filter by product ID (nullable)
-  --item-type: string # Filter by subscription item type plan or addon
+  --item-type: string@item-type-completer # Filter by subscription item type plan or addon
   --X-Profile-Id: string # Profile ID for authentication
 ]: nothing -> table<item_id: string, name: string, description: string, price_id: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))

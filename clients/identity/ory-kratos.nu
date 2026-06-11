@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -65,6 +66,7 @@ def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def status-completer [] { ["abandoned" "processing" "queued" "sent"] }
 def consistency-completer [] { ["" "eventual" "strong"] }
 def region-completer [] { ["asia" "asia-northeast" "eu" "eu-central" "global" "us" "us-east" "us-west"] }
 def state-completer [] { ["active" "inactive"] }
@@ -134,7 +136,7 @@ export def "admin-courier-messages listCourierMessages" [
   --allow-errors(-e) # Return full response without error handling
   --page-size: int # Items per Page  This is the number of items per page to return. For details on pagination please head over to the [pagination documentation](https://www.ory.com/docs/ecosystem/api-design#pagination). (format: int64, default: 250)
   --page-token: string # Next Page Token  The next page token. For details on pagination please head over to the [pagination documentation](https://www.ory.com/docs/ecosystem/api-design#pagination).
-  --status: string # Status filters out messages based on status. If no value is provided, it doesn't take effect on filter.
+  --status: string@status-completer # Status filters out messages based on status. If no value is provided, it doesn't take effect on filter.
   --recipient: string # Recipient filters out messages based on recipient. If no value is provided, it doesn't take effect on filter.
 ]: nothing -> record<error: record<code: int, debug: string, details: record, id: string, message: string, reason: string, request: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

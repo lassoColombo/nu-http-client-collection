@@ -96,15 +96,21 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## blockchain
 
-| Client                                           | Type    | Source                                                                                    |
-| ------------------------------------------------ | ------- | ----------------------------------------------------------------------------------------- |
-| [alchemy-nft](clients/blockchain/alchemy-nft.nu) | openapi | <https://raw.githubusercontent.com/alchemyplatform/docs-openapi-specs/main/nft/nfts.yaml> |
+| Client                                                 | Type    | Source                                                                                         |
+| ------------------------------------------------------ | ------- | ---------------------------------------------------------------------------------------------- |
+| [alchemy-nft](clients/blockchain/alchemy-nft.nu)       | openapi | <https://raw.githubusercontent.com/alchemyplatform/docs-openapi-specs/main/nft/nfts.yaml>      |
+| [alchemy-prices](clients/blockchain/alchemy-prices.nu) | openapi | <https://raw.githubusercontent.com/alchemyplatform/docs-openapi-specs/main/prices/prices.yaml> |
+| [alchemy-notify](clients/blockchain/alchemy-notify.nu) | openapi | <https://raw.githubusercontent.com/alchemyplatform/docs-openapi-specs/main/notify/notify.yaml> |
+| [alchemy-data](clients/blockchain/alchemy-data.nu)     | openapi | <https://raw.githubusercontent.com/alchemyplatform/docs-openapi-specs/main/data/v1.yaml>       |
+| [moralis](clients/blockchain/moralis.nu)               | openapi | <https://deep-index.moralis.io/api-docs-2.2/v2.2/swagger.json>                                 |
 
 ## browser-automation
 
-| Client                                                   | Type    | Source                                                         |
-| -------------------------------------------------------- | ------- | -------------------------------------------------------------- |
-| [browserless](clients/browser-automation/browserless.nu) | openapi | <https://docs.browserless.io/redocusaurus/plugin-redoc-0.yaml> |
+| Client                                                   | Type    | Source                                                                                                                                                    |
+| -------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [browserless](clients/browser-automation/browserless.nu) | openapi | <https://docs.browserless.io/redocusaurus/plugin-redoc-0.yaml>                                                                                            |
+| [browserbase](clients/browser-automation/browserbase.nu) | openapi | <https://storage.googleapis.com/stainless-sdk-openapi-specs/browserbase/browserbase-f39b852755134d01a440f7c37701f6c5397f43d13740d9ba08739cae488382a7.yml> |
+| [apify](clients/browser-automation/apify.nu)             | openapi | <https://api.apify.com/v2/openapi.json>                                                                                                                   |
 
 ## calendar
 
@@ -125,17 +131,22 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## cdn
 
-| Client                                                          | Type    | Source                                                                                                   |
-| --------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------- |
-| [cloudflare](clients/cdn/cloudflare.nu)                         | openapi | <https://raw.githubusercontent.com/cloudflare/api-schemas/main/openapi.json>                             |
-| [aws-cloudfront](clients/cdn/aws-cloudfront.nu)                 | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/cloudfront/2020-05-31/openapi.json>                        |
-| [aws-global-accelerator](clients/cdn/aws-global-accelerator.nu) | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/globalaccelerator/2018-08-08/openapi.json>                 |
-| [azure-cdn](clients/cdn/azure-cdn.nu)                           | openapi | <https://api.apis.guru/v2/specs/azure.com/cdn/2019-06-15-preview/swagger.json>                           |
-| [azure-cdn-waf](clients/cdn/azure-cdn-waf.nu)                   | openapi | <https://api.apis.guru/v2/specs/azure.com/cdn-cdnwebapplicationfirewall/2019-06-15-preview/swagger.json> |
-| [vercel](clients/cdn/vercel.nu)                                 | openapi | <https://openapi.vercel.sh/>                                                                             |
-| [bunny](clients/cdn/bunny.nu)                                   | openapi | <https://core-api-public-docs.b-cdn.net/docs/v3/public.json>                                             |
-| [gcore-cdn](clients/cdn/gcore-cdn.nu)                           | openapi | <https://gcore.com/docs/api-reference/services_docs_mintlify/cdn_api.yaml>                               |
-| [gcore-fastedge](clients/cdn/gcore-fastedge.nu)                 | openapi | <https://gcore.com/docs/api-reference/services_docs_mintlify/fastedge_api.yaml>                          |
+| Client                                                            | Type    | Source                                                                                                   |
+| ----------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------- |
+| [cloudflare](clients/cdn/cloudflare.nu)                           | openapi | <https://raw.githubusercontent.com/cloudflare/api-schemas/main/openapi.json>                             |
+| [aws-cloudfront](clients/cdn/aws-cloudfront.nu)                   | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/cloudfront/2020-05-31/openapi.json>                        |
+| [aws-global-accelerator](clients/cdn/aws-global-accelerator.nu)   | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/globalaccelerator/2018-08-08/openapi.json>                 |
+| [azure-cdn](clients/cdn/azure-cdn.nu)                             | openapi | <https://api.apis.guru/v2/specs/azure.com/cdn/2019-06-15-preview/swagger.json>                           |
+| [azure-cdn-waf](clients/cdn/azure-cdn-waf.nu)                     | openapi | <https://api.apis.guru/v2/specs/azure.com/cdn-cdnwebapplicationfirewall/2019-06-15-preview/swagger.json> |
+| [vercel](clients/cdn/vercel.nu)                                   | openapi | <https://openapi.vercel.sh/>                                                                             |
+| [bunny](clients/cdn/bunny.nu)                                     | openapi | <https://core-api-public-docs.b-cdn.net/docs/v3/public.json>                                             |
+| [gcore-cdn](clients/cdn/gcore-cdn.nu)                             | openapi | <https://gcore.com/docs/api-reference/services_docs_mintlify/cdn_api.yaml>                               |
+| [gcore-fastedge](clients/cdn/gcore-fastedge.nu)                   | openapi | <https://gcore.com/docs/api-reference/services_docs_mintlify/fastedge_api.yaml>                          |
+| [akamai-ccu](clients/cdn/akamai-ccu.nu)                           | openapi | <https://raw.githubusercontent.com/akamai/akamai-apis/main/apis/ccu/v3/openapi.json>                     |
+| [akamai-appsec](clients/cdn/akamai-appsec.nu)                     | openapi | <https://raw.githubusercontent.com/akamai/akamai-apis/main/apis/appsec/v1/openapi.json>                  |
+| [akamai-gtm](clients/cdn/akamai-gtm.nu)                           | openapi | <https://raw.githubusercontent.com/akamai/akamai-apis/main/apis/config-gtm/v1/openapi.json>              |
+| [akamai-edge-diagnostics](clients/cdn/akamai-edge-diagnostics.nu) | openapi | <https://raw.githubusercontent.com/akamai/akamai-apis/main/apis/edge-diagnostics/v1/openapi.json>        |
+| [akamai-amfa](clients/cdn/akamai-amfa.nu)                         | openapi | <https://raw.githubusercontent.com/akamai/akamai-apis/main/apis/amfa/v1/openapi.json>                    |
 
 ## chat
 
@@ -208,9 +219,10 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## collaboration
 
-| Client                                | Type    | Source                                                                                    |
-| ------------------------------------- | ------- | ----------------------------------------------------------------------------------------- |
-| [miro](clients/collaboration/miro.nu) | openapi | <https://raw.githubusercontent.com/miroapp/api-clients/main/packages/generator/spec.json> |
+| Client                                          | Type    | Source                                                                                    |
+| ----------------------------------------------- | ------- | ----------------------------------------------------------------------------------------- |
+| [miro](clients/collaboration/miro.nu)           | openapi | <https://raw.githubusercontent.com/miroapp/api-clients/main/packages/generator/spec.json> |
+| [bluescape](clients/collaboration/bluescape.nu) | openapi | <https://api.apps.us.bluescape.com/v3/openapi.json>                                       |
 
 ## commerce
 
@@ -276,6 +288,7 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [quay](clients/containers/quay.nu)                     | openapi | <https://quay.io/api/v1/discovery>                                                                                    |
 | [dockerhub](clients/containers/dockerhub.nu)           | openapi | <https://api.apis.guru/v2/specs/docker.com/hub/beta/openapi.json>                                                     |
 | [snyk](clients/containers/snyk.nu)                     | openapi | <https://api.apis.guru/v2/specs/snyk.io/1.0.0/openapi.json>                                                           |
+| [zot](clients/containers/zot.nu)                       | openapi | <https://raw.githubusercontent.com/project-zot/zot/main/swagger/swagger.json>                                         |
 
 ## crm
 
@@ -311,18 +324,28 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [google-workflows](clients/data-pipeline/google-workflows.nu)                   | openapi | <https://api.apis.guru/v2/specs/googleapis.com/workflows/v1/openapi.json>                                               |
 | [google-workflowexecutions](clients/data-pipeline/google-workflowexecutions.nu) | openapi | <https://api.apis.guru/v2/specs/googleapis.com/workflowexecutions/v1/openapi.json>                                      |
 | [aws-datapipeline](clients/data-pipeline/aws-datapipeline.nu)                   | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/datapipeline/2012-10-29/openapi.json>                                     |
+| [kestra](clients/data-pipeline/kestra.nu)                                       | openapi | <https://raw.githubusercontent.com/kestra-io/client-sdk/main/kestra-ee.yml>                                             |
 
 ## data-warehouse
 
-| Client                                                           | Type    | Source                                                                                                    |
-| ---------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------- |
-| [snowflake-account](clients/data-warehouse/snowflake-account.nu) | openapi | <https://raw.githubusercontent.com/snowflakedb/snowflake-rest-api-specs/main/specifications/account.yaml> |
+| Client                                                               | Type    | Source                                                                                                      |
+| -------------------------------------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------- |
+| [snowflake-account](clients/data-warehouse/snowflake-account.nu)     | openapi | <https://raw.githubusercontent.com/snowflakedb/snowflake-rest-api-specs/main/specifications/account.yaml>   |
+| [snowflake-database](clients/data-warehouse/snowflake-database.nu)   | openapi | <https://raw.githubusercontent.com/snowflakedb/snowflake-rest-api-specs/main/specifications/database.yaml>  |
+| [snowflake-warehouse](clients/data-warehouse/snowflake-warehouse.nu) | openapi | <https://raw.githubusercontent.com/snowflakedb/snowflake-rest-api-specs/main/specifications/warehouse.yaml> |
+| [snowflake-sqlapi](clients/data-warehouse/snowflake-sqlapi.nu)       | openapi | <https://raw.githubusercontent.com/snowflakedb/snowflake-rest-api-specs/main/specifications/sqlapi.yaml>    |
+| [bigquery](clients/data-warehouse/bigquery.nu)                       | openapi | <https://api.apis.guru/v2/specs/googleapis.com/bigquery/v2/openapi.json>                                    |
 
 ## database
 
-| Client                           | Type    | Source                                      |
-| -------------------------------- | ------- | ------------------------------------------- |
-| [neon](clients/database/neon.nu) | openapi | <https://neon.com/api_spec/release/v2.json> |
+| Client                                                     | Type    | Source                                                                                       |
+| ---------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------- |
+| [neon](clients/database/neon.nu)                           | openapi | <https://neon.com/api_spec/release/v2.json>                                                  |
+| [planetscale](clients/database/planetscale.nu)             | openapi | <https://api.planetscale.com/v1/openapi-spec>                                                |
+| [supabase-mgmt](clients/database/supabase-mgmt.nu)         | openapi | <https://api.supabase.com/api/v1-json>                                                       |
+| [turso](clients/database/turso.nu)                         | openapi | <https://raw.githubusercontent.com/tursodatabase/turso-docs/main/api-reference/openapi.json> |
+| [mongodb-atlas](clients/database/mongodb-atlas.nu)         | openapi | <https://raw.githubusercontent.com/mongodb/openapi/main/openapi/v2.json>                     |
+| [cockroachdb-cloud](clients/database/cockroachdb-cloud.nu) | openapi | <https://cockroachlabs.cloud/assets/docs/api/latest/openapi.json>                            |
 
 ## dns
 
@@ -489,6 +512,7 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [google-play-games](clients/gaming/google-play-games.nu)                             | openapi | <https://api.apis.guru/v2/specs/googleapis.com/games/v1/openapi.json>                           |
 | [google-play-games-configuration](clients/gaming/google-play-games-configuration.nu) | openapi | <https://api.apis.guru/v2/specs/googleapis.com/gamesConfiguration/v1configuration/openapi.json> |
 | [google-play-games-management](clients/gaming/google-play-games-management.nu)       | openapi | <https://api.apis.guru/v2/specs/googleapis.com/gamesManagement/v1management/openapi.json>       |
+| [twitch-helix](clients/gaming/twitch-helix.nu)                                       | openapi | <https://raw.githubusercontent.com/DmitryScaletta/twitch-api-swagger/main/openapi.json>         |
 
 ## healthcare
 
@@ -558,6 +582,8 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [statuspage](clients/incident/statuspage.nu)     | openapi | <https://raw.githubusercontent.com/sbecker59/statuspage-api-client-go/main/api/v1/statuspage/api/openapi.yaml> |
 | [instatus](clients/incident/instatus.nu)         | openapi | <https://raw.githubusercontent.com/instatushq/openapi/main/instatus.yaml>                                      |
 | [better-stack](clients/incident/better-stack.nu) | openapi | <https://raw.githubusercontent.com/api-evangelist/better-stack/main/openapi/better-stack-openapi.yml>          |
+| [firehydrant](clients/incident/firehydrant.nu)   | openapi | <https://raw.githubusercontent.com/firehydrant/firehydrant-go-sdk/main/openapi.yaml>                           |
+| [rootly](clients/incident/rootly.nu)             | openapi | <https://raw.githubusercontent.com/Rootly-AI-Labs/Rootly-MCP-server/main/rootly_openapi.json>                  |
 
 ## iot
 
@@ -607,17 +633,24 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## maps
 
-| Client                                               | Type    | Source                                                                          |
-| ---------------------------------------------------- | ------- | ------------------------------------------------------------------------------- |
-| [opencagedata](clients/maps/opencagedata.nu)         | openapi | <https://api.apis.guru/v2/specs/opencagedata.com/1/swagger.json>                |
-| [here-positioning](clients/maps/here-positioning.nu) | openapi | <https://api.apis.guru/v2/specs/here.com/positioning/2.1.1/openapi.json>        |
-| [tomtom-search](clients/maps/tomtom-search.nu)       | openapi | <https://api.apis.guru/v2/specs/tomtom.com/search/1.0.0/openapi.json>           |
-| [tomtom-routing](clients/maps/tomtom-routing.nu)     | openapi | <https://api.apis.guru/v2/specs/tomtom.com/routing/1.0.0/openapi.json>          |
-| [tomtom-maps](clients/maps/tomtom-maps.nu)           | openapi | <https://api.apis.guru/v2/specs/tomtom.com/maps/1.0.0/openapi.json>             |
-| [aws-location](clients/maps/aws-location.nu)         | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/location/2020-11-19/openapi.json> |
-| [geodb](clients/maps/geodb.nu)                       | openapi | <https://api.apis.guru/v2/specs/mashape.com/geodb/1.0.0/swagger.json>           |
-| [bc-geocoder](clients/maps/bc-geocoder.nu)           | openapi | <https://api.apis.guru/v2/specs/gov.bc.ca/geocoder/2.0.0/openapi.json>          |
-| [ip2location-io](clients/maps/ip2location-io.nu)     | openapi | <https://api.apis.guru/v2/specs/ip2location.io/1.0/openapi.json>                |
+| Client                                                                         | Type    | Source                                                                                                                 |
+| ------------------------------------------------------------------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------- |
+| [opencagedata](clients/maps/opencagedata.nu)                                   | openapi | <https://api.apis.guru/v2/specs/opencagedata.com/1/swagger.json>                                                       |
+| [here-positioning](clients/maps/here-positioning.nu)                           | openapi | <https://api.apis.guru/v2/specs/here.com/positioning/2.1.1/openapi.json>                                               |
+| [tomtom-search](clients/maps/tomtom-search.nu)                                 | openapi | <https://api.apis.guru/v2/specs/tomtom.com/search/1.0.0/openapi.json>                                                  |
+| [tomtom-routing](clients/maps/tomtom-routing.nu)                               | openapi | <https://api.apis.guru/v2/specs/tomtom.com/routing/1.0.0/openapi.json>                                                 |
+| [tomtom-maps](clients/maps/tomtom-maps.nu)                                     | openapi | <https://api.apis.guru/v2/specs/tomtom.com/maps/1.0.0/openapi.json>                                                    |
+| [aws-location](clients/maps/aws-location.nu)                                   | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/location/2020-11-19/openapi.json>                                        |
+| [geodb](clients/maps/geodb.nu)                                                 | openapi | <https://api.apis.guru/v2/specs/mashape.com/geodb/1.0.0/swagger.json>                                                  |
+| [bc-geocoder](clients/maps/bc-geocoder.nu)                                     | openapi | <https://api.apis.guru/v2/specs/gov.bc.ca/geocoder/2.0.0/openapi.json>                                                 |
+| [ip2location-io](clients/maps/ip2location-io.nu)                               | openapi | <https://api.apis.guru/v2/specs/ip2location.io/1.0/openapi.json>                                                       |
+| [stadia-maps](clients/maps/stadia-maps.nu)                                     | openapi | <https://api.stadiamaps.com/openapi.yaml>                                                                              |
+| [geoapify-forward-geocoding](clients/maps/geoapify-forward-geocoding.nu)       | openapi | <https://raw.githubusercontent.com/geoapify/geoapify-openapi-specs/main/api-specs/geocoding/forward_geocoding.yaml>    |
+| [geoapify-reverse-geocoding](clients/maps/geoapify-reverse-geocoding.nu)       | openapi | <https://raw.githubusercontent.com/geoapify/geoapify-openapi-specs/main/api-specs/geocoding/reverse_geocoding.yaml>    |
+| [geoapify-address-autocomplete](clients/maps/geoapify-address-autocomplete.nu) | openapi | <https://raw.githubusercontent.com/geoapify/geoapify-openapi-specs/main/api-specs/geocoding/address_autocomplete.yaml> |
+| [geoapify-routing](clients/maps/geoapify-routing.nu)                           | openapi | <https://raw.githubusercontent.com/geoapify/geoapify-openapi-specs/main/api-specs/routing/routing.yaml>                |
+| [geoapify-places](clients/maps/geoapify-places.nu)                             | openapi | <https://raw.githubusercontent.com/geoapify/geoapify-openapi-specs/main/api-specs/places/places.yaml>                  |
+| [geoapify-isoline](clients/maps/geoapify-isoline.nu)                           | openapi | <https://raw.githubusercontent.com/geoapify/geoapify-openapi-specs/main/api-specs/isoline/isoline.yaml>                |
 
 ## marketing
 
@@ -717,9 +750,10 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## password-manager
 
-| Client                                                                 | Type    | Source                                                                            |
-| ---------------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------- |
-| [onepassword-connect](clients/password-manager/onepassword-connect.nu) | openapi | <https://raw.githubusercontent.com/1Password/connect/main/docs/openapi/spec.yaml> |
+| Client                                                                       | Type    | Source                                                                            |
+| ---------------------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------- |
+| [onepassword-connect](clients/password-manager/onepassword-connect.nu)       | openapi | <https://raw.githubusercontent.com/1Password/connect/main/docs/openapi/spec.yaml> |
+| [onepassword-events-api](clients/password-manager/onepassword-events-api.nu) | openapi | <https://api.apis.guru/v2/specs/1password.com/events/1.0.0/openapi.json>          |
 
 ## payments
 
@@ -819,6 +853,8 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [realworld-conduit](clients/sandbox/realworld-conduit.nu) | openapi | <https://raw.githubusercontent.com/realworld-apps/realworld/main/specs/api/openapi.yml>          |
 | [jsonplaceholder](clients/sandbox/jsonplaceholder.nu)     | openapi | <https://raw.githubusercontent.com/sebastienlevert/jsonplaceholder-api/main/openapi.yaml>        |
 | [ergast-f1](clients/sandbox/ergast-f1.nu)                 | openapi | <https://raw.githubusercontent.com/adampax/ergast-f1-openapi-doc/master/ergast-openapi-doc.yaml> |
+| [randomlovecraft](clients/sandbox/randomlovecraft.nu)     | openapi | <https://api.apis.guru/v2/specs/randomlovecraft.com/1.0/openapi.json>                            |
+| [randommer](clients/sandbox/randommer.nu)                 | openapi | <https://api.apis.guru/v2/specs/randommer.io/v1/openapi.json>                                    |
 
 ## sci-fi
 
@@ -1033,12 +1069,18 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [wiremock-admin](clients/testing/wiremock-admin.nu)                           | openapi | <https://api.apis.guru/v2/specs/wiremock.org/admin/2.35.0/openapi.json>           |
 | [jokes-one](clients/testing/jokes-one.nu)                                     | openapi | <https://api.apis.guru/v2/specs/jokes.one/1.1/swagger.json>                       |
 | [quotes-rest](clients/testing/quotes-rest.nu)                                 | openapi | <https://api.apis.guru/v2/specs/quotes.rest/3.1/openapi.json>                     |
+| [fungenerators-trivia](clients/testing/fungenerators-trivia.nu)               | openapi | <https://api.apis.guru/v2/specs/fungenerators.com/trivia/1.5/swagger.json>        |
+| [fungenerators-riddle](clients/testing/fungenerators-riddle.nu)               | openapi | <https://api.apis.guru/v2/specs/fungenerators.com/riddle/1.5/openapi.json>        |
+| [fungenerators-shakespeare](clients/testing/fungenerators-shakespeare.nu)     | openapi | <https://api.apis.guru/v2/specs/fungenerators.com/shakespeare/1.5/openapi.json>   |
+| [fungenerators-pirate](clients/testing/fungenerators-pirate.nu)               | openapi | <https://api.apis.guru/v2/specs/fungenerators.com/pirate/1.5/openapi.json>        |
+| [lambdatest-screenshots](clients/testing/lambdatest-screenshots.nu)           | openapi | <https://api.apis.guru/v2/specs/lambdatest.com/1.0.1/openapi.json>                |
 
 ## time-tracking
 
 | Client                                              | Type    | Source                                                                                 |
 | --------------------------------------------------- | ------- | -------------------------------------------------------------------------------------- |
 | [toggl-track](clients/time-tracking/toggl-track.nu) | openapi | <https://engineering.toggl.com/assets/files/api-d56ecbd7b19d9020283019e0581d80ca.json> |
+| [clockify](clients/time-tracking/clockify.nu)       | openapi | <https://docs.clockify.me/openapi.json>                                                |
 
 ## torrent
 
@@ -1144,12 +1186,20 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## web-hosting
 
-| Client                                  | Type    | Source                                                         |
-| --------------------------------------- | ------- | -------------------------------------------------------------- |
-| [render](clients/web-hosting/render.nu) | openapi | <https://api-docs.render.com/openapi/render-public-api-1.json> |
+| Client                                    | Type    | Source                                                         |
+| ----------------------------------------- | ------- | -------------------------------------------------------------- |
+| [render](clients/web-hosting/render.nu)   | openapi | <https://api-docs.render.com/openapi/render-public-api-1.json> |
+| [dokploy](clients/web-hosting/dokploy.nu) | openapi | <https://docs.dokploy.com/openapi.json>                        |
+
+## webhooks
+
+| Client                           | Type    | Source                                     |
+| -------------------------------- | ------- | ------------------------------------------ |
+| [svix](clients/webhooks/svix.nu) | openapi | <https://api.svix.com/api/v1/openapi.json> |
 
 ## workflow-automation
 
-| Client                                    | Type    | Source                                   |
-| ----------------------------------------- | ------- | ---------------------------------------- |
-| [n8n](clients/workflow-automation/n8n.nu) | openapi | <https://docs.n8n.io/api/v1/openapi.yml> |
+| Client                                      | Type    | Source                                     |
+| ------------------------------------------- | ------- | ------------------------------------------ |
+| [n8n](clients/workflow-automation/n8n.nu)   | openapi | <https://docs.n8n.io/api/v1/openapi.yml>   |
+| [make](clients/workflow-automation/make.nu) | openapi | <https://eu1.make.com/api/v2/openapi.json> |

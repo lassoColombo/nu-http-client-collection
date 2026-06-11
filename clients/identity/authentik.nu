@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -71,6 +72,7 @@ def provider-model-completer [] { ["authentik_providers_google_workspace.googlew
 def type-completer [] { ["external" "internal" "internal_service_account" "service_account"] }
 def platform-completer [] { ["android" "bsd" "i_os" "linux" "mac_os" "other" "unix" "windows"] }
 def action-completer [] { ["authorize_application" "configuration_error" "configuration_warning" "custom_" "email_sent" "export_ready" "flow_execution" "impersonation_ended" "impersonation_started" "invitation_used" "login" "login_failed" "logout" "model_created" "model_deleted" "model_updated" "password_set" "policy_exception" "policy_execution" "property_mapping_exception" "review_attested" "review_completed" "review_initiated" "review_overdue" "secret_rotate" "secret_view" "source_linked" "suspicious_request" "system_exception" "system_task_exception" "system_task_execution" "update_available" "user_write"] }
+def severity-completer [] { ["alert" "notice" "warning"] }
 def mode-completer [] { ["email" "local" "webhook" "webhook_slack"] }
 def component-completer [] { ["ak-provider-iframe-logout" "ak-provider-oauth2-device-code" "ak-provider-oauth2-device-code-finish" "ak-provider-saml-native-logout" "ak-source-oauth-apple" "ak-source-plex" "ak-source-telegram" "ak-stage-authenticator-duo" "ak-stage-authenticator-email" "ak-stage-authenticator-sms" "ak-stage-authenticator-static" "ak-stage-authenticator-totp" "ak-stage-authenticator-validate" "ak-stage-authenticator-webauthn" "ak-stage-autosubmit" "ak-stage-captcha" "ak-stage-consent" "ak-stage-dummy" "ak-stage-email" "ak-stage-endpoint-agent" "ak-stage-identification" "ak-stage-password" "ak-stage-prompt" "ak-stage-user-login" "xak-flow-frame" "xak-flow-redirect"] }
 def layout-completer [] { ["content_left" "content_right" "sidebar_left" "sidebar_left_frame_background" "sidebar_right" "sidebar_right_frame_background" "stacked"] }
@@ -81,24 +83,27 @@ def group-delete-action-completer [] { ["delete" "do_nothing" "suspend"] }
 def sync-object-model-completer [] { ["authentik.core.models.Group" "authentik.core.models.User"] }
 def search-mode-completer [] { ["cached" "direct"] }
 def bind-mode-completer [] { ["cached" "direct"] }
+def default-name-id-policy-completer [] { ["urn:oasis:names:tc:SAML:1.1:nameid-format:X509SubjectName" "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress" "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified" "urn:oasis:names:tc:SAML:2.0:nameid-format:WindowsDomainQualifiedName" "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent" "urn:oasis:names:tc:SAML:2.0:nameid-format:transient"] }
 def digest-algorithm-completer [] { ["http://www.w3.org/2000/09/xmldsig#sha1" "http://www.w3.org/2001/04/xmldsig-more#sha384" "http://www.w3.org/2001/04/xmlenc#sha256" "http://www.w3.org/2001/04/xmlenc#sha512"] }
 def signature-algorithm-completer [] { ["http://www.w3.org/2000/09/xmldsig#dsa-sha1" "http://www.w3.org/2000/09/xmldsig#rsa-sha1" "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha1" "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256" "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha384" "http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha512" "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256" "http://www.w3.org/2001/04/xmldsig-more#rsa-sha384" "http://www.w3.org/2001/04/xmldsig-more#rsa-sha512"] }
-def default-name-id-policy-completer [] { ["urn:oasis:names:tc:SAML:1.1:nameid-format:X509SubjectName" "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress" "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified" "urn:oasis:names:tc:SAML:2.0:nameid-format:WindowsDomainQualifiedName" "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent" "urn:oasis:names:tc:SAML:2.0:nameid-format:transient"] }
 def accept-completer [] { ["application/json" "application/xml"] }
 def auth-mode-completer [] { ["oauth" "oauth_interactive" "token"] }
 def protocol-completer [] { ["rdp" "ssh" "vnc"] }
 def auth-mode-completer-1 [] { ["prompt" "static"] }
 def model-completer [] { ["authentik_blueprints.blueprintinstance" "authentik_brands.brand" "authentik_core.application" "authentik_core.applicationentitlement" "authentik_core.group" "authentik_core.token" "authentik_core.user" "authentik_crypto.certificatekeypair" "authentik_endpoints.deviceaccessgroup" "authentik_endpoints.deviceuserbinding" "authentik_endpoints.endpointstage" "authentik_endpoints_connectors_agent.agentconnector" "authentik_endpoints_connectors_agent.agentdeviceuserbinding" "authentik_endpoints_connectors_agent.enrollmenttoken" "authentik_endpoints_connectors_fleet.fleetconnector" "authentik_endpoints_connectors_google_chrome.googlechromeconnector" "authentik_enterprise.license" "authentik_events.event" "authentik_events.notification" "authentik_events.notificationrule" "authentik_events.notificationtransport" "authentik_events.notificationwebhookmapping" "authentik_flows.flow" "authentik_flows.flowstagebinding" "authentik_lifecycle.lifecycleiteration" "authentik_lifecycle.lifecyclerule" "authentik_lifecycle.review" "authentik_outposts.dockerserviceconnection" "authentik_outposts.kubernetesserviceconnection" "authentik_outposts.outpost" "authentik_policies.policybinding" "authentik_policies_dummy.dummypolicy" "authentik_policies_event_matcher.eventmatcherpolicy" "authentik_policies_expiry.passwordexpirypolicy" "authentik_policies_expression.expressionpolicy" "authentik_policies_geoip.geoippolicy" "authentik_policies_password.passwordpolicy" "authentik_policies_reputation.reputationpolicy" "authentik_policies_unique_password.uniquepasswordpolicy" "authentik_providers_google_workspace.googleworkspaceprovider" "authentik_providers_google_workspace.googleworkspaceprovidermapping" "authentik_providers_ldap.ldapprovider" "authentik_providers_microsoft_entra.microsoftentraprovider" "authentik_providers_microsoft_entra.microsoftentraprovidermapping" "authentik_providers_oauth2.oauth2provider" "authentik_providers_oauth2.scopemapping" "authentik_providers_proxy.proxyprovider" "authentik_providers_rac.endpoint" "authentik_providers_rac.racpropertymapping" "authentik_providers_rac.racprovider" "authentik_providers_radius.radiusprovider" "authentik_providers_radius.radiusproviderpropertymapping" "authentik_providers_saml.samlpropertymapping" "authentik_providers_saml.samlprovider" "authentik_providers_scim.scimmapping" "authentik_providers_scim.scimprovider" "authentik_providers_ssf.ssfprovider" "authentik_providers_ws_federation.wsfederationprovider" "authentik_rbac.initialpermissions" "authentik_rbac.role" "authentik_reports.dataexport" "authentik_sources_kerberos.groupkerberossourceconnection" "authentik_sources_kerberos.kerberossource" "authentik_sources_kerberos.kerberossourcepropertymapping" "authentik_sources_kerberos.userkerberossourceconnection" "authentik_sources_ldap.groupldapsourceconnection" "authentik_sources_ldap.ldapsource" "authentik_sources_ldap.ldapsourcepropertymapping" "authentik_sources_ldap.userldapsourceconnection" "authentik_sources_oauth.groupoauthsourceconnection" "authentik_sources_oauth.oauthsource" "authentik_sources_oauth.oauthsourcepropertymapping" "authentik_sources_oauth.useroauthsourceconnection" "authentik_sources_plex.groupplexsourceconnection" "authentik_sources_plex.plexsource" "authentik_sources_plex.plexsourcepropertymapping" "authentik_sources_plex.userplexsourceconnection" "authentik_sources_saml.groupsamlsourceconnection" "authentik_sources_saml.samlsource" "authentik_sources_saml.samlsourcepropertymapping" "authentik_sources_saml.usersamlsourceconnection" "authentik_sources_scim.scimsource" "authentik_sources_scim.scimsourcepropertymapping" "authentik_sources_telegram.grouptelegramsourceconnection" "authentik_sources_telegram.telegramsource" "authentik_sources_telegram.telegramsourcepropertymapping" "authentik_sources_telegram.usertelegramsourceconnection" "authentik_stages_account_lockdown.accountlockdownstage" "authentik_stages_authenticator_duo.authenticatorduostage" "authentik_stages_authenticator_duo.duodevice" "authentik_stages_authenticator_email.authenticatoremailstage" "authentik_stages_authenticator_email.emaildevice" "authentik_stages_authenticator_endpoint_gdtc.authenticatorendpointgdtcstage" "authentik_stages_authenticator_sms.authenticatorsmsstage" "authentik_stages_authenticator_sms.smsdevice" "authentik_stages_authenticator_static.authenticatorstaticstage" "authentik_stages_authenticator_static.staticdevice" "authentik_stages_authenticator_totp.authenticatortotpstage" "authentik_stages_authenticator_totp.totpdevice" "authentik_stages_authenticator_validate.authenticatorvalidatestage" "authentik_stages_authenticator_webauthn.authenticatorwebauthnstage" "authentik_stages_authenticator_webauthn.webauthndevice" "authentik_stages_captcha.captchastage" "authentik_stages_consent.consentstage" "authentik_stages_deny.denystage" "authentik_stages_dummy.dummystage" "authentik_stages_email.emailstage" "authentik_stages_identification.identificationstage" "authentik_stages_invitation.invitation" "authentik_stages_invitation.invitationstage" "authentik_stages_mtls.mutualtlsstage" "authentik_stages_password.passwordstage" "authentik_stages_prompt.prompt" "authentik_stages_prompt.promptstage" "authentik_stages_redirect.redirectstage" "authentik_stages_source.sourcestage" "authentik_stages_user_delete.userdeletestage" "authentik_stages_user_login.userloginstage" "authentik_stages_user_logout.userlogoutstage" "authentik_stages_user_write.userwritestage" "authentik_tasks_schedules.schedule" "authentik_tenants.domain"] }
+def format-completer [] { ["json" "yaml"] }
+def lang-completer [] { ["af" "ar" "ar-dz" "ast" "az" "be" "bg" "bn" "br" "bs" "ca" "ckb" "cs" "cy" "da" "de" "dsb" "el" "en" "en-au" "en-gb" "eo" "es" "es-ar" "es-co" "es-mx" "es-ni" "es-ve" "et" "eu" "fa" "fi" "fr" "fy" "ga" "gd" "gl" "he" "hi" "hr" "hsb" "hu" "hy" "ia" "id" "ig" "io" "is" "it" "ja" "ka" "kab" "kk" "km" "kn" "ko" "ky" "lb" "lt" "lv" "mk" "ml" "mn" "mr" "ms" "my" "nb" "ne" "nl" "nn" "os" "pa" "pl" "pt" "pt-br" "ro" "ru" "sk" "sl" "sq" "sr" "sr-latn" "sv" "sw" "ta" "te" "tg" "th" "tk" "tr" "tt" "udm" "ug" "uk" "ur" "uz" "vi" "zh-hans" "zh-hant"] }
 def accept-completer-1 [] { ["application/json" "application/vnd.oai.openapi" "application/vnd.oai.openapi+json" "application/yaml"] }
 def provider-type-completer [] { ["apple" "discord" "entraid" "facebook" "github" "gitlab" "google" "mailcow" "okta" "openidconnect" "patreon" "reddit" "slack" "twitch" "twitter" "wechat"] }
 def pkce-completer [] { ["S256" "none" "plain"] }
 def binding-type-completer [] { ["POST" "POST_AUTO" "REDIRECT"] }
-def provider-completer [] { ["generic" "twilio"] }
+def delivery-method-completer [] { ["https://schemas.openid.net/secevent/risc/delivery-method/poll" "https://schemas.openid.net/secevent/risc/delivery-method/push" "urn:ietf:rfc:8935" "urn:ietf:rfc:8936"] }
 def auth-type-completer [] { ["basic" "bearer"] }
+def provider-completer [] { ["generic" "twilio"] }
 def digits-completer [] { ["6" "8"] }
 def not-configured-action-completer [] { ["configure" "deny" "skip"] }
-def user-verification-completer [] { ["discouraged" "preferred" "required"] }
 def resident-key-requirement-completer [] { ["discouraged" "preferred" "required"] }
+def user-verification-completer [] { ["discouraged" "preferred" "required"] }
 def request-content-type-completer [] { ["application/json" "application/x-www-form-urlencoded"] }
 def mode-completer-1 [] { ["always_require" "expiring" "permanent"] }
 def mode-completer-2 [] { ["optional" "required"] }
@@ -3564,7 +3569,7 @@ export def "core-tokens list" [
   --expires: string # format: date-time
   --expiring: string@bool-completer
   --identifier: string
-  --intent: string
+  --intent: string@intent-completer
   --managed: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -7115,7 +7120,7 @@ export def "events-notifications list" [
   --page-size: int # Number of results to return per page.
   --search: string # A search term.
   --seen: string@bool-completer
-  --severity: string
+  --severity: string@severity-completer
   --user: int
 ]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<pk: string, severity: record, body: string, hyperlink: string, hyperlink_label: string, created: string, event: record, seen: bool>, autocomplete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7470,7 +7475,7 @@ export def "events-transports list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --mode: string
+  --mode: string@mode-completer
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -7698,7 +7703,7 @@ export def "flows-bindings list" [
   --page-size: int # Number of results to return per page.
   --pbm-uuid: string # format: uuid
   --policies: list
-  --policy-engine-mode: string
+  --policy-engine-mode: string@policy-engine-mode-completer
   --re-evaluate-policies: string@bool-completer
   --search: string # A search term.
   --stage: string # format: uuid
@@ -17132,9 +17137,9 @@ export def "providers-saml list" [
   --authn-context-class-ref-mapping: string # format: uuid
   --authorization-flow: string # format: uuid
   --backchannel-application: string # format: uuid
-  --default-name-id-policy: string
+  --default-name-id-policy: string@default-name-id-policy-completer
   --default-relay-state: string
-  --digest-algorithm: string
+  --digest-algorithm: string@digest-algorithm-completer
   --encryption-kp: string # format: uuid
   --invalidation-flow: string # format: uuid
   --is-backchannel: string@bool-completer
@@ -17152,7 +17157,7 @@ export def "providers-saml list" [
   --sign-logout-request: string@bool-completer
   --sign-logout-response: string@bool-completer
   --sign-response: string@bool-completer
-  --signature-algorithm: string
+  --signature-algorithm: string@signature-algorithm-completer
   --signing-kp: string # format: uuid
   --sls-binding: string
   --sls-url: string
@@ -18185,9 +18190,9 @@ export def "providers-wsfed list" [
   --authn-context-class-ref-mapping: string # format: uuid
   --authorization-flow: string # format: uuid
   --backchannel-application: string # format: uuid
-  --default-name-id-policy: string
+  --default-name-id-policy: string@default-name-id-policy-completer
   --default-relay-state: string
-  --digest-algorithm: string
+  --digest-algorithm: string@digest-algorithm-completer
   --encryption-kp: string # format: uuid
   --invalidation-flow: string # format: uuid
   --is-backchannel: string@bool-completer
@@ -18205,7 +18210,7 @@ export def "providers-wsfed list" [
   --sign-logout-request: string@bool-completer
   --sign-logout-response: string@bool-completer
   --sign-response: string@bool-completer
-  --signature-algorithm: string
+  --signature-algorithm: string@signature-algorithm-completer
   --signing-kp: string # format: uuid
   --sls-binding: string
   --sls-url: string
@@ -19479,8 +19484,8 @@ export def "schema get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-1 # Response content type
-  --format: string
-  --lang: string
+  --format: string@format-completer
+  --lang: string@lang-completer
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -21469,7 +21474,7 @@ export def "sources-oauth list" [
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --pbm-uuid: string # format: uuid
-  --policy-engine-mode: string
+  --policy-engine-mode: string@policy-engine-mode-completer
   --profile-url: string
   --provider-type: string
   --request-token-url: string
@@ -21750,7 +21755,7 @@ export def "sources-plex list" [
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --pbm-uuid: string # format: uuid
-  --policy-engine-mode: string
+  --policy-engine-mode: string@policy-engine-mode-completer
   --search: string # A search term.
   --slug: string
   --user-matching-mode: string
@@ -22023,8 +22028,8 @@ export def "sources-saml list" [
   --allow-errors(-e) # Return full response without error handling
   --allow-idp-initiated: string@bool-completer
   --authentication-flow: string # format: uuid
-  --binding-type: string
-  --digest-algorithm: string
+  --binding-type: string@binding-type-completer
+  --digest-algorithm: string@digest-algorithm-completer
   --enabled: string@bool-completer
   --enrollment-flow: string # format: uuid
   --force-authn: string@bool-completer
@@ -22036,10 +22041,10 @@ export def "sources-saml list" [
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --pbm-uuid: string # format: uuid
-  --policy-engine-mode: string
+  --policy-engine-mode: string@policy-engine-mode-completer
   --pre-authentication-flow: string # format: uuid
   --search: string # A search term.
-  --signature-algorithm: string
+  --signature-algorithm: string@signature-algorithm-completer
   --signed-assertion: string@bool-completer
   --signed-response: string@bool-completer
   --signing-kp: string # format: uuid
@@ -22885,7 +22890,7 @@ export def "sources-telegram list" [
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --pbm-uuid: string # format: uuid
-  --policy-engine-mode: string
+  --policy-engine-mode: string@policy-engine-mode-completer
   --request-message-access: string@bool-completer
   --search: string # A search term.
   --slug: string
@@ -24333,7 +24338,7 @@ export def "ssf-streams list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --delivery-method: string
+  --delivery-method: string@delivery-method-completer
   --endpoint-url: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -25407,7 +25412,7 @@ export def "stages-authenticator-sms list" [
   --account-sid: string
   --qp-auth: string
   --auth-password: string
-  --auth-type: string
+  --auth-type: string@auth-type-completer
   --configure-flow: string # format: uuid
   --friendly-name: string
   --from-number: string
@@ -25416,7 +25421,7 @@ export def "stages-authenticator-sms list" [
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
-  --provider: string
+  --provider: string@provider-completer
   --search: string # A search term.
   --stage-uuid: string # format: uuid
   --verify-only: string@bool-completer
@@ -25803,7 +25808,7 @@ export def "stages-authenticator-totp list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --configure-flow: string # format: uuid
-  --digits: string
+  --digits: string@digits-completer
   --friendly-name: string
   --name: string
   --ordering: string # Which field to use when ordering the results.
@@ -25987,7 +25992,7 @@ export def "stages-authenticator-validate list" [
   --allow-errors(-e) # Return full response without error handling
   --configuration-stages: list
   --name: string
-  --not-configured-action: string
+  --not-configured-action: string@not-configured-action-completer
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
@@ -26198,9 +26203,9 @@ export def "stages-authenticator-webauthn list" [
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
-  --resident-key-requirement: string
+  --resident-key-requirement: string@resident-key-requirement-completer
   --search: string # A search term.
-  --user-verification: string
+  --user-verification: string@user-verification-completer
 ]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: list, configure_flow: string, friendly_name: string, user_verification: string, authenticator_attachment: record, resident_key_requirement: string, hints: list, device_type_restrictions: list, device_type_restrictions_obj: list, prevent_duplicate_devices: bool, max_attempts: int>, autocomplete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -26643,7 +26648,7 @@ export def "stages-consent list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --consent-expire-in: string
-  --mode: string
+  --mode: string@mode-completer-1
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
@@ -28203,16 +28208,16 @@ export def "stages-mtls list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cert-attribute: string
+  --cert-attribute: string@cert-attribute-completer
   --certificate-authorities: list
-  --mode: string
+  --mode: string@mode-completer-2
   --name: string
   --ordering: string # Which field to use when ordering the results.
   --page: int # A page number within the paginated result set.
   --page-size: int # Number of results to return per page.
   --search: string # A search term.
   --stage-uuid: string # format: uuid
-  --user-attribute: string
+  --user-attribute: string@user-attribute-completer
 ]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: list, mode: string, certificate_authorities: list, cert_attribute: string, user_attribute: string>, autocomplete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -28583,7 +28588,7 @@ export def "stages-prompt-prompts list" [
   --page-size: int # Number of results to return per page.
   --placeholder: string
   --search: string # A search term.
-  --type: string
+  --type: string@type-completer-2
 ]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<pk: string, name: string, field_key: string, label: string, type: string, required: bool, placeholder: string, initial_value: string, order: int, prompt_stages_obj: list, sub_text: string, placeholder_expression: bool, initial_value_expression: bool>, autocomplete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -29899,9 +29904,9 @@ export def "stages-user-write list" [
   --page-size: int # Number of results to return per page.
   --search: string # A search term.
   --stage-uuid: string # format: uuid
-  --user-creation-mode: string
+  --user-creation-mode: string@user-creation-mode-completer
   --user-path-template: string
-  --user-type: string
+  --user-type: string@user-type-completer
 ]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: list, user_creation_mode: string, create_users_as_inactive: bool, create_users_group: string, user_type: string, user_path_template: string>, autocomplete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

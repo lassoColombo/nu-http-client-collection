@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -65,6 +66,7 @@ def base-url-completer [] { ["https://api.intercom.io" "https://api.eu.intercom.
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def Intercom-Version-completer [] { ["1.0" "1.1" "1.2" "1.3" "1.4" "2.0" "2.1" "2.10" "2.11" "2.2" "2.3" "2.4" "2.5" "2.6" "2.7" "2.8" "2.9" "Preview"] }
 def state-completer [] { ["draft" "published"] }
 def message-type-completer [] { ["comment" "note"] }
 def type-completer [] { ["admin"] }
@@ -115,7 +117,7 @@ export def "me identifyAdmin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, id: string, name: string, email: string, job_title: string, away_mode_enabled: bool, away_mode_reassign: bool, has_inbox_seat: bool, team_ids: list<int>, avatar: record<type: string, image_url: string>, email_verified: bool, app: record<type: string, id_code: string, name: string, region: string, timezone: string, created_at: int, identity_verification: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -140,7 +142,7 @@ export def "admins-away setAwayAdmin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --away-mode-enabled: string@bool-completer # Set to "true" to change the status of the admin to away. (default: true, e.g. true)
   --away-mode-reassign: string@bool-completer # Set to "true" to assign any new conversation replies to your default inbox. (default: false, e.g. false)
 ]: any -> record<type: string, id: string, name: string, email: string, job_title: string, away_mode_enabled: bool, away_mode_reassign: bool, has_inbox_seat: bool, team_ids: list<int>, avatar: record<image_url: string>, team_priority_level: record<primary_team_ids: list<int>, secondary_team_ids: list<int>>> {
@@ -171,7 +173,7 @@ export def "admins-activity-logs listActivityLogs" [
   --allow-errors(-e) # Return full response without error handling
   --created-at-after: string # The start date that you request data for. It must be formatted as a UNIX timestamp. (e.g. 1677253093)
   --created-at-before: string # The end date that you request data for. It must be formatted as a UNIX timestamp. (e.g. 1677861493)
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, pages: record<type: string, page: int, next: record<per_page: int, starting_after: string>, per_page: int, total_pages: int>, activity_logs: table<id: string, performed_by: record, metadata: record, created_at: int, activity_type: string, activity_description: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -197,7 +199,7 @@ export def "admins listAdmins" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --display-avatar: string@bool-completer # If set to true, the response will include the admin's avatar object containing the image URL. Defaults to false. (e.g. true)
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, admins: table<type: string, id: string, name: string, email: string, job_title: string, away_mode_enabled: bool, away_mode_reassign: bool, has_inbox_seat: bool, team_ids: list, avatar: record, team_priority_level: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -223,7 +225,7 @@ export def "admins retrieveAdmin" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, id: string, name: string, email: string, job_title: string, away_mode_enabled: bool, away_mode_reassign: bool, has_inbox_seat: bool, team_ids: list<int>, avatar: record<image_url: string>, team_priority_level: record<primary_team_ids: list<int>, secondary_team_ids: list<int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -249,7 +251,7 @@ export def "articles listArticles" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # The page of results to fetch. Defaults to first page (e.g. 1)
   --per-page: int # How many results to display per page. Defaults to 15 (e.g. 15)
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, pages: record<type: string, page: int, next: record<per_page: int, starting_after: string>, per_page: int, total_pages: int>, total_count: int, data: table<type: string, id: string, workspace_id: string, title: string, description: string, body: string, author_id: int, state: string, created_at: int, updated_at: int, url: string, parent_id: int, parent_ids: list, parent_type: string, default_locale: string, translated_content: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -275,7 +277,7 @@ export def "articles createArticle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   title: string # The title of the article.For multilingual articles, this will be the title of the default language's content. (e.g. Thanks for everything)
   --description: string # The description of the article. For multilingual articles, this will be the description of the default language's content. (e.g. Description of the Article)
   --body-body: string # The content of the article. For multilingual articles, this will be the body of the default language's content. (e.g. <p>This is the body in html</p>)
@@ -311,7 +313,7 @@ export def "articles retrieveArticle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<statistics: record<type: string, views: int, conversions: int, reactions: int, happy_reaction_percentage: float, neutral_reaction_percentage: float, sad_reaction_percentage: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -337,7 +339,7 @@ export def "articles updateArticle" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --title: string # The title of the article.For multilingual articles, this will be the title of the default language's content. (e.g. Thanks for everything)
   --description: string # The description of the article. For multilingual articles, this will be the description of the default language's content. (e.g. Description of the Article)
   --body-body: string # The content of the article. For multilingual articles, this will be the body of the default language's content. (e.g. <p>This is the body in html</p>)
@@ -373,7 +375,7 @@ export def "articles delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<id: string, object: string, deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -401,7 +403,7 @@ export def "articles-search searchArticles" [
   --state: string # The state of the Articles returned. One of `published`, `draft` or `all`. (e.g. published)
   --help-center-id: int # The ID of the Help Center to search in. (e.g. 123)
   --highlight: string@bool-completer # Return a highlighted version of the matching content within your articles. Refer to the response schema for more details. (e.g. false)
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, total_count: int, data: record<articles: list<record>, highlights: list<record>>, pages: record<type: string, page: int, next: record<per_page: int, starting_after: string>, per_page: int, total_pages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -428,7 +430,7 @@ export def "help-center-collections listAllCollections" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # The page of results to fetch. Defaults to first page (e.g. 1)
   --per-page: int # How many results to display per page. Defaults to 15 (e.g. 15)
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, pages: record<type: string, page: int, next: record<per_page: int, starting_after: string>, per_page: int, total_pages: int>, total_count: int, data: table<id: string, workspace_id: string, name: string, description: string, created_at: int, updated_at: int, url: string, icon: string, order: int, default_locale: string, translated_content: record, parent_id: string, help_center_id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -454,7 +456,7 @@ export def "help-center-collections createCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   name: string # The name of the collection. For multilingual collections, this will be the name of the default language's content. (e.g. collection 51)
   --description: string # The description of the collection. For multilingual collections, this will be the description of the default language's content. (e.g. English description)
   --translated-content: record # The Translated Content of an Group. The keys are the locale codes and the values are the translated content of the Group. — shape: {type: "group_translated_content", ar?: record, bg?: record, bs?: record, ca?: record, cs?: record, da?: record, de?: record, el?: record, en?: record, es?: record, et?: record, fi?: record, fr?: record, he?: record, hr?: record, hu?: record, id?: record, it?: record, ja?: record, ko?: record, lt?: record, lv?: record, mn?: record, nb?: record, nl?: record, pl?: record, pt?: record, ro?: record, ru?: record, sl?: record, sr?: record, sv?: record, tr?: record, vi?: record, pt-BR?: record, zh-CN?: record, zh-TW?: record}
@@ -487,7 +489,7 @@ export def "help-center-collections retrieveCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<id: string, workspace_id: string, name: string, description: string, created_at: int, updated_at: int, url: string, icon: string, order: int, default_locale: string, translated_content: record<type: string, ar: record<type: string, name: string, description: string>, bg: record<type: string, name: string, description: string>, bs: record<type: string, name: string, description: string>, ca: record<type: string, name: string, description: string>, cs: record<type: string, name: string, description: string>, da: record<type: string, name: string, description: string>, de: record<type: string, name: string, description: string>, el: record<type: string, name: string, description: string>, en: record<type: string, name: string, description: string>, es: record<type: string, name: string, description: string>, et: record<type: string, name: string, description: string>, fi: record<type: string, name: string, description: string>, fr: record<type: string, name: string, description: string>, he: record<type: string, name: string, description: string>, hr: record<type: string, name: string, description: string>, hu: record<type: string, name: string, description: string>, id: record<type: string, name: string, description: string>, it: record<type: string, name: string, description: string>, ja: record<type: string, name: string, description: string>, ko: record<type: string, name: string, description: string>, lt: record<type: string, name: string, description: string>, lv: record<type: string, name: string, description: string>, mn: record<type: string, name: string, description: string>, nb: record<type: string, name: string, description: string>, nl: record<type: string, name: string, description: string>, pl: record<type: string, name: string, description: string>, pt: record<type: string, name: string, description: string>, ro: record<type: string, name: string, description: string>, ru: record<type: string, name: string, description: string>, sl: record<type: string, name: string, description: string>, sr: record<type: string, name: string, description: string>, sv: record<type: string, name: string, description: string>, tr: record<type: string, name: string, description: string>, vi: record<type: string, name: string, description: string>, pt_BR: record<type: string, name: string, description: string>, zh_CN: record<type: string, name: string, description: string>, zh_TW: record<type: string, name: string, description: string>>, parent_id: string, help_center_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -513,7 +515,7 @@ export def "help-center-collections updateCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --name: string # The name of the collection. For multilingual collections, this will be the name of the default language's content. (e.g. collection 51)
   --description: string # The description of the collection. For multilingual collections, this will be the description of the default language's content. (e.g. English description)
   --translated-content: record # The Translated Content of an Group. The keys are the locale codes and the values are the translated content of the Group. — shape: {type: "group_translated_content", ar?: record, bg?: record, bs?: record, ca?: record, cs?: record, da?: record, de?: record, el?: record, en?: record, es?: record, et?: record, fi?: record, fr?: record, he?: record, hr?: record, hu?: record, id?: record, it?: record, ja?: record, ko?: record, lt?: record, lv?: record, mn?: record, nb?: record, nl?: record, pl?: record, pt?: record, ro?: record, ru?: record, sl?: record, sr?: record, sv?: record, tr?: record, vi?: record, pt-BR?: record, zh-CN?: record, zh-TW?: record}
@@ -545,7 +547,7 @@ export def "help-center-collections delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<id: string, object: string, deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -570,7 +572,7 @@ export def "help-center-help-centers retrieveHelpCenter" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<id: string, workspace_id: string, created_at: int, updated_at: int, identifier: string, website_turned_on: bool, display_name: string, url: string, custom_domain: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -596,7 +598,7 @@ export def "help-center-help-centers listHelpCenters" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # The page of results to fetch. Defaults to first page (e.g. 1)
   --per-page: int # How many results to display per page. Defaults to 15 (e.g. 15)
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, data: table<id: string, workspace_id: string, created_at: int, updated_at: int, identifier: string, website_turned_on: bool, display_name: string, url: string, custom_domain: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -621,7 +623,7 @@ export def "companies createOrUpdateCompany" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --name: string # The name of the Company (e.g. Intercom)
   --company-id: string # The company id you have defined for the company. Can't be updated (e.g. 625e90fc55ab113b6d92175f)
   --plan: string # The name of the plan you have associated with the company. (e.g. Enterprise)
@@ -663,7 +665,7 @@ export def "companies retrieveCompany" [
   --segment-id: string # The `segment_id` of the company to filter by. (e.g. 98765)
   --page: int # The page of results to fetch. Defaults to first page (e.g. 1)
   --per-page: int # How many results to display per page. Defaults to 15 (e.g. 15)
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, pages: record<type: string, page: int, next: record<per_page: int, starting_after: string>, per_page: int, total_pages: int>, total_count: int, data: table<type: string, id: string, name: string, app_id: string, plan: record, company_id: string, remote_created_at: int, created_at: int, updated_at: int, last_request_at: int, size: int, website: string, industry: string, monthly_spend: int, session_count: int, user_count: int, custom_attributes: record, tags: record, segments: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -689,7 +691,7 @@ export def "companies RetrieveACompanyById" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, id: string, name: string, app_id: string, plan: record<type: string, id: string, name: string>, company_id: string, remote_created_at: int, created_at: int, updated_at: int, last_request_at: int, size: int, website: string, industry: string, monthly_spend: int, session_count: int, user_count: int, custom_attributes: record, tags: record<type: string, tags: list<record>>, segments: record<type: string, segments: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -714,7 +716,7 @@ export def "companies UpdateCompany" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, id: string, name: string, app_id: string, plan: record<type: string, id: string, name: string>, company_id: string, remote_created_at: int, created_at: int, updated_at: int, last_request_at: int, size: int, website: string, industry: string, monthly_spend: int, session_count: int, user_count: int, custom_attributes: record, tags: record<type: string, tags: list<record>>, segments: record<type: string, segments: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -739,7 +741,7 @@ export def "companies delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<id: string, object: string, deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -766,7 +768,7 @@ export def "companies-contacts ListAttachedContacts" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # The page of results to fetch. Defaults to first page (e.g. 1)
   --per-page: int # How many results to return per page. Defaults to 15 (e.g. 15)
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, data: table<type: string, id: string, external_id: string, workspace_id: string, role: string, email: string, email_domain: string, phone: string, formatted_phone: string, name: string, owner_id: int, has_hard_bounced: bool, marked_email_as_spam: bool, unsubscribed_from_emails: bool, created_at: int, updated_at: int, signed_up_at: int, last_seen_at: int, last_replied_at: int, last_contacted_at: int, last_email_opened_at: int, last_email_clicked_at: int, language_override: string, browser: string, browser_version: string, browser_language: string, os: string, android_app_name: string, android_app_version: string, android_device: string, android_os_version: string, android_sdk_version: string, android_last_seen_at: int, ios_app_name: string, ios_app_version: string, ios_device: string, ios_os_version: string, ios_sdk_version: string, ios_last_seen_at: int, custom_attributes: record, avatar: record, tags: record, notes: record, companies: record, location: record, social_profiles: record>, total_count: int, pages: record<type: string, page: int, next: record<per_page: int, starting_after: string>, per_page: int, total_pages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -792,7 +794,7 @@ export def "companies-segments ListAttachedSegmentsForCompanies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, data: table<type: string, id: string, name: string, created_at: int, updated_at: int, person_type: string, count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -819,7 +821,7 @@ export def "companies-list listAllCompanies" [
   --page: int # The page of results to fetch. Defaults to first page (e.g. 1)
   --per-page: int # How many results to return per page. Defaults to 15 (e.g. 15)
   --order: string # `asc` or `desc`. Return the companies in ascending or descending order. Defaults to desc (e.g. desc)
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, pages: record<type: string, page: int, next: record<per_page: int, starting_after: string>, per_page: int, total_pages: int>, total_count: int, data: table<type: string, id: string, name: string, app_id: string, plan: record, company_id: string, remote_created_at: int, created_at: int, updated_at: int, last_request_at: int, size: int, website: string, industry: string, monthly_spend: int, session_count: int, user_count: int, custom_attributes: record, tags: record, segments: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -845,7 +847,7 @@ export def "companies-scroll scrollOverAllCompanies" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --scroll-param: string
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, data: table<type: string, id: string, name: string, app_id: string, plan: record, company_id: string, remote_created_at: int, created_at: int, updated_at: int, last_request_at: int, size: int, website: string, industry: string, monthly_spend: int, session_count: int, user_count: int, custom_attributes: record, tags: record, segments: record>, pages: record<type: string, page: int, next: record<per_page: int, starting_after: string>, per_page: int, total_pages: int>, total_count: int, scroll_param: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -871,7 +873,7 @@ export def "contacts-companies attachContactToACompany" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   id: string # The unique identifier for the company which is given by Intercom (e.g. 58a430d35458202d41b1e65b)
 ]: any -> record<type: string, id: string, name: string, app_id: string, plan: record<type: string, id: string, name: string>, company_id: string, remote_created_at: int, created_at: int, updated_at: int, last_request_at: int, size: int, website: string, industry: string, monthly_spend: int, session_count: int, user_count: int, custom_attributes: record, tags: record<type: string, tags: list<record>>, segments: record<type: string, segments: list<record>>> {
   let input = $in
@@ -902,7 +904,7 @@ export def "contacts-companies listCompaniesForAContact" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # The page of results to fetch. Defaults to first page (e.g. 1)
   --per-page: int # How many results to display per page. Defaults to 15 (e.g. 15)
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, companies: table<type: string, id: string, name: string, app_id: string, plan: record, company_id: string, remote_created_at: int, created_at: int, updated_at: int, last_request_at: int, size: int, website: string, industry: string, monthly_spend: int, session_count: int, user_count: int, custom_attributes: record, tags: record, segments: record>, total_count: int, pages: record<type: string, page: int, next: string, per_page: int, total_pages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -929,7 +931,7 @@ export def "contacts-companies detachContactFromACompany" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, id: string, name: string, app_id: string, plan: record<type: string, id: string, name: string>, company_id: string, remote_created_at: int, created_at: int, updated_at: int, last_request_at: int, size: int, website: string, industry: string, monthly_spend: int, session_count: int, user_count: int, custom_attributes: record, tags: record<type: string, tags: list<record>>, segments: record<type: string, segments: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -956,7 +958,7 @@ export def "contacts-notes listNotes" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # The page of results to fetch. Defaults to first page (e.g. 1)
   --per-page: int # How many results to display per page. Defaults to 15 (e.g. 15)
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, data: table<type: string, id: string, created_at: int, contact: record, author: record, body: string>, total_count: int, pages: record<type: string, page: int, next: record<per_page: int, starting_after: string>, per_page: int, total_pages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -982,7 +984,7 @@ export def "contacts-notes createNote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --body-body: string # The text of the note. (e.g. New note)
   --admin-id: string # The unique identifier of a given admin. (e.g. 123)
 ]: any -> record<type: string, id: string, created_at: int, contact: record<type: string, id: string>, author: record<type: string, id: string, name: string, email: string, job_title: string, away_mode_enabled: bool, away_mode_reassign: bool, has_inbox_seat: bool, team_ids: list<int>, avatar: record<image_url: string>, team_priority_level: record<primary_team_ids: list, secondary_team_ids: list>>, body: string> {
@@ -1012,7 +1014,7 @@ export def "contacts-segments listSegmentsForAContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, data: table<type: string, id: string, name: string, created_at: int, updated_at: int, person_type: string, count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1037,7 +1039,7 @@ export def "contacts-subscriptions listSubscriptionsForAContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, data: table<type: string, id: string, state: string, default_translation: record, translations: list, consent_type: string, content_types: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1062,7 +1064,7 @@ export def "contacts-subscriptions attachSubscriptionTypeToContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   id: string # The unique identifier for the subscription which is given by Intercom (e.g. 37846)
   consent_type: string # The consent_type of a subscription, opt_out or opt_in. (e.g. opt_in)
 ]: any -> record<type: string, id: string, state: string, default_translation: record<name: string, description: string, locale: string>, translations: table<name: string, description: string, locale: string>, consent_type: string, content_types: list<string>> {
@@ -1093,7 +1095,7 @@ export def "contacts-subscriptions detachSubscriptionTypeToContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, id: string, state: string, default_translation: record<name: string, description: string, locale: string>, translations: table<name: string, description: string, locale: string>, consent_type: string, content_types: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1118,7 +1120,7 @@ export def "contacts-tags listTagsForAContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, data: table<type: string, id: string, name: string, applied_at: int, applied_by: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1143,7 +1145,7 @@ export def "contacts-tags attachTagToContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   id: string # The unique identifier for the tag which is given by Intercom (e.g. 7522907)
 ]: any -> record<type: string, id: string, name: string, applied_at: int, applied_by: record> {
   let input = $in
@@ -1173,7 +1175,7 @@ export def "contacts-tags detachTagFromContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, id: string, name: string, applied_at: int, applied_by: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1198,7 +1200,7 @@ export def "contacts UpdateContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --role: string # The role of the contact.
   --external-id: string # A unique identifier for the contact which is given to Intercom
   --email: string # The contacts email (e.g. jdoe@example.com)
@@ -1237,7 +1239,7 @@ export def "contacts ShowContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, id: string, external_id: string, workspace_id: string, role: string, email: string, email_domain: string, phone: string, formatted_phone: string, name: string, owner_id: int, has_hard_bounced: bool, marked_email_as_spam: bool, unsubscribed_from_emails: bool, created_at: int, updated_at: int, signed_up_at: int, last_seen_at: int, last_replied_at: int, last_contacted_at: int, last_email_opened_at: int, last_email_clicked_at: int, language_override: string, browser: string, browser_version: string, browser_language: string, os: string, android_app_name: string, android_app_version: string, android_device: string, android_os_version: string, android_sdk_version: string, android_last_seen_at: int, ios_app_name: string, ios_app_version: string, ios_device: string, ios_os_version: string, ios_sdk_version: string, ios_last_seen_at: int, custom_attributes: record, avatar: record<type: string, image_url: string>, tags: record<data: list<record>, url: string, total_count: int, has_more: bool>, notes: record<data: list<record>, url: string, total_count: int, has_more: bool>, companies: record<type: string, data: list<record>, url: string, total_count: int, has_more: bool>, location: record<type: string, country: string, region: string, city: string>, social_profiles: record<data: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1262,7 +1264,7 @@ export def "contacts DeleteContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, id: string, external_id: string, deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1286,7 +1288,7 @@ export def "contacts-merge MergeContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --body-from: string # The unique identifier for the contact to merge away from. Must be a lead. (e.g. 5d70dd30de4efd54f42fd526)
   --body-into: string # The unique identifier for the contact to merge into. Must be a user. (e.g. 5ba682d23d7cf92bef87bfd4)
 ]: any -> record<type: string, id: string, external_id: string, workspace_id: string, role: string, email: string, email_domain: string, phone: string, formatted_phone: string, name: string, owner_id: int, has_hard_bounced: bool, marked_email_as_spam: bool, unsubscribed_from_emails: bool, created_at: int, updated_at: int, signed_up_at: int, last_seen_at: int, last_replied_at: int, last_contacted_at: int, last_email_opened_at: int, last_email_clicked_at: int, language_override: string, browser: string, browser_version: string, browser_language: string, os: string, android_app_name: string, android_app_version: string, android_device: string, android_os_version: string, android_sdk_version: string, android_last_seen_at: int, ios_app_name: string, ios_app_version: string, ios_device: string, ios_os_version: string, ios_sdk_version: string, ios_last_seen_at: int, custom_attributes: record, avatar: record<type: string, image_url: string>, tags: record<data: list<record>, url: string, total_count: int, has_more: bool>, notes: record<data: list<record>, url: string, total_count: int, has_more: bool>, companies: record<type: string, data: list<record>, url: string, total_count: int, has_more: bool>, location: record<type: string, country: string, region: string, city: string>, social_profiles: record<data: list<record>>> {
@@ -1316,7 +1318,7 @@ export def "contacts-search SearchContacts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --body-query: any
   --pagination: record # shape: {per_page: int, starting_after?: string}
 ]: any -> record<type: string, data: table<type: string, id: string, external_id: string, workspace_id: string, role: string, email: string, email_domain: string, phone: string, formatted_phone: string, name: string, owner_id: int, has_hard_bounced: bool, marked_email_as_spam: bool, unsubscribed_from_emails: bool, created_at: int, updated_at: int, signed_up_at: int, last_seen_at: int, last_replied_at: int, last_contacted_at: int, last_email_opened_at: int, last_email_clicked_at: int, language_override: string, browser: string, browser_version: string, browser_language: string, os: string, android_app_name: string, android_app_version: string, android_device: string, android_os_version: string, android_sdk_version: string, android_last_seen_at: int, ios_app_name: string, ios_app_version: string, ios_device: string, ios_os_version: string, ios_sdk_version: string, ios_last_seen_at: int, custom_attributes: record, avatar: record, tags: record, notes: record, companies: record, location: record, social_profiles: record>, total_count: int, pages: record<type: string, page: int, next: record<per_page: int, starting_after: string>, per_page: int, total_pages: int>> {
@@ -1348,7 +1350,7 @@ export def "contacts ListContacts" [
   --page: int # The page of results to fetch. Defaults to first page (e.g. 1)
   --per-page: int # How many results to display per page. Defaults to 15 (e.g. 15)
   --starting-after: string # String used to get the next page of conversations.
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, data: table<type: string, id: string, external_id: string, workspace_id: string, role: string, email: string, email_domain: string, phone: string, formatted_phone: string, name: string, owner_id: int, has_hard_bounced: bool, marked_email_as_spam: bool, unsubscribed_from_emails: bool, created_at: int, updated_at: int, signed_up_at: int, last_seen_at: int, last_replied_at: int, last_contacted_at: int, last_email_opened_at: int, last_email_clicked_at: int, language_override: string, browser: string, browser_version: string, browser_language: string, os: string, android_app_name: string, android_app_version: string, android_device: string, android_os_version: string, android_sdk_version: string, android_last_seen_at: int, ios_app_name: string, ios_app_version: string, ios_device: string, ios_os_version: string, ios_sdk_version: string, ios_last_seen_at: int, custom_attributes: record, avatar: record, tags: record, notes: record, companies: record, location: record, social_profiles: record>, total_count: int, pages: record<type: string, page: int, next: record<per_page: int, starting_after: string>, per_page: int, total_pages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1373,7 +1375,7 @@ export def "contacts CreateContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --role: string # The role of the contact. (e.g. user)
   --external-id: string # A unique identifier for the contact which is given to Intercom (e.g. 625e90fc55ab113b6d92175f)
   --email: string # The contacts email (e.g. jdoe@example.com)
@@ -1412,7 +1414,7 @@ export def "contacts-archive ArchiveContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, id: string, external_id: string, archived: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1437,7 +1439,7 @@ export def "contacts-unarchive UnarchiveContact" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, id: string, external_id: string, archived: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1462,7 +1464,7 @@ export def "conversations-tags attachTagToConversation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   id: string # The unique identifier for the tag which is given by Intercom (e.g. 7522907)
   admin_id: string # The unique identifier for the admin which is given by Intercom. (e.g. 780)
 ]: any -> record<type: string, id: string, name: string, applied_at: int, applied_by: record> {
@@ -1493,7 +1495,7 @@ export def "conversations-tags detachTagFromConversation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   admin_id: string # The unique identifier for the admin which is given by Intercom. (e.g. 123)
 ]: any -> record<type: string, id: string, name: string, applied_at: int, applied_by: record> {
   let input = $in
@@ -1523,7 +1525,7 @@ export def "conversations listConversations" [
   --allow-errors(-e) # Return full response without error handling
   --per-page: int # How many results per page (default: 20)
   --starting-after: string # String used to get the next page of conversations.
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, conversations: table<type: string, id: string, title: string, created_at: int, updated_at: int, waiting_since: int, snoozed_until: int, open: bool, state: string, read: bool, priority: string, admin_assignee_id: int, team_assignee_id: int, tags: record, conversation_rating: record, source: record, contacts: record, teammates: record, custom_attributes: any, first_contact_reply: record, sla_applied: record, statistics: record, linked_objects: record, ai_agent_participated: bool, ai_agent: record>, total_count: int, pages: record<type: string, page: int, next: record<per_page: int, starting_after: string>, per_page: int, total_pages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1549,7 +1551,7 @@ export def "conversations createConversation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --body-from: record # shape: {type: "lead"|"user"|"contact", id: string}
   --body-body: string # The content of the message. HTML is not supported. (e.g. Hello)
   --subject: string # The title of the email. Only applicable if the message type is email. (e.g. Thanks for everything)
@@ -1583,7 +1585,7 @@ export def "conversations retrieveConversation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --display-as: string # Set to plaintext to retrieve conversation messages in plain text. (e.g. plaintext)
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, id: string, title: string, created_at: int, updated_at: int, waiting_since: int, snoozed_until: int, open: bool, state: string, read: bool, priority: string, admin_assignee_id: int, team_assignee_id: int, tags: record<type: string, tags: list<record>>, conversation_rating: record<rating: int, remark: string, created_at: int, contact: record<type: string, id: string, external_id: string>, teammate: record<type: string, id: string>>, source: record<type: string, id: string, delivered_as: string, subject: string, body: string, author: record<type: string, id: string, name: string, email: string>, attachments: list<record>, url: string, redacted: bool>, contacts: record<type: string, contacts: list<record>>, teammates: record<type: string, teammates: list<record>>, custom_attributes: any, first_contact_reply: record<created_at: int, type: string, url: string>, sla_applied: record<type: string, sla_name: string, sla_status: string>, statistics: record<type: string, time_to_assignment: int, time_to_admin_reply: int, time_to_first_close: int, time_to_last_close: int, median_time_to_reply: int, first_contact_reply_at: int, first_assignment_at: int, first_admin_reply_at: int, first_close_at: int, last_assignment_at: int, last_assignment_admin_reply_at: int, last_contact_reply_at: int, last_admin_reply_at: int, last_close_at: int, last_closed_by_id: string, count_reopens: int, count_assignments: int, count_conversation_parts: int>, conversation_parts: record<type: string, conversation_parts: list<record>, total_count: int>, linked_objects: record<type: string, total_count: int, has_more: bool, data: list<record>>, ai_agent_participated: bool, ai_agent: record<source_type: string, source_title: string, last_answer_type: string, resolution_state: string, rating: int, rating_remark: string, content_sources: record<type: string, total_count: int, content_sources: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1610,7 +1612,7 @@ export def "conversations updateConversation" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --display-as: string # Set to plaintext to retrieve conversation messages in plain text. (e.g. plaintext)
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --read: string@bool-completer # Mark a conversation as read within Intercom. (e.g. true)
   --custom-attributes: any
 ]: any -> record<type: string, id: string, title: string, created_at: int, updated_at: int, waiting_since: int, snoozed_until: int, open: bool, state: string, read: bool, priority: string, admin_assignee_id: int, team_assignee_id: int, tags: record<type: string, tags: list<record>>, conversation_rating: record<rating: int, remark: string, created_at: int, contact: record<type: string, id: string, external_id: string>, teammate: record<type: string, id: string>>, source: record<type: string, id: string, delivered_as: string, subject: string, body: string, author: record<type: string, id: string, name: string, email: string>, attachments: list<record>, url: string, redacted: bool>, contacts: record<type: string, contacts: list<record>>, teammates: record<type: string, teammates: list<record>>, custom_attributes: any, first_contact_reply: record<created_at: int, type: string, url: string>, sla_applied: record<type: string, sla_name: string, sla_status: string>, statistics: record<type: string, time_to_assignment: int, time_to_admin_reply: int, time_to_first_close: int, time_to_last_close: int, median_time_to_reply: int, first_contact_reply_at: int, first_assignment_at: int, first_admin_reply_at: int, first_close_at: int, last_assignment_at: int, last_assignment_admin_reply_at: int, last_contact_reply_at: int, last_admin_reply_at: int, last_close_at: int, last_closed_by_id: string, count_reopens: int, count_assignments: int, count_conversation_parts: int>, conversation_parts: record<type: string, conversation_parts: list<record>, total_count: int>, linked_objects: record<type: string, total_count: int, has_more: bool, data: list<record>>, ai_agent_participated: bool, ai_agent: record<source_type: string, source_title: string, last_answer_type: string, resolution_state: string, rating: int, rating_remark: string, content_sources: record<type: string, total_count: int, content_sources: list>>> {
@@ -1641,7 +1643,7 @@ export def "conversations-search searchConversations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --body-query: any
   --pagination: record # shape: {per_page: int, starting_after?: string}
 ]: any -> record<type: string, conversations: table<type: string, id: string, title: string, created_at: int, updated_at: int, waiting_since: int, snoozed_until: int, open: bool, state: string, read: bool, priority: string, admin_assignee_id: int, team_assignee_id: int, tags: record, conversation_rating: record, source: record, contacts: record, teammates: record, custom_attributes: any, first_contact_reply: record, sla_applied: record, statistics: record, linked_objects: record, ai_agent_participated: bool, ai_agent: record>, total_count: int, pages: record<type: string, page: int, next: record<per_page: int, starting_after: string>, per_page: int, total_pages: int>> {
@@ -1672,7 +1674,7 @@ export def "conversations-reply replyConversation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --message-type: string@message-type-completer
   --type: string@type-completer # e.g. admin
   --body-body: string # The text body of the reply. Notes accept some HTML formatting. Must be present for comment and note message types. (e.g. Hello there!)
@@ -1707,7 +1709,7 @@ export def "conversations-parts manageConversation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --message-type: string@message-type-completer-1 # e.g. close
   --type: string@type-completer # e.g. admin
   --admin-id: string # The id of the admin who is performing the action. (e.g. 12345)
@@ -1741,7 +1743,7 @@ export def "conversations-run-assignment-rules autoAssignConversation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, id: string, title: string, created_at: int, updated_at: int, waiting_since: int, snoozed_until: int, open: bool, state: string, read: bool, priority: string, admin_assignee_id: int, team_assignee_id: int, tags: record<type: string, tags: list<record>>, conversation_rating: record<rating: int, remark: string, created_at: int, contact: record<type: string, id: string, external_id: string>, teammate: record<type: string, id: string>>, source: record<type: string, id: string, delivered_as: string, subject: string, body: string, author: record<type: string, id: string, name: string, email: string>, attachments: list<record>, url: string, redacted: bool>, contacts: record<type: string, contacts: list<record>>, teammates: record<type: string, teammates: list<record>>, custom_attributes: any, first_contact_reply: record<created_at: int, type: string, url: string>, sla_applied: record<type: string, sla_name: string, sla_status: string>, statistics: record<type: string, time_to_assignment: int, time_to_admin_reply: int, time_to_first_close: int, time_to_last_close: int, median_time_to_reply: int, first_contact_reply_at: int, first_assignment_at: int, first_admin_reply_at: int, first_close_at: int, last_assignment_at: int, last_assignment_admin_reply_at: int, last_contact_reply_at: int, last_admin_reply_at: int, last_close_at: int, last_closed_by_id: string, count_reopens: int, count_assignments: int, count_conversation_parts: int>, conversation_parts: record<type: string, conversation_parts: list<record>, total_count: int>, linked_objects: record<type: string, total_count: int, has_more: bool, data: list<record>>, ai_agent_participated: bool, ai_agent: record<source_type: string, source_title: string, last_answer_type: string, resolution_state: string, rating: int, rating_remark: string, content_sources: record<type: string, total_count: int, content_sources: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1767,7 +1769,7 @@ export def "conversations-customers attachContactToConversation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --admin-id: string # The `id` of the admin who is adding the new participant. (e.g. 12345)
   --customer: record # shape: {intercom_user_id?: string, customer?: record, user_id?: string, email?: string}
 ]: any -> record<type: string, id: string, title: string, created_at: int, updated_at: int, waiting_since: int, snoozed_until: int, open: bool, state: string, read: bool, priority: string, admin_assignee_id: int, team_assignee_id: int, tags: record<type: string, tags: list<record>>, conversation_rating: record<rating: int, remark: string, created_at: int, contact: record<type: string, id: string, external_id: string>, teammate: record<type: string, id: string>>, source: record<type: string, id: string, delivered_as: string, subject: string, body: string, author: record<type: string, id: string, name: string, email: string>, attachments: list<record>, url: string, redacted: bool>, contacts: record<type: string, contacts: list<record>>, teammates: record<type: string, teammates: list<record>>, custom_attributes: any, first_contact_reply: record<created_at: int, type: string, url: string>, sla_applied: record<type: string, sla_name: string, sla_status: string>, statistics: record<type: string, time_to_assignment: int, time_to_admin_reply: int, time_to_first_close: int, time_to_last_close: int, median_time_to_reply: int, first_contact_reply_at: int, first_assignment_at: int, first_admin_reply_at: int, first_close_at: int, last_assignment_at: int, last_assignment_admin_reply_at: int, last_contact_reply_at: int, last_admin_reply_at: int, last_close_at: int, last_closed_by_id: string, count_reopens: int, count_assignments: int, count_conversation_parts: int>, conversation_parts: record<type: string, conversation_parts: list<record>, total_count: int>, linked_objects: record<type: string, total_count: int, has_more: bool, data: list<record>>, ai_agent_participated: bool, ai_agent: record<source_type: string, source_title: string, last_answer_type: string, resolution_state: string, rating: int, rating_remark: string, content_sources: record<type: string, total_count: int, content_sources: list>>> {
@@ -1798,7 +1800,7 @@ export def "conversations-customers detachContactFromConversation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   admin_id: string # The `id` of the admin who is performing the action. (e.g. 5017690)
 ]: any -> record<type: string, id: string, title: string, created_at: int, updated_at: int, waiting_since: int, snoozed_until: int, open: bool, state: string, read: bool, priority: string, admin_assignee_id: int, team_assignee_id: int, tags: record<type: string, tags: list<record>>, conversation_rating: record<rating: int, remark: string, created_at: int, contact: record<type: string, id: string, external_id: string>, teammate: record<type: string, id: string>>, source: record<type: string, id: string, delivered_as: string, subject: string, body: string, author: record<type: string, id: string, name: string, email: string>, attachments: list<record>, url: string, redacted: bool>, contacts: record<type: string, contacts: list<record>>, teammates: record<type: string, teammates: list<record>>, custom_attributes: any, first_contact_reply: record<created_at: int, type: string, url: string>, sla_applied: record<type: string, sla_name: string, sla_status: string>, statistics: record<type: string, time_to_assignment: int, time_to_admin_reply: int, time_to_first_close: int, time_to_last_close: int, median_time_to_reply: int, first_contact_reply_at: int, first_assignment_at: int, first_admin_reply_at: int, first_close_at: int, last_assignment_at: int, last_assignment_admin_reply_at: int, last_contact_reply_at: int, last_admin_reply_at: int, last_close_at: int, last_closed_by_id: string, count_reopens: int, count_assignments: int, count_conversation_parts: int>, conversation_parts: record<type: string, conversation_parts: list<record>, total_count: int>, linked_objects: record<type: string, total_count: int, has_more: bool, data: list<record>>, ai_agent_participated: bool, ai_agent: record<source_type: string, source_title: string, last_answer_type: string, resolution_state: string, rating: int, rating_remark: string, content_sources: record<type: string, total_count: int, content_sources: list>>> {
   let input = $in
@@ -1826,7 +1828,7 @@ export def "conversations-redact redactConversation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --type: string@type-completer-1 # The type of resource being redacted. (e.g. conversation_part)
   --conversation-id: string # The id of the conversation. (e.g. 19894788788)
   --conversation-part-id: string # The id of the conversation_part. (e.g. 19381789428)
@@ -1858,7 +1860,7 @@ export def "conversations-convert convertConversationToTicket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   ticket_type_id: string # The ID of the type of ticket you want to convert the conversation to (e.g. 1234)
   --attributes: record # The attributes set on the ticket. When setting the default title and description attributes, the attribute keys that should be used are `_default_title_` and `_default_description_`. When setting ticket type attributes of the list attribute type, the key should be the attribute name and the value of the attribute should be the list item id, obtainable by [listing the ticket type](ref:get_ticket-types). For example, if the ticket type has an attribute called `priority` of type `list`, the key should be `priority` and the value of the attribute should be the guid of the list item (e.g. `de1825a0-0164-4070-8ca6-13e22462fa7e`). (e.g. {_default_title_: Found a bug, _default_description_: The button is not working})
 ]: any -> record<type: string, id: string, ticket_id: string, category: string, ticket_attributes: record, ticket_state: string, ticket_type: record<type: string, id: string, category: string, name: string, description: string, icon: string, workspace_id: string, ticket_type_attributes: record<type: string, ticket_type_attributes: list>, archived: bool, created_at: int, updated_at: int>, contacts: record<type: string, contacts: list<record>>, admin_assignee_id: string, team_assignee_id: string, created_at: int, updated_at: int, open: bool, snoozed_until: int, linked_objects: record<type: string, total_count: int, has_more: bool, data: list<record>>, ticket_parts: record<type: string, ticket_parts: list<record>, total_count: int>, is_shared: bool, ticket_state_internal_label: string, ticket_state_external_label: string> {
@@ -1889,7 +1891,7 @@ export def "data-attributes listDataAttributes" [
   --allow-errors(-e) # Return full response without error handling
   --model: string@model-completer # Specify the data attribute model to return. (e.g. company)
   --include-archived: string@bool-completer # Include archived attributes in the list. By default we return only non archived data attributes. (e.g. false)
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, data: table<type: string, id: int, model: string, name: string, full_name: string, label: string, description: string, data_type: string, options: list, api_writable: bool, messenger_writable: bool, ui_writable: bool, custom: bool, archived: bool, created_at: int, updated_at: int, admin_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1914,7 +1916,7 @@ export def "data-attributes createDataAttribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   name: string # The name of the data attribute. (e.g. My Data Attribute)
   model: string@model-completer-1 # The model that the data attribute belongs to. (e.g. contact)
   data_type: string@data-type-completer # The type of data stored for this attribute. (e.g. string)
@@ -1949,7 +1951,7 @@ export def "data-attributes updateDataAttribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --archived: string@bool-completer # Whether the attribute is to be archived or not. (e.g. false)
   --description: string # The readable description you see in the UI for the attribute. (e.g. My Data Attribute Description)
   --options: list # To create list attributes. Provide a set of hashes with `value` as the key of the options you want to make. `data_type` must be `string`. (e.g. [option1, option2]) — item shape: {value: string}
@@ -1980,7 +1982,7 @@ export def "events createDataEvent" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --event-name: string # The name of the event that occurred. This is presented to your App's admins when filtering and creating segments - a good event name is typically a past tense 'verb-noun' combination, to improve readability, for example `updated-plan`. (e.g. invited-friend)
   --created-at: int # The time the event occurred as a UTC Unix timestamp (format: date-time, e.g. 1671028894)
   --user-id: string # Your identifier for the user. (e.g. 314159)
@@ -2017,7 +2019,7 @@ export def "events lisDataEvents" [
   --type: string # The value must be user
   --summary: string@bool-completer # summary flag
   --per-page: int # How many results to display per page. Defaults to 15 (e.g. 15)
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, email: string, intercom_user_id: string, user_id: string, events: table<name: string, first: string, last: string, count: int, description: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2043,7 +2045,7 @@ export def "events-summaries dataEventSummaries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --user-id: string # Your identifier for the user. (e.g. 314159)
   --event-summaries: record # A list of event summaries for the user. Each event summary should contain the event name, the time the event occurred, and the number of times the event occurred. The event name should be a past tense 'verb-noun' combination, to improve readability, for example `updated-plan`. — shape: {event_name?: string, count?: int, first?: int, last?: int}
 ]: any -> any {
@@ -2072,7 +2074,7 @@ export def "export-content-data createDataExport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   created_at_after: int # The start date that you request data for. It must be formatted as a unix timestamp. (e.g. 1527811200)
   created_at_before: int # The end date that you request data for. It must be formatted as a unix timestamp. (e.g. 1527811200)
 ]: any -> record<job_identifier: string, status: string, download_expires_at: string, download_url: string> {
@@ -2102,7 +2104,7 @@ export def "export-content-data get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<job_identifier: string, status: string, download_expires_at: string, download_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2127,7 +2129,7 @@ export def "export-cancel cancelDataExport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<job_identifier: string, status: string, download_expires_at: string, download_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2152,7 +2154,7 @@ export def "download-content-data downloadDataExport" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2178,7 +2180,7 @@ export def "messages createMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --message-type: string@message-type-completer-2 # The kind of message being created. Values: `in_app` or `email`. (e.g. in_app)
   --subject: string # The title of the email. (e.g. Thanks for everything)
   --body-body: string # The content of the message. HTML and plaintext are supported. (e.g. Hello there)
@@ -2213,7 +2215,7 @@ export def "news-news-items listNewsItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, pages: record<type: string, page: int, next: record<per_page: int, starting_after: string>, per_page: int, total_pages: int>, total_count: int, data: table<type: string, id: string, workspace_id: string, title: string, body: string, sender_id: int, state: string, newsfeed_assignments: list, labels: list, cover_image_url: string, reactions: list, deliver_silently: bool, created_at: int, updated_at: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2238,7 +2240,7 @@ export def "news-news-items createNewsItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   title: string # The title of the news item. (e.g. Halloween is here!)
   --body-body: string # The news item body, which may contain HTML. (e.g. <p>New costumes in store for this spooky season</p>)
   sender_id: int # The id of the sender of the news item. Must be a teammate on the workspace. (e.g. 123)
@@ -2274,7 +2276,7 @@ export def "news-news-items retrieveNewsItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, id: string, workspace_id: string, title: string, body: string, sender_id: int, state: string, newsfeed_assignments: table<newsfeed_id: int, published_at: int>, labels: list<string>, cover_image_url: string, reactions: list<string>, deliver_silently: bool, created_at: int, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2300,7 +2302,7 @@ export def "news-news-items updateNewsItem" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   title: string # The title of the news item. (e.g. Halloween is here!)
   --body-body: string # The news item body, which may contain HTML. (e.g. <p>New costumes in store for this spooky season</p>)
   sender_id: int # The id of the sender of the news item. Must be a teammate on the workspace. (e.g. 123)
@@ -2336,7 +2338,7 @@ export def "news-news-items delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<id: string, object: string, deleted: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2361,7 +2363,7 @@ export def "news-newsfeeds-items listLiveNewsfeedItems" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, pages: record<type: string, page: int, next: record<per_page: int, starting_after: string>, per_page: int, total_pages: int>, total_count: int, data: table<type: string, id: string, workspace_id: string, title: string, body: string, sender_id: int, state: string, newsfeed_assignments: list, labels: list, cover_image_url: string, reactions: list, deliver_silently: bool, created_at: int, updated_at: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2385,7 +2387,7 @@ export def "news-newsfeeds listNewsfeeds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, pages: record<type: string, page: int, next: record<per_page: int, starting_after: string>, per_page: int, total_pages: int>, total_count: int, data: table<id: string, type: string, name: string, created_at: int, updated_at: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2410,7 +2412,7 @@ export def "news-newsfeeds retrieveNewsfeed" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<id: string, type: string, name: string, created_at: int, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2435,7 +2437,7 @@ export def "notes retrieveNote" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, id: string, created_at: int, contact: record<type: string, id: string>, author: record<type: string, id: string, name: string, email: string, job_title: string, away_mode_enabled: bool, away_mode_reassign: bool, has_inbox_seat: bool, team_ids: list<int>, avatar: record<image_url: string>, team_priority_level: record<primary_team_ids: list, secondary_team_ids: list>>, body: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2460,7 +2462,7 @@ export def "segments listSegments" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --include-count: string@bool-completer # It includes the count of contacts that belong to each segment. (e.g. true)
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, segments: table<type: string, id: string, name: string, created_at: int, updated_at: int, person_type: string, count: int>, pages: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2486,7 +2488,7 @@ export def "segments retrieveSegment" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, id: string, name: string, created_at: int, updated_at: int, person_type: string, count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2510,7 +2512,7 @@ export def "subscription-types listSubscriptionTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, data: table<type: string, id: string, state: string, default_translation: record, translations: list, consent_type: string, content_types: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2534,7 +2536,7 @@ export def "phone-call-redirects createPhoneSwitch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   phone: string # Phone number in E.164 format, that will receive the SMS to continue the conversation in the Messenger. (e.g. +1 1234567890)
   --custom-attributes: any
 ]: any -> record<type: string, phone: string> {
@@ -2563,7 +2565,7 @@ export def "tags listTags" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, data: table<type: string, id: string, name: string, applied_at: int, applied_by: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2589,7 +2591,7 @@ export def "tags createTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --name: string # The name of the tag, which will be created if not found, or the new name for the tag if this is an update request. Names are case insensitive. (e.g. Independent)
   --id: string # The id of tag to updates. (e.g. 656452352)
   --companies: list # The id or company_id of the company can be passed as input parameters. — item shape: {id?: string, company_id?: string}
@@ -2621,7 +2623,7 @@ export def "tags findTag" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2646,7 +2648,7 @@ export def "tags delete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2670,7 +2672,7 @@ export def "teams listTeams" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, teams: table<type: string, id: string, name: string, admin_ids: list, admin_priority_level: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2695,7 +2697,7 @@ export def "teams retrieveTeam" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, id: string, name: string, admin_ids: list<int>, admin_priority_level: record<primary_admin_ids: list<int>, secondary_admin_ids: list<int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2720,7 +2722,7 @@ export def "ticket-types-attributes createTicketTypeAttribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   name: string # The name of the ticket type attribute (e.g. Bug Priority)
   description: string # The description of the attribute presented to the teammate or contact (e.g. Priority level of the bug)
   data_type: string@data-type-completer-1 # The data type of the attribute (e.g. string)
@@ -2759,7 +2761,7 @@ export def "ticket-types-attributes updateTicketTypeAttribute" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --name: string # The name of the ticket type attribute (e.g. Bug Priority)
   --description: string # The description of the attribute presented to the teammate or contact (e.g. Priority level of the bug)
   --required-to-create: string@bool-completer # Whether the attribute is required to be filled in when teammates are creating the ticket in Inbox. (default: false, e.g. false)
@@ -2796,7 +2798,7 @@ export def "ticket-types listTicketTypes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, ticket_types: table<type: string, id: string, category: string, name: string, description: string, icon: string, workspace_id: string, ticket_type_attributes: record, archived: bool, created_at: int, updated_at: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2820,7 +2822,7 @@ export def "ticket-types createTicketType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   name: string # The name of the ticket type. (e.g. Bug)
   --description: string # The description of the ticket type. (e.g. Used for tracking bugs)
   --category: string@category-completer # Category of the Ticket Type. (e.g. Customer)
@@ -2853,7 +2855,7 @@ export def "ticket-types get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, id: string, category: string, name: string, description: string, icon: string, workspace_id: string, ticket_type_attributes: record<type: string, ticket_type_attributes: list<record>>, archived: bool, created_at: int, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2878,7 +2880,7 @@ export def "ticket-types updateTicketType" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --name: string # The name of the ticket type. (e.g. Bug)
   --description: string # The description of the ticket type. (e.g. A bug has been occured)
   --category: string@category-completer # Category of the Ticket Type. (e.g. Customer)
@@ -2913,7 +2915,7 @@ export def "tickets-reply replyTicket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --message-type: string@message-type-completer-3 # e.g. comment
   --type: string@type-completer # e.g. admin
   --body-body: string # The text body of the reply. Notes accept some HTML formatting. Must be present for comment and note message types. (e.g. Hello there!)
@@ -2949,7 +2951,7 @@ export def "tickets-tags attachTagToTicket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   id: string # The unique identifier for the tag which is given by Intercom (e.g. 7522907)
   admin_id: string # The unique identifier for the admin which is given by Intercom. (e.g. 780)
 ]: any -> record<type: string, id: string, name: string, applied_at: int, applied_by: record> {
@@ -2980,7 +2982,7 @@ export def "tickets-tags detachTagFromTicket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   admin_id: string # The unique identifier for the admin which is given by Intercom. (e.g. 123)
 ]: any -> record<type: string, id: string, name: string, applied_at: int, applied_by: record> {
   let input = $in
@@ -3008,7 +3010,7 @@ export def "tickets createTicket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   ticket_type_id: string # The ID of the type of ticket you want to create (e.g. 1234)
   contacts: list # The list of contacts (users or leads) affected by this ticket. Currently only one is allowed (e.g. [{id: 1234}])
   --company-id: string # The ID of the company that the ticket is associated with. The ID that you set upon company creation. (e.g. 1234)
@@ -3042,7 +3044,7 @@ export def "tickets updateTicket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --ticket-attributes: record # The attributes set on the ticket. (e.g. {_default_title_: example, _default_description_: having a problem})
   --state: string@state-completer-2 # The state of the ticket. (e.g. submitted)
   --body-open: string@bool-completer # Specify if a ticket is open. Set to false to close a ticket. Closing a ticket will also unsnooze it. (e.g. true)
@@ -3076,7 +3078,7 @@ export def "tickets get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, id: string, ticket_id: string, category: string, ticket_attributes: record, ticket_state: string, ticket_type: record<type: string, id: string, category: string, name: string, description: string, icon: string, workspace_id: string, ticket_type_attributes: record<type: string, ticket_type_attributes: list>, archived: bool, created_at: int, updated_at: int>, contacts: record<type: string, contacts: list<record>>, admin_assignee_id: string, team_assignee_id: string, created_at: int, updated_at: int, open: bool, snoozed_until: int, linked_objects: record<type: string, total_count: int, has_more: bool, data: list<record>>, ticket_parts: record<type: string, ticket_parts: list<record>, total_count: int>, is_shared: bool, ticket_state_internal_label: string, ticket_state_external_label: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3101,7 +3103,7 @@ export def "tickets-search searchTickets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --body-query: any
   --pagination: record # shape: {per_page: int, starting_after?: string}
 ]: any -> record<type: string, tickets: table<type: string, id: string, ticket_id: string, category: string, ticket_attributes: record, ticket_state: string, ticket_type: record, contacts: record, admin_assignee_id: string, team_assignee_id: string, created_at: int, updated_at: int, open: bool, snoozed_until: int, linked_objects: record, ticket_parts: record, is_shared: bool, ticket_state_internal_label: string, ticket_state_external_label: string>, total_count: int, pages: record<type: string, page: int, next: record<per_page: int, starting_after: string>, per_page: int, total_pages: int>> {
@@ -3130,7 +3132,7 @@ export def "visitors updateVisitor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   --id: string # A unique identified for the visitor which is given by Intercom. (e.g. 8a88a590-e)
   --user-id: string # A unique identified for the visitor which is given by you. (e.g. 123)
   --name: string # The visitor's name. (e.g. Christian Bale)
@@ -3162,7 +3164,7 @@ export def "visitors retrieveVisitorWithUserId" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --user-id: string # The user_id of the Visitor you want to retrieve.
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
 ]: nothing -> record<type: string, id: string, user_id: string, anonymous: bool, email: string, phone: string, name: string, pseudonym: string, avatar: record<type: string, image_url: string>, app_id: string, companies: record<type: string, companies: list<record>>, location_data: record<type: string, city_name: string, continent_code: string, country_code: string, country_name: string, postal_code: string, region_name: string, timezone: string>, las_request_at: int, created_at: int, remote_created_at: int, signed_up_at: int, updated_at: int, session_count: int, social_profiles: record<type: string, social_profiles: list<string>>, owner_id: string, unsubscribed_from_emails: bool, marked_email_as_spam: bool, has_hard_bounced: bool, tags: record<type: string, tags: list<record>>, segments: record<type: string, segments: list<string>>, custom_attributes: record, referrer: string, utm_campaign: string, utm_content: string, utm_medium: string, utm_source: string, utm_term: string, do_not_track: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3189,7 +3191,7 @@ export def "visitors-convert convertVisitor" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Intercom-Version: string
+  --Intercom-Version: string@Intercom-Version-completer # e.g. 2.11
   type: string # Represents the role of the Contact model. Accepts `lead` or `user`. (e.g. user)
   user: record # The unique identifiers retained after converting or merging. — shape: {id?: string, user_id?: string, email?: string}
   visitor: record # The unique identifiers to convert a single Visitor. — shape: {id?: string, user_id?: string, email?: string}

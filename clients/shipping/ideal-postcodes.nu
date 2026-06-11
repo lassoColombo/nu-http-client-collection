@@ -19,17 +19,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -63,6 +64,8 @@ def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://api.ideal-postcodes.co.uk/v1"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def bias-ip-completer [] { ["true"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -99,31 +102,31 @@ export def "addresses Addresses" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --api-key: string
+  --api-key: string # e.g. ak_test
   --qp-query: string # Specifies the address you wish to query. Query can be shortened to `q=`
-  --limit: string
-  --page: string
-  --filter: string
-  --lon: string
-  --lat: string
-  --postcode-outward: string
-  --postcode: string
-  --postcode-area: string
-  --postcode-sector: string
-  --post-town: string
-  --uprn: string
-  --country: string
-  --postcode-type: string
-  --su-organisation-indicator: string
-  --box: string
+  --limit: int # format: int32, default: 10, e.g. 5
+  --page: int # format: int32, default: 0, e.g. 0
+  --filter: string # e.g. line_1,line_2,line_3
+  --lon: float # format: float, e.g. -0.12767
+  --lat: float # format: float, e.g. 51.503541
+  --postcode-outward: string # e.g. 1AA
+  --postcode: string # e.g. SW1A 2AA
+  --postcode-area: string # e.g. SW
+  --postcode-sector: string # e.g. SW1A 2
+  --post-town: string # e.g. London
+  --uprn: int # e.g. 100023336956
+  --country: string # e.g. England
+  --postcode-type: string # e.g. L
+  --su-organisation-indicator: string # e.g. Y
+  --box: string # e.g. 2.095,57.15,-2.096,57.14
   --bias-postcode-outward: string
-  --bias-postcode: string
-  --bias-postcode-area: string
-  --bias-postcode-sector: string
+  --bias-postcode: string # e.g. /addresses?postcode=SW1A2AA&q=10
+  --bias-postcode-area: string # e.g. The postcode area of SW1A 2AA and N1 6RT are SW and N respectively
+  --bias-postcode-sector: string # e.g. SW1A 2AA is SW1A 2
   --bias-post-town: string
   --bias-thoroughfare: string
   --bias-country: string
-  --bias-lonlat: string
+  --bias-lonlat: string # e.g. -2.095,57.15,100
 ]: nothing -> record<code: int, message: string, result: record<hits: list<any>, limit: int, page: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -146,29 +149,29 @@ export def "autocomplete-addresses AddressAutocomplete" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --api-key: string
+  --api-key: string # e.g. ak_test
   --qp-query: string # Specifies the address you wish to query. Query can be shortened to `q=`
   --context: string
-  --limit: string # Limits number of address suggestions unless a postcode is detected. In this instance entire list of addreses for that postcode is returned.
-  --postcode-outward: string
-  --postcode: string
-  --postcode-area: string
-  --postcode-sector: string
-  --post-town: string
-  --uprn: string
-  --country: string
-  --postcode-type: string
-  --su-organisation-indicator: string
-  --box: string
+  --limit: int # Limits number of address suggestions unless a postcode is detected. In this instance entire list of addreses for that postcode is returned.  (format: int32, default: 10, e.g. 5)
+  --postcode-outward: string # e.g. 1AA
+  --postcode: string # e.g. SW1A 2AA
+  --postcode-area: string # e.g. SW
+  --postcode-sector: string # e.g. SW1A 2
+  --post-town: string # e.g. London
+  --uprn: int # e.g. 100023336956
+  --country: string # e.g. England
+  --postcode-type: string # e.g. L
+  --su-organisation-indicator: string # e.g. Y
+  --box: string # e.g. 2.095,57.15,-2.096,57.14
   --bias-postcode-outward: string
-  --bias-postcode: string
-  --bias-postcode-area: string
-  --bias-postcode-sector: string
+  --bias-postcode: string # e.g. /addresses?postcode=SW1A2AA&q=10
+  --bias-postcode-area: string # e.g. The postcode area of SW1A 2AA and N1 6RT are SW and N respectively
+  --bias-postcode-sector: string # e.g. SW1A 2AA is SW1A 2
   --bias-post-town: string
   --bias-thoroughfare: string
   --bias-country: string
-  --bias-lonlat: string
-  --bias-ip: string
+  --bias-lonlat: string # e.g. -2.095,57.15,100
+  --bias-ip: string@bias-ip-completer # e.g. true
 ]: nothing -> record<code: int, message: string, result: record<hits: list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -192,7 +195,7 @@ export def "autocomplete-addresses-gbr Resolve" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --api-key: string
+  --api-key: string # e.g. ak_test
 ]: nothing -> record<code: int, message: string, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -216,7 +219,7 @@ export def "autocomplete-addresses-usa ResolveUsa" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --api-key: string
+  --api-key: string # e.g. ak_test
 ]: nothing -> record<code: int, message: string, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -239,7 +242,7 @@ export def "cleanse-addresses AddressCleanse" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --api-key: string
+  --api-key: string # e.g. ak_test
   --body-query: string # Freeform address input to cleanse  (e.g. 10 Downing Street, London, SW2A 2BN)
 ]: any -> record<code: int, message: string, result: any> {
   let input = $in
@@ -266,7 +269,7 @@ export def "emails EmailValidation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --api-key: string
+  --api-key: string # e.g. ak_test
   --qp-query: string # Specifies the email address to validate
 ]: nothing -> record<code: int, message: string, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -313,7 +316,7 @@ export def "keys-configs ListConfigs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --user-token: string
+  --user-token: string # e.g. uk_B59ScW1p1HHouf1VqclEPZUx
 ]: nothing -> record<code: int, message: string, result: record<configs: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -337,7 +340,7 @@ export def "keys-configs CreateConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --user-token: string
+  --user-token: string # e.g. uk_B59ScW1p1HHouf1VqclEPZUx
   name: string # A unique name to identify the configuration payload (e.g. woocommerce)
   payload: string # A serialised payload of up to `4096` characters (e.g. {   "removeOrganisation": false } )
 ]: any -> record<code: int, message: string, result: record<createdAt: string, name: string, payload: string, updatedAt: string>> {
@@ -367,7 +370,7 @@ export def "keys-configs DeleteConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --user-token: string
+  --user-token: string # e.g. uk_B59ScW1p1HHouf1VqclEPZUx
 ]: nothing -> record<code: int, message: string, result: record<deleted: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -415,7 +418,7 @@ export def "keys-configs UpdateConfig" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --user-token: string
+  --user-token: string # e.g. uk_B59ScW1p1HHouf1VqclEPZUx
   --payload: string # A serialised payload of up to `4096` characters (e.g. {   "removeOrganisation": false } )
 ]: any -> record<code: int, message: string, result: record<createdAt: string, name: string, payload: string, updatedAt: string>> {
   let input = $in
@@ -443,7 +446,7 @@ export def "keys-details KeyDetails" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --user-token: string
+  --user-token: string # e.g. uk_B59ScW1p1HHouf1VqclEPZUx
 ]: nothing -> record<code: int, message: string, result: record<allowed_urls: list<string>, automated_topups: record<enabled: bool>, current_purchases: list<record>, daily_limit: record<consumed: int, limit: int>, datasets: record<ecad: bool, ecaf: bool, herewe: bool, mr: bool, nyb: bool, paf: bool, pafa: bool, pafw: bool, usps: bool>, individual_limit: record<limit: int>, lookups_remaining: int, notifications: record<emails: list, enabled: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -468,8 +471,8 @@ export def "keys-licensees ListLicensees" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --starting-after: int # Specify ID of the licensee after which you would like to list results (format: int32)
-  --user-token: string
-  --limit: string # Specify the maximum number of results to return per page. Default and maximum is `100`.
+  --user-token: string # e.g. uk_B59ScW1p1HHouf1VqclEPZUx
+  --limit: int # Specify the maximum number of results to return per page. Default and maximum is `100`. (format: int32, default: 10, e.g. 5)
   --qp-query: string # Filter result by licensee name. Query can be shortened to `q=`
 ]: nothing -> record<code: int, message: string, result: record<hasMore: bool, licensees: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -495,7 +498,7 @@ export def "keys-licensees CreateLicensee" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --user-token: string
+  --user-token: string # e.g. uk_B59ScW1p1HHouf1VqclEPZUx
   --address: string # Licensee's first, second and third line address as well as post town concatenated by commas (e.g. 12 High Street, Manchester)
   --daily: record # shape: {limit?: float}
   --name: string # Licensee individual or organisation name (e.g. Qwerty Widgets Limited)
@@ -528,7 +531,7 @@ export def "keys-licensees DeleteLicensee" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --user-token: string
+  --user-token: string # e.g. uk_B59ScW1p1HHouf1VqclEPZUx
 ]: nothing -> record<code: int, message: string, result: record<deleted: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -553,7 +556,7 @@ export def "keys-licensees RetrieveLicensee" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --user-token: string
+  --user-token: string # e.g. uk_B59ScW1p1HHouf1VqclEPZUx
 ]: nothing -> record<code: int, message: string, result: record<address: string, daily: record<count: float, updatedAt: string>, name: string, postcode: string, whitelist: list<string>, createdAt: string, id: string, key: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -579,7 +582,7 @@ export def "keys-licensees UpdateLicensee" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --user-token: string
+  --user-token: string # e.g. uk_B59ScW1p1HHouf1VqclEPZUx
   --address: string # Licensee's first, second and third line address as well as post town concatenated by commas (e.g. 12 High Street, Manchester)
   --daily: record # shape: {limit?: float}
   --name: string # Licensee individual or organisation name (e.g. Qwerty Widgets Limited)
@@ -611,9 +614,9 @@ export def "keys-lookups KeyLogs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --start: string # An start date/time in the form of a UNIX Timestamp in milliseconds, e.g. `1418556452651`. If no start time is provided, the start time will be assigned to a time 21 days prior to the end time.
-  --end: string # An end date/time in the form of a UNIX Timestamp in milliseconds, e.g. `1418556452651`. If no end time is provided, the current time will be used.
-  --licensee: string # Sublicensed keys only. This will restrict the analysed dataset to a specific licensee.
+  --start: int # An start date/time in the form of a UNIX Timestamp in milliseconds, e.g. `1418556452651`. If no start time is provided, the start time will be assigned to a time 21 days prior to the end time. (format: int32, e.g. 1418556452651)
+  --end: int # An end date/time in the form of a UNIX Timestamp in milliseconds, e.g. `1418556452651`. If no end time is provided, the current time will be used. (format: int32, e.g. 1418556477882)
+  --licensee: string # Sublicensed keys only. This will restrict the analysed dataset to a specific licensee. (e.g. sk_hk71kco54zGSGvF9eXXrvvnMOLLNh)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -637,10 +640,10 @@ export def "keys-usage KeyUsage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --start: string # A start date/time in the form of a UNIX Timestamp in milliseconds, e.g. `1418556452651`. If no start time is provided, the start time will be assigned to a time 21 days prior to the end time.
-  --end: string # An end date/time in the form of a UNIX Timestamp in milliseconds, e.g. `1418556452651`. If no end time is provided, the current time will be used.
-  --tags: string
-  --licensee: string # Sublicensed keys only. This will restrict the analysed dataset to a specific licensee.
+  --start: int # A start date/time in the form of a UNIX Timestamp in milliseconds, e.g. `1418556452651`. If no start time is provided, the start time will be assigned to a time 21 days prior to the end time. (format: int32, e.g. 1418556452651)
+  --end: int # An end date/time in the form of a UNIX Timestamp in milliseconds, e.g. `1418556452651`. If no end time is provided, the current time will be used. (format: int32, e.g. 1418556477882)
+  --tags: string # e.g. foo,bar
+  --licensee: string # Sublicensed keys only. This will restrict the analysed dataset to a specific licensee. (e.g. sk_hk71kco54zGSGvF9eXXrvvnMOLLNh)
 ]: nothing -> record<code: int, message: string, result: record<dailyCount: list<record>, end: string, start: string, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -663,7 +666,7 @@ export def "phone-numbers PhoneNumberValidation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --api-key: string
+  --api-key: string # e.g. ak_test
   --qp-query: string # Specifies the phone number to validate. Phone number must include a country code in acceptable format. For instance, UK phone numbers should be suffixed `+44`, `44` or `0044`.
 ]: nothing -> record<code: int, message: string, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -687,12 +690,12 @@ export def "places FindPlace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --api-key: string
+  --api-key: string # e.g. ak_test
   --qp-query: string # Specifies the place you wish to query. Query can be shortened to `q=`
-  --country-iso: string
-  --bias-country-iso: string
-  --bias-lonlat: string
-  --bias-ip: string
+  --country-iso: string # e.g. GBR
+  --bias-country-iso: string # e.g. GBR
+  --bias-lonlat: string # e.g. -2.095,57.15,100
+  --bias-ip: string@bias-ip-completer # e.g. true
 ]: nothing -> record<code: int, message: string, result: record<hits: list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -716,7 +719,7 @@ export def "places-place ResolvePlace" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --api-key: string
+  --api-key: string # e.g. ak_test
 ]: nothing -> record<code: int, message: string, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -740,9 +743,9 @@ export def "postcodes Postcodes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --api-key: string
-  --filter: string
-  --page: string
+  --api-key: string # e.g. ak_test
+  --filter: string # e.g. line_1,line_2,line_3
+  --page: int # format: int32, default: 0, e.g. 0
 ]: nothing -> record<code: int, message: string, result: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -766,8 +769,8 @@ export def "udprn UDPRN" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --api-key: string
-  --filter: string
+  --api-key: string # e.g. ak_test
+  --filter: string # e.g. line_1,line_2,line_3
 ]: nothing -> record<code: int, message: string, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -791,8 +794,8 @@ export def "umprn UMPRN" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --api-key: string
-  --filter: string
+  --api-key: string # e.g. ak_test
+  --filter: string # e.g. line_1,line_2,line_3
 ]: nothing -> record<code: int, message: string, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

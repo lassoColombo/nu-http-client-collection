@@ -19,17 +19,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -63,6 +64,12 @@ def bool-completer [] { ["'true'" "'false'"] }
 def base-url-completer [] { ["https://overfast-api.tekrop.fr"] }
 def auth-scheme-completer [] { ["bearer"] }
 
+# Completers for enum parameters
+def locale-completer [] { ["de-de" "en-gb" "en-us" "es-es" "es-mx" "fr-fr" "it-it" "ja-jp" "ko-kr" "pl-pl" "pt-br" "ru-ru" "zh-tw"] }
+def platform-completer [] { ["console" "pc"] }
+def gamemode-completer [] { ["competitive" "quickplay"] }
+def region-completer [] { ["americas" "asia" "europe"] }
+def hero-completer [] { ["all-heroes" "ana" "anran" "ashe" "baptiste" "bastion" "brigitte" "cassidy" "domina" "doomfist" "dva" "echo" "emre" "freja" "genji" "hanzo" "hazard" "illari" "jetpack-cat" "junker-queen" "junkrat" "juno" "kiriko" "lifeweaver" "lucio" "mauga" "mei" "mercy" "mizuki" "moira" "orisa" "pharah" "ramattra" "reaper" "reinhardt" "roadhog" "shion" "sierra" "sigma" "sojourn" "soldier-76" "sombra" "symmetra" "torbjorn" "tracer" "vendetta" "venture" "widowmaker" "winston" "wrecking-ball" "wuyang" "zarya" "zenyatta"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -100,7 +107,7 @@ export def "heroes heroes" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --role: string
-  --locale: string # default: en-us
+  --locale: string@locale-completer
   --gamemode: string
 ]: nothing -> table<key: string, name: string, portrait: string, role: string, subrole: string, gamemodes: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -124,9 +131,9 @@ export def "heroes-stats stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --platform: string
-  --gamemode: string # Filter on a specific gamemode.
-  --region: string # Filter on a specific player region.
+  --platform: string@platform-completer
+  --gamemode: string@gamemode-completer # Filter on a specific gamemode.
+  --region: string@region-completer # Filter on a specific player region.
   --role: string
   --map: string
   --competitive-division: string
@@ -154,7 +161,7 @@ export def "heroes hero" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --locale: string # default: en-us
+  --locale: string@locale-completer
 ]: nothing -> record<name: string, description: string, portrait: any, backgrounds: table<url: string, sizes: list>, role: string, subrole: string, location: string, age: any, birthday: any, hitpoints: any, abilities: table<name: string, description: string, icon: string, video: record>, perks: record<minor: list<record>, major: list<record>>, stadium_powers: any, story: record<summary: string, media: any, chapters: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -177,7 +184,7 @@ export def "roles roles" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --locale: string # default: en-us
+  --locale: string@locale-completer
 ]: nothing -> table<key: string, name: string, icon: string, description: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -318,9 +325,9 @@ export def "players-stats-career stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --gamemode: string # Filter on a specific gamemode.
-  --platform: string # Filter on a specific platform. If not specified, the only platform the player played on will be selected. If the player has already played on both PC and console, the PC stats will be displayed by default.
-  --hero: string # Filter on a specific hero in order to only get his statistics. You also can specify 'all-heroes' for general stats.
+  --gamemode: string@gamemode-completer # Filter on a specific gamemode.
+  --platform: string@platform-completer # Filter on a specific platform. If not specified, the only platform the player played on will be selected. If the player has already played on both PC and console, the PC stats will be displayed by default.
+  --hero: string@hero-completer # Filter on a specific hero in order to only get his statistics. You also can specify 'all-heroes' for general stats.
 ]: nothing -> record<all_heroes: any, ana: any, anran: any, ashe: any, baptiste: any, bastion: any, brigitte: any, cassidy: any, dva: any, domina: any, doomfist: any, echo: any, emre: any, freja: any, genji: any, hazard: any, hanzo: any, illari: any, jetpack_cat: any, junker_queen: any, junkrat: any, juno: any, kiriko: any, lifeweaver: any, lucio: any, mauga: any, mei: any, mercy: any, mizuki: any, moira: any, orisa: any, pharah: any, ramattra: any, reaper: any, reinhardt: any, roadhog: any, shion: any, sigma: any, sierra: any, sojourn: any, soldier_76: any, sombra: any, symmetra: any, torbjorn: any, tracer: any, vendetta: any, venture: any, widowmaker: any, winston: any, wrecking_ball: any, wuyang: any, zarya: any, zenyatta: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -344,9 +351,9 @@ export def "players-stats stats" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --gamemode: string # Filter on a specific gamemode.
-  --platform: string # Filter on a specific platform. If not specified, the only platform the player played on will be selected. If the player has already played on both PC and console, the PC stats will be displayed by default.
-  --hero: string # Filter on a specific hero in order to only get his statistics. You also can specify 'all-heroes' for general stats.
+  --gamemode: string@gamemode-completer # Filter on a specific gamemode.
+  --platform: string@platform-completer # Filter on a specific platform. If not specified, the only platform the player played on will be selected. If the player has already played on both PC and console, the PC stats will be displayed by default.
+  --hero: string@hero-completer # Filter on a specific hero in order to only get his statistics. You also can specify 'all-heroes' for general stats.
 ]: nothing -> record<all_heroes: any, ana: any, anran: any, ashe: any, baptiste: any, bastion: any, brigitte: any, cassidy: any, dva: any, domina: any, doomfist: any, echo: any, emre: any, freja: any, genji: any, hazard: any, hanzo: any, illari: any, jetpack_cat: any, junker_queen: any, junkrat: any, juno: any, kiriko: any, lifeweaver: any, lucio: any, mauga: any, mei: any, mercy: any, mizuki: any, moira: any, orisa: any, pharah: any, ramattra: any, reaper: any, reinhardt: any, roadhog: any, shion: any, sigma: any, sierra: any, sojourn: any, soldier_76: any, sombra: any, symmetra: any, torbjorn: any, tracer: any, vendetta: any, venture: any, widowmaker: any, winston: any, wrecking_ball: any, wuyang: any, zarya: any, zenyatta: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

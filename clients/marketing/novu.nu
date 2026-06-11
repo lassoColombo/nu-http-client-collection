@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -76,10 +77,13 @@ def markAs-completer [] { ["read" "seen" "unread" "unseen"] }
 def status-completer [] { ["done" "pending"] }
 def criticality-completer [] { ["all" "critical" "nonCritical"] }
 def source-completer [] { ["dashboard"] }
+def orderBy-completer [] { ["createdAt" "name" "updatedAt"] }
 def type-completer-1 [] { ["string"] }
 def source-completer-1 [] { ["ai" "bridge" "dashboard" "dropdown" "editor" "empty_state" "notification_directory" "onboarding_digest_demo" "onboarding_get_started" "onboarding_in_app" "template_store"] }
 def severity-completer [] { ["high" "low" "medium" "none"] }
+def orderBy-completer-1 [] { ["createdAt" "lastTriggeredAt" "name" "updatedAt"] }
 def origin-completer [] { ["external" "novu-cloud" "novu-cloud-v1"] }
+def providerId-completer-1 [] { ["africas-talking" "afro-message" "anthropic" "anthropic-aws" "apns" "appio" "azure-sms" "bandwidth" "braze" "brevo-sms" "bulk-sms" "burst-sms" "chat-webhook" "clickatell" "clicksend" "cm-telecom" "discord" "eazy-sms" "email-webhook" "emailjs" "expo" "fcm" "firetext" "forty-six-elks" "generic-sms" "getstream" "grafana-on-call" "gupshup" "imedia" "infobip-email" "infobip-sms" "isend-sms" "isendpro-sms" "kannel" "mailersend" "mailgun" "mailjet" "mailtrap" "mandrill" "maqsam" "mattermost" "messagebird" "mobishastra" "msteams" "netcore" "nexmo" "nodemailer" "novu" "novu-anthropic" "novu-email" "novu-email-agent" "novu-slack" "novu-sms" "one-signal" "outlook365" "plivo" "plunk" "postmark" "push-webhook" "pusher-beams" "pushpad" "resend" "ring-central" "rocket-chat" "ryver" "sendchamp" "sendgrid" "sendinblue" "ses" "simpletexting" "sinch" "slack" "sms-central" "sms77" "smsmode" "sns" "sparkpost" "telegram" "telnyx" "termii" "twilio" "unifonic" "whatsapp-business" "zulip"] }
 def type-completer-2 [] { ["ms_teams_channel" "ms_teams_user" "phone" "slack_channel" "slack_user" "telegram_chat" "webhook"] }
 def resourceType-completer [] { ["layout" "workflow"] }
 
@@ -2173,8 +2177,8 @@ export def "layouts list" [
   --allow-errors(-e) # Return full response without error handling
   --limit: float # Number of items to return per page (e.g. 10)
   --offset: float # Number of items to skip before starting to return results (e.g. 0)
-  --orderDirection: string # Direction of sorting
-  --orderBy: string # Field to sort the results by
+  --orderDirection: string@orderDirection-completer # Direction of sorting
+  --orderBy: string@orderBy-completer # Field to sort the results by
   --qp-query: string # Search query to filter layouts
 ]: nothing -> record<data: record<layouts: list<record>, totalCount: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2347,7 +2351,7 @@ export def "messages get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --channel: string
+  --channel: string@channel-completer
   --subscriberId: string
   --transactionId: list
   --contextKeys: list # Filter by exact context keys, order insensitive (format: "type:id") (e.g. [tenant:org-123, region:us-east-1])
@@ -2899,8 +2903,8 @@ export def "workflows searchWorkflows" [
   --allow-errors(-e) # Return full response without error handling
   --limit: float # Number of items to return per page (e.g. 10)
   --offset: float # Number of items to skip before starting to return results (e.g. 0)
-  --orderDirection: string # Direction of sorting
-  --orderBy: string # Field to sort the results by
+  --orderDirection: string@orderDirection-completer # Direction of sorting
+  --orderBy: string@orderBy-completer-1 # Field to sort the results by
   --qp-query: string # Search query to filter workflows
   --tags: list # Filter workflows by tags
   --status: list # Filter workflows by status
@@ -3203,7 +3207,7 @@ export def "channel-connections listChannelConnections" [
   --includeCursor: string@bool-completer # Include cursor item in response
   --subscriberId: string # The subscriber ID to filter results by (e.g. subscriber-123)
   --channel: string@channel-completer # Filter by channel type (email, sms, push, chat, etc.). (e.g. chat)
-  --providerId: string # Filter by provider identifier (e.g., sendgrid, twilio, slack, etc.). (e.g. slack)
+  --providerId: string@providerId-completer-1 # Filter by provider identifier (e.g., sendgrid, twilio, slack, etc.). (e.g. slack)
   --integrationIdentifier: string # Filter by integration identifier. (e.g. slack-prod)
   --contextKeys: list # Filter by exact context keys, order insensitive (format: "type:id") (e.g. [tenant:org-123, region:us-east-1])
 ]: nothing -> record<data: record<data: list<record>, next: string, previous: string, totalCount: float, totalCountCapped: bool>> {
@@ -3343,7 +3347,7 @@ export def "channel-endpoints listChannelEndpoints" [
   --subscriberId: string # The subscriber ID to filter results by (e.g. subscriber-123)
   --contextKeys: list # Filter by exact context keys, order insensitive (format: "type:id") (e.g. [tenant:org-123, region:us-east-1])
   --channel: string@channel-completer # Channel type to filter results.
-  --providerId: string # Filter by provider identifier (e.g., sendgrid, twilio, slack, etc.). (e.g. slack)
+  --providerId: string@providerId-completer-1 # Filter by provider identifier (e.g., sendgrid, twilio, slack, etc.). (e.g. slack)
   --integrationIdentifier: string # Integration identifier to filter results. (e.g. slack-prod)
   --connectionIdentifier: string # Connection identifier to filter results. (e.g. slack-connection-abc123)
 ]: nothing -> record<data: record<data: list<record>, next: string, previous: string, totalCount: float, totalCountCapped: bool>> {

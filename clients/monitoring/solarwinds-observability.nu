@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -67,6 +68,9 @@ def auth-scheme-completer [] { ["bearer"] }
 # Completers for enum parameters
 def direction-completer [] { ["backward" "forward" "tail"] }
 def status-completer [] { ["down" "up" "up,down"] }
+def aggregateBy-completer [] { ["AVG" "COUNT" "LAST" "MAX" "MIN" "SUM"] }
+def preGroupByMethod-completer [] { ["AVG" "COUNT" "LAST" "MAX" "MIN" "SUM"] }
+def seriesType-completer [] { ["SCALAR" "TIMESERIES"] }
 def type-completer [] { ["ingestion"] }
 
 # List all available API commands with their parameters
@@ -1689,10 +1693,10 @@ export def "metrics-measurements listMetricMeasurements" [
   --allow-errors(-e) # Return full response without error handling
   --filter: string # Query to filter the measurement values. e.g id: [id1,id2] category: moderate
   --groupBy: string # Comma-delimited list of attribute names to group measurements by. e.g id, category
-  --aggregateBy: string # Aggregation method used to group measurements. Defaults to AVG.
+  --aggregateBy: string@aggregateBy-completer # Aggregation method used to group measurements. Defaults to AVG.
   --preGroupBy: string # Secondary grouping to allow aggregating data points inside individual buckets. Has to be set together with `preGroupByMethod`.
-  --preGroupByMethod: string # Secondary aggregation to allow aggregating data points inside individual buckets. Has to be set together with `preGroupBy`.
-  --seriesType: string # Indicates what type of data to return. Defaults to TIMESERIES. (default: TIMESERIES)
+  --preGroupByMethod: string@preGroupByMethod-completer # Secondary aggregation to allow aggregating data points inside individual buckets. Has to be set together with `preGroupBy`.
+  --seriesType: string@seriesType-completer # Indicates what type of data to return. Defaults to TIMESERIES.
   --startTime: string # Timestamp in ISO 8601 format in UTC timezone: yyyy-MM-ddTHH:mm:ssZ (format: date-time)
   --endTime: string # Timestamp in ISO 8601 format in UTC timezone: yyyy-MM-ddTHH:mm:ssZ (format: date-time)
   --pageSize: int # Number of items in a response page. Default varies by API. (format: int32)

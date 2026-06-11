@@ -19,17 +19,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -105,7 +106,7 @@ export def "vocabularies-concepts listConcepts" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --arg1: string
+  --arg1: record
   --tags: string # Tags of the concept
   --parentKey: int # The key of the parent concept. (format: int64)
   --parent: string # The name of the parent concept.
@@ -125,7 +126,7 @@ export def "vocabularies-concepts listConcepts" [
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: int, name: string, externalDefinitions: list, editorialNotes: list, replacedByKey: int, deprecated: string, deprecatedBy: string, created: string, createdBy: string, modified: string, modifiedBy: string, vocabularyKey: int, definition: list, label: list, parentKey: int, sameAsUris: list, tags: list, vocabularyName: string, parents: list, childrenCount: int, children: list, alternativeLabelsLink: string, hiddenLabelsLink: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "arg1" $arg1 "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "parentKey" $parentKey "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "replacedByKey" $replacedByKey "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "deprecated" $deprecated "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "hasParent" $hasParent "scalar") (serialize-qp "hasReplacement" $hasReplacement "scalar") (serialize-qp "includeChildrenCount" $includeChildrenCount "scalar") (serialize-qp "includeChildren" $includeChildren "scalar") (serialize-qp "includeParents" $includeParents "scalar") (serialize-qp "hiddenLabel" $hiddenLabel "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "arg1" $arg1 "multi") (serialize-qp "tags" $tags "scalar") (serialize-qp "parentKey" $parentKey "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "replacedByKey" $replacedByKey "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "deprecated" $deprecated "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "hasParent" $hasParent "scalar") (serialize-qp "hasReplacement" $hasReplacement "scalar") (serialize-qp "includeChildrenCount" $includeChildrenCount "scalar") (serialize-qp "includeChildren" $includeChildren "scalar") (serialize-qp "includeParents" $includeParents "scalar") (serialize-qp "hiddenLabel" $hiddenLabel "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -213,13 +214,13 @@ export def "vocabulary-tags listTags" [
   --q: string # Query for full-text search.
   --name: string # The name of the tag. Useful to use with the isInUse parameter.
   --isInUse: string@bool-completer # If true it searches for tags that are currently being used in at least one concept.
-  --arg3: string
+  --arg3: record
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: int, name: string, description: string, color: string, created: string, createdBy: string, modified: string, modifiedBy: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "isInUse" $isInUse "scalar") (serialize-qp "arg3" $arg3 "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "isInUse" $isInUse "scalar") (serialize-qp "arg3" $arg3 "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/vocabularyTags" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -270,7 +271,7 @@ export def "vocabularies listVocabularies" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --arg0: string
+  --arg0: record
   --name: string # The name of the vocabulary.
   --namespace: string # The namespace of the vocabulary.
   --deprecated: string@bool-completer # Is the vocabulary deprecated?
@@ -282,7 +283,7 @@ export def "vocabularies listVocabularies" [
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: int, name: string, externalDefinitions: list, editorialNotes: list, replacedByKey: int, deprecated: string, deprecatedBy: string, created: string, createdBy: string, modified: string, modifiedBy: string, namespace: string, definition: list, label: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "arg0" $arg0 "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "deprecated" $deprecated "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "hasUnreleasedChanges" $hasUnreleasedChanges "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "arg0" $arg0 "multi") (serialize-qp "name" $name "scalar") (serialize-qp "namespace" $namespace "scalar") (serialize-qp "deprecated" $deprecated "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "hasUnreleasedChanges" $hasUnreleasedChanges "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/vocabularies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1316,13 +1317,13 @@ export def "vocabularies-concepts-alternative-labels listConceptAlternativeLabel
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --lang: string@lang-completer # Languages to filter by
-  --arg3: string
+  --arg3: record
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: int, language: string, value: string, createdBy: string, created: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "arg3" $arg3 "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "arg3" $arg3 "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/($name)/alternativeLabels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1399,13 +1400,13 @@ export def "vocabularies-concepts-hidden-labels listConceptHiddenLabels" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --q: string # Search term to filter hidden labels
-  --arg3: string
+  --arg3: record
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: int, value: string, createdBy: string, created: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "arg3" $arg3 "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "arg3" $arg3 "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/($name)/hiddenLabels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1479,7 +1480,7 @@ export def "vocabularies-concepts-latest-release listConceptsFromLatestRelease" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --arg1: string
+  --arg1: record
   --parentKey: int # The key of the parent concept. (format: int64)
   --parent: string # The name of the parent concept.
   --replacedByKey: int # The key of the replacement of the concept. (format: int64)
@@ -1498,7 +1499,7 @@ export def "vocabularies-concepts-latest-release listConceptsFromLatestRelease" 
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: int, name: string, externalDefinitions: list, editorialNotes: list, replacedByKey: int, deprecated: string, deprecatedBy: string, created: string, createdBy: string, modified: string, modifiedBy: string, vocabularyKey: int, definition: list, label: list, parentKey: int, sameAsUris: list, tags: list, vocabularyName: string, parents: list, childrenCount: int, children: list, alternativeLabelsLink: string, hiddenLabelsLink: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "arg1" $arg1 "scalar") (serialize-qp "parentKey" $parentKey "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "replacedByKey" $replacedByKey "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "deprecated" $deprecated "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "hasParent" $hasParent "scalar") (serialize-qp "hasReplacement" $hasReplacement "scalar") (serialize-qp "includeChildrenCount" $includeChildrenCount "scalar") (serialize-qp "includeChildren" $includeChildren "scalar") (serialize-qp "includeParents" $includeParents "scalar") (serialize-qp "hiddenLabel" $hiddenLabel "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "arg1" $arg1 "multi") (serialize-qp "parentKey" $parentKey "scalar") (serialize-qp "parent" $parent "scalar") (serialize-qp "replacedByKey" $replacedByKey "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "deprecated" $deprecated "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "hasParent" $hasParent "scalar") (serialize-qp "hasReplacement" $hasReplacement "scalar") (serialize-qp "includeChildrenCount" $includeChildrenCount "scalar") (serialize-qp "includeChildren" $includeChildren "scalar") (serialize-qp "includeParents" $includeParents "scalar") (serialize-qp "hiddenLabel" $hiddenLabel "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/latestRelease" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1623,13 +1624,13 @@ export def "vocabularies-concepts-latest-release-alternative-labels listConceptA
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --lang: string@lang-completer # Languages to filter by
-  --arg3: string
+  --arg3: record
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: int, language: string, value: string, createdBy: string, created: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "arg3" $arg3 "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "arg3" $arg3 "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/latestRelease/($name)/alternativeLabels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1651,13 +1652,13 @@ export def "vocabularies-concepts-latest-release-hidden-labels listConceptHidden
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --q: string
-  --arg3: string
+  --arg3: record
   --limit: int # Controls the number of results in the page. Using too high a value will be overwritten with the default maximum threshold, depending on the service. Sensible defaults are used so this may be omitted. (format: int32)
   --offset: int # Determines the offset for the search results. A limit of 20 and offset of 40 will get the third page of 20 results. Some services have a maximum offset. (format: int32)
 ]: nothing -> record<endOfRecords: bool, count: int, results: table<key: int, value: string, createdBy: string, created: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "arg3" $arg3 "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "arg3" $arg3 "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/vocabularies/($vocabularyName)/concepts/latestRelease/($name)/hiddenLabels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

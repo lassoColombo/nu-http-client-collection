@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -66,10 +67,18 @@ def auth-scheme-completer [] { ["basic"] }
 
 # Completers for enum parameters
 def CallbackMethod-completer [] { ["GET" "POST"] }
+def Status-completer [] { ["available" "downloaded" "failed" "installed" "new" "reserving"] }
 def IpCommandsMethod-completer [] { ["GET" "POST"] }
 def SmsCommandsMethod-completer [] { ["GET" "POST"] }
 def PayloadType-completer [] { ["binary" "text"] }
-def Status-completer [] { ["active" "inactive" "ready"] }
+def Status-completer-1 [] { ["failed" "queued" "received" "sent"] }
+def Direction-completer [] { ["from_sim" "to_sim"] }
+def Status-completer-2 [] { ["failed" "in-progress" "scheduled" "successful"] }
+def Status-completer-3 [] { ["active" "inactive" "new" "ready" "scheduled"] }
+def Status-completer-4 [] { ["active" "inactive" "ready"] }
+def Status-completer-5 [] { ["delivered" "failed" "queued" "received" "sent"] }
+def Group-completer [] { ["fleet" "isoCountry" "network" "sim"] }
+def Granularity-completer [] { ["all" "day" "hour"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -162,7 +171,7 @@ export def "e-sim-profiles ListEsimProfile" [
   --allow-errors(-e) # Return full response without error handling
   --Eid: string # List the eSIM Profiles that have been associated with an EId.
   --SimSid: string # Find the eSIM Profile resource related to a [Sim](https://www.twilio.com/docs/iot/supersim/api/sim-resource) resource by providing the SIM SID. Will always return an array with either 1 or 0 records.
-  --Status: string # List the eSIM Profiles that are in a given status.
+  --Status: string@Status-completer # List the eSIM Profiles that are in a given status.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -355,8 +364,8 @@ export def "ip-commands ListIpCommand" [
   --allow-errors(-e) # Return full response without error handling
   --Sim: string # The SID or unique name of the Sim resource that IP Command was sent to or from.
   --SimIccid: string # The ICCID of the Sim resource that IP Command was sent to or from.
-  --Status: string # The status of the IP Command. Can be: `queued`, `sent`, `received` or `failed`. See the [IP Command Status Values](https://www.twilio.com/docs/iot/supersim/api/ipcommand-resource#status-values) for a description of each.
-  --Direction: string # The direction of the IP Command. Can be `to_sim` or `from_sim`. The value of `to_sim` is synonymous with the term `mobile terminated`, and `from_sim` is synonymous with the term `mobile originated`.
+  --Status: string@Status-completer-1 # The status of the IP Command. Can be: `queued`, `sent`, `received` or `failed`. See the [IP Command Status Values](https://www.twilio.com/docs/iot/supersim/api/ipcommand-resource#status-values) for a description of each.
+  --Direction: string@Direction-completer # The direction of the IP Command. Can be `to_sim` or `from_sim`. The value of `to_sim` is synonymous with the term `mobile terminated`, and `from_sim` is synonymous with the term `mobile originated`.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -652,7 +661,7 @@ export def "settings-updates ListSettingsUpdate" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Sim: string # Filter the Settings Updates by a Super SIM's SID or UniqueName.
-  --Status: string # Filter the Settings Updates by status. Can be `scheduled`, `in-progress`, `successful`, or `failed`.
+  --Status: string@Status-completer-2 # Filter the Settings Updates by status. Can be `scheduled`, `in-progress`, `successful`, or `failed`.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -704,7 +713,7 @@ export def "sims ListSim" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Status: string # The status of the Sim resources to read. Can be `new`, `ready`, `active`, `inactive`, or `scheduled`.
+  --Status: string@Status-completer-3 # The status of the Sim resources to read. Can be `new`, `ready`, `active`, `inactive`, or `scheduled`.
   --Fleet: string # The SID or unique name of the Fleet to which a list of Sims are assigned.
   --Iccid: string # The [ICCID](https://en.wikipedia.org/wiki/Subscriber_identity_module#ICCID) associated with a Super SIM to filter the list by. Passing this parameter will always return a list containing zero or one SIMs.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
@@ -756,7 +765,7 @@ export def "sims UpdateSim" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --UniqueName: string # An application-defined string that uniquely identifies the resource. It can be used in place of the resource's `sid` in the URL to address the resource.
-  --Status: string@Status-completer
+  --Status: string@Status-completer-4
   --Fleet: string # The SID or unique name of the Fleet to which the SIM resource should be assigned.
   --CallbackUrl: string # The URL we should call using the `callback_method` after an asynchronous update has finished. (format: uri)
   --CallbackMethod: string@CallbackMethod-completer # The HTTP method we should use to call `callback_url`. Can be: `GET` or `POST` and the default is POST. (format: http-method)
@@ -840,8 +849,8 @@ export def "sms-commands ListSmsCommand" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Sim: string # The SID or unique name of the Sim resource that SMS Command was sent to or from.
-  --Status: string # The status of the SMS Command. Can be: `queued`, `sent`, `delivered`, `received` or `failed`. See the [SMS Command Status Values](https://www.twilio.com/docs/iot/supersim/api/smscommand-resource#status-values) for a description of each.
-  --Direction: string # The direction of the SMS Command. Can be `to_sim` or `from_sim`. The value of `to_sim` is synonymous with the term `mobile terminated`, and `from_sim` is synonymous with the term `mobile originated`.
+  --Status: string@Status-completer-5 # The status of the SMS Command. Can be: `queued`, `sent`, `delivered`, `received` or `failed`. See the [SMS Command Status Values](https://www.twilio.com/docs/iot/supersim/api/smscommand-resource#status-values) for a description of each.
+  --Direction: string@Direction-completer # The direction of the SMS Command. Can be `to_sim` or `from_sim`. The value of `to_sim` is synonymous with the term `mobile terminated`, and `from_sim` is synonymous with the term `mobile originated`.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -893,8 +902,8 @@ export def "usage-records ListUsageRecord" [
   --Fleet: string # SID or unique name of a Fleet resource. Only show UsageRecords representing usage for Super SIMs belonging to this Fleet resource at the time the usage occurred.
   --Network: string # SID of a Network resource. Only show UsageRecords representing usage on this network.
   --IsoCountry: string # Alpha-2 ISO Country Code. Only show UsageRecords representing usage in this country. (format: iso-country-code)
-  --Group: string # Dimension over which to aggregate usage records. Can be: `sim`, `fleet`, `network`, `isoCountry`. Default is to not aggregate across any of these dimensions, UsageRecords will be aggregated into the time buckets described by the `Granularity` parameter.
-  --Granularity: string # Time-based grouping that UsageRecords should be aggregated by. Can be: `hour`, `day`, or `all`. Default is `all`. `all` returns one UsageRecord that describes the usage for the entire period.
+  --Group: string@Group-completer # Dimension over which to aggregate usage records. Can be: `sim`, `fleet`, `network`, `isoCountry`. Default is to not aggregate across any of these dimensions, UsageRecords will be aggregated into the time buckets described by the `Granularity` parameter.
+  --Granularity: string@Granularity-completer # Time-based grouping that UsageRecords should be aggregated by. Can be: `hour`, `day`, or `all`. Default is `all`. `all` returns one UsageRecord that describes the usage for the entire period.
   --StartTime: string # Only include usage that occurred at or after this time, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. Default is one month before the `end_time`. (format: date-time)
   --EndTime: string # Only include usage that occurred before this time (exclusive), specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. Default is the current time. (format: date-time)
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)

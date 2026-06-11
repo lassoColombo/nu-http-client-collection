@@ -23,17 +23,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -71,9 +72,15 @@ def auth-scheme-completer [] { ["x-auth-email" "x-auth-key" "bearer" "x-auth-use
 def direction-completer [] { ["asc" "desc"] }
 def type-completer [] { ["enterprise" "standard"] }
 def state-completer [] { ["customized" "default"] }
+def status-completer [] { ["accepted" "in_review"] }
+def type-completer-1 [] { ["DMCA" "EMER" "GEN" "NCSEI" "NETWORK" "PHISH" "REG_WHO" "THREAT" "TM"] }
+def mitigation-status-completer [] { ["active" "cancelled" "in_review" "pending" "removed"] }
 def sort-completer [] { ["effective_date,asc" "effective_date,desc" "entity_type,asc" "entity_type,desc" "status,asc" "status,desc" "type,asc" "type,desc"] }
+def type-completer-2 [] { ["account_suspend" "copyright_interstitial" "geo_block" "legal_block" "malware_interstitial" "misleading_interstitial" "network_block" "phishing_interstitial" "playfairite_enforce" "r2_takedown_account" "r2_takedown_bucket" "r2_takedown_object" "rate_limit_cache" "redirect_video_stream" "registrar_freeze" "registrar_parking" "stream_block_account" "user_suspend" "workers_takedown_by_zone_id"] }
+def status-completer-1 [] { ["active" "cancelled" "in_review" "pending" "removed"] }
+def entity-type-completer [] { ["account" "url_pattern" "zone"] }
 def auth-type-completer [] { ["bearer" "oauth" "unauthenticated"] }
-def type-completer-1 [] { ["forbidden" "identity_denied"] }
+def type-completer-3 [] { ["forbidden" "identity_denied"] }
 def allowedOp-completer [] { ["eq" "neq"] }
 def country-codeOp-completer [] { ["eq" "neq"] }
 def app-typeOp-completer [] { ["eq" "neq"] }
@@ -84,8 +91,8 @@ def idpOp-completer [] { ["eq" "neq"] }
 def non-identityOp-completer [] { ["eq" "neq"] }
 def user-idOp-completer [] { ["eq" "neq"] }
 def decision-completer [] { ["allow" "bypass" "deny" "non_identity"] }
-def status-completer [] { ["error" "fail" "success"] }
-def type-completer-2 [] { ["all" "auto" "manual"] }
+def status-completer-2 [] { ["error" "fail" "success"] }
+def type-completer-4 [] { ["all" "auto" "manual"] }
 def duration-completer [] { ["daily" "monthly" "weekly"] }
 def strategy-completer [] { ["fixed" "sliding"] }
 def value-grouping-window-completer [] { ["day" "hour"] }
@@ -98,17 +105,17 @@ def workers-ai-billing-mode-completer [] { ["postpaid"] }
 def order-by-completer [] { ["cached" "cost" "created_at" "duration" "feedback" "model" "model_type" "provider" "success" "tokens_in" "tokens_out"] }
 def order-by-completer-1 [] { ["cached" "created_at" "model" "model_type" "provider" "success"] }
 def order-by-completer-2 [] { ["created_at"] }
-def ai-search-model-completer [] { ["" "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b" "@cf/google/gemma-3-12b-it" "@cf/google/gemma-4-26b-a4b-it" "@cf/meta/llama-3.1-8b-instruct-fast" "@cf/meta/llama-3.1-8b-instruct-fp8" "@cf/meta/llama-3.3-70b-instruct-fp8-fast" "@cf/meta/llama-4-scout-17b-16e-instruct" "@cf/moonshotai/kimi-k2-instruct" "@cf/moonshotai/kimi-k2.5" "@cf/qwen/qwen3-30b-a3b-fp8" "@cf/zai-org/glm-4.7-flash" "anthropic/claude-3-5-haiku" "anthropic/claude-3-7-sonnet" "anthropic/claude-opus-4" "anthropic/claude-sonnet-4" "cerebras/gpt-oss-120b" "cerebras/llama-3.3-70b" "cerebras/llama-4-maverick-17b-128e-instruct" "cerebras/llama-4-scout-17b-16e-instruct" "cerebras/qwen-3-235b-a22b-instruct" "cerebras/qwen-3-235b-a22b-thinking" "google-ai-studio/gemini-2.5-flash" "google-ai-studio/gemini-2.5-pro" "grok/grok-4" "groq/llama-3.1-8b-instant" "groq/llama-3.3-70b-versatile" "openai/gpt-5" "openai/gpt-5-mini" "openai/gpt-5-nano"] }
+def ai-search-model-completer [] { ["" "" "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b" "@cf/google/gemma-3-12b-it" "@cf/google/gemma-4-26b-a4b-it" "@cf/meta/llama-3.1-8b-instruct-fast" "@cf/meta/llama-3.1-8b-instruct-fp8" "@cf/meta/llama-3.3-70b-instruct-fp8-fast" "@cf/meta/llama-4-scout-17b-16e-instruct" "@cf/moonshotai/kimi-k2-instruct" "@cf/moonshotai/kimi-k2.5" "@cf/qwen/qwen3-30b-a3b-fp8" "@cf/zai-org/glm-4.7-flash" "anthropic/claude-3-5-haiku" "anthropic/claude-3-7-sonnet" "anthropic/claude-opus-4" "anthropic/claude-sonnet-4" "cerebras/gpt-oss-120b" "cerebras/llama-3.3-70b" "cerebras/llama-4-maverick-17b-128e-instruct" "cerebras/llama-4-scout-17b-16e-instruct" "cerebras/qwen-3-235b-a22b-instruct" "cerebras/qwen-3-235b-a22b-thinking" "google-ai-studio/gemini-2.5-flash" "google-ai-studio/gemini-2.5-pro" "grok/grok-4" "groq/llama-3.1-8b-instant" "groq/llama-3.3-70b-versatile" "openai/gpt-5" "openai/gpt-5-mini" "openai/gpt-5-nano"] }
 def cache-threshold-completer [] { ["anything_goes" "close_enough" "flexible_friend" "super_strict_match"] }
-def embedding-model-completer [] { ["" "@cf/baai/bge-large-en-v1.5" "@cf/baai/bge-m3" "@cf/google/embeddinggemma-300m" "@cf/qwen/qwen3-embedding-0.6b" "google-ai-studio/gemini-embedding-001" "google-ai-studio/gemini-embedding-2-preview" "openai/text-embedding-3-large" "openai/text-embedding-3-small"] }
+def embedding-model-completer [] { ["" "" "@cf/baai/bge-large-en-v1.5" "@cf/baai/bge-m3" "@cf/google/embeddinggemma-300m" "@cf/qwen/qwen3-embedding-0.6b" "google-ai-studio/gemini-embedding-001" "google-ai-studio/gemini-embedding-2-preview" "openai/text-embedding-3-large" "openai/text-embedding-3-small"] }
 def fusion-method-completer [] { ["max" "rrf"] }
-def reranking-model-completer [] { ["" "@cf/baai/bge-reranker-base"] }
-def rewrite-model-completer [] { ["" "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b" "@cf/google/gemma-3-12b-it" "@cf/google/gemma-4-26b-a4b-it" "@cf/meta/llama-3.1-8b-instruct-fast" "@cf/meta/llama-3.1-8b-instruct-fp8" "@cf/meta/llama-3.3-70b-instruct-fp8-fast" "@cf/meta/llama-4-scout-17b-16e-instruct" "@cf/moonshotai/kimi-k2-instruct" "@cf/moonshotai/kimi-k2.5" "@cf/qwen/qwen3-30b-a3b-fp8" "@cf/zai-org/glm-4.7-flash" "anthropic/claude-3-5-haiku" "anthropic/claude-3-7-sonnet" "anthropic/claude-opus-4" "anthropic/claude-sonnet-4" "cerebras/gpt-oss-120b" "cerebras/llama-3.3-70b" "cerebras/llama-4-maverick-17b-128e-instruct" "cerebras/llama-4-scout-17b-16e-instruct" "cerebras/qwen-3-235b-a22b-instruct" "cerebras/qwen-3-235b-a22b-thinking" "google-ai-studio/gemini-2.5-flash" "google-ai-studio/gemini-2.5-pro" "grok/grok-4" "groq/llama-3.1-8b-instant" "groq/llama-3.3-70b-versatile" "openai/gpt-5" "openai/gpt-5-mini" "openai/gpt-5-nano"] }
-def type-completer-3 [] { ["r2" "web-crawler"] }
-def summarization-model-completer [] { ["" "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b" "@cf/google/gemma-3-12b-it" "@cf/google/gemma-4-26b-a4b-it" "@cf/meta/llama-3.1-8b-instruct-fast" "@cf/meta/llama-3.1-8b-instruct-fp8" "@cf/meta/llama-3.3-70b-instruct-fp8-fast" "@cf/meta/llama-4-scout-17b-16e-instruct" "@cf/moonshotai/kimi-k2-instruct" "@cf/moonshotai/kimi-k2.5" "@cf/qwen/qwen3-30b-a3b-fp8" "@cf/zai-org/glm-4.7-flash" "anthropic/claude-3-5-haiku" "anthropic/claude-3-7-sonnet" "anthropic/claude-opus-4" "anthropic/claude-sonnet-4" "cerebras/gpt-oss-120b" "cerebras/llama-3.3-70b" "cerebras/llama-4-maverick-17b-128e-instruct" "cerebras/llama-4-scout-17b-16e-instruct" "cerebras/qwen-3-235b-a22b-instruct" "cerebras/qwen-3-235b-a22b-thinking" "google-ai-studio/gemini-2.5-flash" "google-ai-studio/gemini-2.5-pro" "grok/grok-4" "groq/llama-3.1-8b-instant" "groq/llama-3.3-70b-versatile" "openai/gpt-5" "openai/gpt-5-mini" "openai/gpt-5-nano"] }
+def reranking-model-completer [] { ["" "" "@cf/baai/bge-reranker-base"] }
+def rewrite-model-completer [] { ["" "" "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b" "@cf/google/gemma-3-12b-it" "@cf/google/gemma-4-26b-a4b-it" "@cf/meta/llama-3.1-8b-instruct-fast" "@cf/meta/llama-3.1-8b-instruct-fp8" "@cf/meta/llama-3.3-70b-instruct-fp8-fast" "@cf/meta/llama-4-scout-17b-16e-instruct" "@cf/moonshotai/kimi-k2-instruct" "@cf/moonshotai/kimi-k2.5" "@cf/qwen/qwen3-30b-a3b-fp8" "@cf/zai-org/glm-4.7-flash" "anthropic/claude-3-5-haiku" "anthropic/claude-3-7-sonnet" "anthropic/claude-opus-4" "anthropic/claude-sonnet-4" "cerebras/gpt-oss-120b" "cerebras/llama-3.3-70b" "cerebras/llama-4-maverick-17b-128e-instruct" "cerebras/llama-4-scout-17b-16e-instruct" "cerebras/qwen-3-235b-a22b-instruct" "cerebras/qwen-3-235b-a22b-thinking" "google-ai-studio/gemini-2.5-flash" "google-ai-studio/gemini-2.5-pro" "grok/grok-4" "groq/llama-3.1-8b-instant" "groq/llama-3.3-70b-versatile" "openai/gpt-5" "openai/gpt-5-mini" "openai/gpt-5-nano"] }
+def type-completer-5 [] { ["" "r2" "web-crawler"] }
+def summarization-model-completer [] { ["" "" "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b" "@cf/google/gemma-3-12b-it" "@cf/google/gemma-4-26b-a4b-it" "@cf/meta/llama-3.1-8b-instruct-fast" "@cf/meta/llama-3.1-8b-instruct-fp8" "@cf/meta/llama-3.3-70b-instruct-fp8-fast" "@cf/meta/llama-4-scout-17b-16e-instruct" "@cf/moonshotai/kimi-k2-instruct" "@cf/moonshotai/kimi-k2.5" "@cf/qwen/qwen3-30b-a3b-fp8" "@cf/zai-org/glm-4.7-flash" "anthropic/claude-3-5-haiku" "anthropic/claude-3-7-sonnet" "anthropic/claude-opus-4" "anthropic/claude-sonnet-4" "cerebras/gpt-oss-120b" "cerebras/llama-3.3-70b" "cerebras/llama-4-maverick-17b-128e-instruct" "cerebras/llama-4-scout-17b-16e-instruct" "cerebras/qwen-3-235b-a22b-instruct" "cerebras/qwen-3-235b-a22b-thinking" "google-ai-studio/gemini-2.5-flash" "google-ai-studio/gemini-2.5-pro" "grok/grok-4" "groq/llama-3.1-8b-instant" "groq/llama-3.3-70b-versatile" "openai/gpt-5" "openai/gpt-5-mini" "openai/gpt-5-nano"] }
 def action-completer [] { ["cancel"] }
 def sort-by-completer [] { ["modified_at" "status"] }
-def status-completer-1 [] { ["completed" "error" "outdated" "queued" "running" "skipped"] }
+def status-completer-3 [] { ["completed" "error" "outdated" "queued" "running" "skipped"] }
 def next-action-completer [] { ["INDEX"] }
 def format-completer [] { ["openrouter"] }
 def target-language-completer [] { ["asm_Beng" "awa_Deva" "ben_Beng" "bho_Deva" "brx_Deva" "doi_Deva" "eng_Latn" "gom_Deva" "gon_Deva" "guj_Gujr" "hin_Deva" "hne_Deva" "kan_Knda" "kas_Arab" "kas_Deva" "kha_Latn" "lus_Latn" "mag_Deva" "mai_Deva" "mal_Mlym" "mar_Deva" "mni_Beng" "mni_Mtei" "npi_Deva" "ory_Orya" "pan_Guru" "san_Deva" "sat_Olck" "snd_Arab" "snd_Deva" "tam_Taml" "tel_Telu" "unr_Deva" "urd_Arab"] }
@@ -137,10 +144,11 @@ def state-event-completer [] { ["0" "1" "2"] }
 def sort-completer-1 [] { ["created_at" "last_push_at" "name" "updated_at"] }
 def accept-completer-5 [] { ["application/json" "application/octet-stream" "text/html" "text/plain"] }
 def state-completer-1 [] { ["active" "all" "expired" "revoked"] }
-def status-completer-2 [] { ["completed" "error" "queued" "running"] }
-def status-completer-3 [] { ["cancelled" "completed" "disallowed" "errored" "queued" "skipped"] }
+def status-completer-4 [] { ["completed" "error" "queued" "running"] }
+def status-completer-5 [] { ["cancelled" "completed" "disallowed" "errored" "queued" "skipped"] }
 def accept-completer-6 [] { ["application/json" "image/jpg" "image/png" "image/webp" "text/plain"] }
 def provider-type-completer [] { ["github"] }
+def status-completer-6 [] { ["degraded" "down" "healthy" "inactive"] }
 def config-src-completer [] { ["cloudflare" "local"] }
 def order-completer [] { ["created_on" "id" "modified_on" "name" "sitekey"] }
 def clearance-level-completer [] { ["interactive" "jschallenge" "managed" "no_clearance"] }
@@ -153,7 +161,7 @@ def subjectType-completer [] { ["account" "group"] }
 def relationshipType-completer [] { ["attributed_to" "caused_by" "related_to"] }
 def direction-completer-1 [] { ["ancestors" "both" "descendants"] }
 def sort-order-completer [] { ["asc" "desc"] }
-def status-completer-4 [] { ["accepted" "approved" "completed" "declined" "open" "reported"] }
+def status-completer-7 [] { ["accepted" "approved" "completed" "declined" "open" "reported"] }
 def tlp-completer [] { ["amber" "amber-strict" "clear" "green" "red"] }
 def recursive-completer [] { ["false" "true"] }
 def is-public-completer [] { ["false" "true"] }
@@ -164,8 +172,8 @@ def format-completer-2 [] { ["pdf" "text"] }
 def accept-completer-7 [] { ["application/json" "application/pdf"] }
 def orderBy-completer-1 [] { ["domain" "matchedAt" "registrar" "similarityScore"] }
 def matchType-completer [] { ["domain" "logo"] }
-def status-completer-5 [] { ["draft" "expired" "resolved" "sent"] }
-def type-completer-4 [] { ["boolean" "date" "number" "text"] }
+def status-completer-8 [] { ["draft" "expired" "resolved" "sent"] }
+def type-completer-6 [] { ["boolean" "date" "number" "text"] }
 def accept-completer-8 [] { ["application/x-ndjson" "text/csv" "text/markdown"] }
 def scheduling-policy-completer [] { ["default"] }
 def kind-completer [] { ["full_auto" "full_manual"] }
@@ -178,51 +186,62 @@ def primary-location-hint-completer [] { ["apac" "eeur" "enam" "oc" "weur" "wnam
 def output-format-completer [] { ["polling"] }
 def action-completer-1 [] { ["init"] }
 def release-track-completer [] { ["beta" "ga"] }
-def type-completer-5 [] { ["tls"] }
+def type-completer-7 [] { ["tls"] }
 def sort-by-completer-1 [] { ["active_registrations" "client_version" "created_at" "id" "last_seen_at" "last_seen_user.email" "name"] }
 def active-registrations-completer [] { ["exclude" "include" "only"] }
-def type-completer-6 [] { ["antivirus" "application" "carbonblack" "client_certificate" "client_certificate_v2" "crowdstrike_s2s" "custom_s2s" "disk_encryption" "domain_joined" "file" "firewall" "gateway" "intune" "kolide" "os_version" "sentinelone" "sentinelone_s2s" "serial_number" "tanium" "tanium_s2s" "unique_client_id" "warp" "workspace_one"] }
-def type-completer-7 [] { ["crowdstrike_s2s" "custom_s2s" "intune" "kolide" "sentinelone_s2s" "tanium_s2s" "uptycs" "workspace_one"] }
-def status-completer-6 [] { ["active" "all" "revoked"] }
+def type-completer-8 [] { ["antivirus" "application" "carbonblack" "client_certificate" "client_certificate_v2" "crowdstrike_s2s" "custom_s2s" "disk_encryption" "domain_joined" "file" "firewall" "gateway" "intune" "kolide" "os_version" "sentinelone" "sentinelone_s2s" "serial_number" "tanium" "tanium_s2s" "unique_client_id" "warp" "workspace_one"] }
+def type-completer-9 [] { ["crowdstrike_s2s" "custom_s2s" "intune" "kolide" "sentinelone_s2s" "tanium_s2s" "uptycs" "workspace_one"] }
+def status-completer-9 [] { ["active" "all" "revoked"] }
 def sort-by-completer-2 [] { ["created_at" "id" "last_seen_at" "user.email" "user.name"] }
 def sortBy-completer [] { ["application-tests-usage" "fleet-status-usage"] }
 def command-type-completer [] { ["pcap" "speed-test" "warp-diag"] }
-def status-completer-7 [] { ["FAILED" "PENDING_EXEC" "PENDING_UPLOAD" "SUCCESS"] }
+def status-completer-10 [] { ["FAILED" "PENDING_EXEC" "PENDING_UPLOAD" "SUCCESS"] }
 def kind-completer-2 [] { ["http" "traceroute"] }
 def sort-by-completer-3 [] { ["time_start"] }
 def sort-order-completer-1 [] { ["ASC" "DESC"] }
+def sort-by-completer-4 [] { ["colo" "device_id" "mode" "platform" "status" "timestamp" "version"] }
+def source-completer [] { ["hourly" "last_seen" "raw"] }
 def interval-completer [] { ["hour" "minute"] }
-def sort-by-completer-4 [] { ["created_at" "name" "updated_at"] }
-def type-completer-8 [] { ["config" "toggle"] }
+def sort-by-completer-5 [] { ["created_at" "name" "updated_at"] }
+def type-completer-10 [] { ["config" "toggle"] }
 def toggle-completer [] { ["off" "on"] }
 def check-type-completer [] { ["icmp"] }
-def type-completer-9 [] { ["custom" "managed"] }
+def type-completer-11 [] { ["custom" "managed"] }
+def time-delta-completer [] { ["all" "auto" "day" "dekaminute" "hour" "minute" "month" "quarter" "week" "year"] }
+def match-completer [] { ["all" "any"] }
+def order-completer-2 [] { ["created_on" "modified_on" "name"] }
 def final-disposition-completer [] { ["BULK" "MALICIOUS" "NONE" "SPAM" "SPOOF" "SUSPICIOUS"] }
 def message-action-completer [] { ["MOVED" "PREVIEW" "QUARANTINE_RELEASED"] }
+def delivery-status-completer [] { ["bounced" "deferred" "delivered" "moved" "quarantined" "queued" "rejected"] }
 def destination-completer [] { ["DeletedItems" "Inbox" "JunkEmail" "RecoverableItemsDeletions" "RecoverableItemsPurges"] }
 def expected-disposition-completer [] { ["BULK" "MALICIOUS" "NONE" "SPAM" "SPOOF" "SUSPICIOUS"] }
-def order-completer-2 [] { ["created_at" "pattern"] }
+def order-completer-3 [] { ["created_at" "pattern"] }
 def pattern-type-completer [] { ["DOMAIN" "EMAIL" "IP" "UNKNOWN"] }
-def order-completer-3 [] { ["created_at" "domain"] }
+def order-completer-4 [] { ["created_at" "domain"] }
+def allowed-delivery-mode-completer [] { ["API" "BCC" "DIRECT" "JOURNAL" "RETRO_SCAN"] }
+def active-delivery-mode-completer [] { ["API" "BCC" "DIRECT" "JOURNAL" "RETRO_SCAN"] }
+def status-completer-11 [] { ["active" "failed" "pending" "timeout"] }
 def folder-completer [] { ["AllItems" "Inbox"] }
-def order-completer-4 [] { ["created_at" "email" "name"] }
+def order-completer-5 [] { ["created_at" "email" "name"] }
 def provenance-completer [] { ["A1S_INTERNAL" "SNOOPY-CASB_OFFICE_365" "SNOOPY-GOOGLE_DIRECTORY" "SNOOPY-OFFICE_365"] }
-def type-completer-10 [] { ["TEAM" "USER"] }
+def type-completer-12 [] { ["TEAM" "USER"] }
+def original-disposition-completer [] { ["BULK" "MALICIOUS" "NONE" "SPAM" "SPOOF" "SUSPICIOUS"] }
+def requested-disposition-completer [] { ["BULK" "MALICIOUS" "NONE" "SPAM" "SPOOF" "SUSPICIOUS"] }
+def outcome-disposition-completer [] { ["BULK" "MALICIOUS" "NONE" "SPAM" "SPOOF" "SUSPICIOUS"] }
 def verified-completer [] { ["false" "true"] }
-def order-completer-5 [] { ["created_at" "email" "expires_at"] }
+def order-completer-6 [] { ["created_at" "email" "expires_at"] }
 def cf-r2-jurisdiction-completer [] { ["default" "eu" "fedramp"] }
-def order-completer-6 [] { ["created_at" "enabled" "name" "source"] }
-def configurationtarget-completer [] { ["asn" "country" "ip" "ip_range"] }
-def match-completer [] { ["all" "any"] }
-def order-completer-7 [] { ["configuration.target" "configuration.value" "mode"] }
+def order-completer-7 [] { ["created_at" "enabled" "name" "source"] }
 def mode-completer-3 [] { ["block" "challenge" "js_challenge" "managed_challenge" "whitelist"] }
-def type-completer-11 [] { ["boolean" "json" "number" "string"] }
-def type-completer-12 [] { ["AAGUID" "CATEGORY" "DEVICE" "DOMAIN" "EMAIL" "IP" "LOCATION" "SERIAL" "URL"] }
+def configurationtarget-completer [] { ["asn" "country" "ip" "ip_range"] }
+def order-completer-8 [] { ["configuration.target" "configuration.value" "mode"] }
+def type-completer-13 [] { ["boolean" "json" "number" "string"] }
+def type-completer-14 [] { ["AAGUID" "CATEGORY" "DEVICE" "DOMAIN" "EMAIL" "IP" "LOCATION" "SERIAL" "URL"] }
 def kind-completer-3 [] { ["identity" "ip"] }
 def action-completer-2 [] { ["allow" "block" "egress" "isolate" "l4_override" "noisolate" "noscan" "off" "on" "override" "quarantine" "redirect" "resolve" "safesearch" "scan" "ytrestricted"] }
-def order-completer-8 [] { ["created_at" "hostname"] }
+def order-completer-9 [] { ["created_at" "hostname"] }
 def indicator-type-completer [] { ["domain" "ipv4" "ipv6" "url"] }
-def type-completer-13 [] { ["http" "https" "icmp_ping" "smtp" "tcp" "udp_icmp"] }
+def type-completer-15 [] { ["http" "https" "icmp_ping" "smtp" "tcp" "udp_icmp"] }
 def notification-email-completer [] { [""] }
 def references-completer [] { ["" "*" "referral" "referrer"] }
 def dataset-completer [] { ["access_requests" "audit_logs" "audit_logs_v2" "biso_user_actions" "casb_findings" "device_posture_results" "dex_application_tests" "dex_device_state_events" "dlp_forensic_copies" "dns_firewall_logs" "dns_logs" "email_security_alerts" "email_security_post_delivery_events" "firewall_events" "gateway_dns" "gateway_http" "gateway_network" "http_requests" "ipsec_logs" "magic_ids_detections" "mcp_portal_logs" "mnm_flow_logs" "nel_reports" "network_analytics_logs" "page_shield_events" "sinkhole_http_logs" "spectrum_events" "ssh_logs" "turnstile_events" "warp_config_changes" "warp_toggle_changes" "websocket_analytics" "workers_trace_events" "zaraz_events" "zero_trust_network_sessions"] }
@@ -231,68 +250,74 @@ def kind-completer-4 [] { ["" "edge"] }
 def destination-type-completer [] { ["NONE" "ZERO_TRUST_LIST"] }
 def update-mode-completer [] { ["AUTO" "MANUAL"] }
 def cloud-type-completer [] { ["AWS" "AZURE" "GOOGLE"] }
-def type-completer-14 [] { ["OnrampTypeHub" "OnrampTypeSingle"] }
+def type-completer-16 [] { ["OnrampTypeHub" "OnrampTypeSingle"] }
 def cloud-type-completer-1 [] { ["AWS" "AZURE" "CLOUDFLARE" "GOOGLE"] }
 def device-type-completer [] { ["LICENSED" "MANAGED"] }
-def order-completer-9 [] { ["status" "user.email" "user.first_name" "user.last_name"] }
-def status-completer-8 [] { ["accepted" "pending" "rejected"] }
-def status-completer-9 [] { ["accepted" "pending"] }
+def order-completer-10 [] { ["status" "user.email" "user.first_name" "user.last_name"] }
+def status-completer-12 [] { ["accepted" "pending" "rejected"] }
+def status-completer-13 [] { ["accepted" "pending"] }
 def duration-completer-1 [] { ["10m" "15m" "1m" "20m" "30m" "45m" "5m" "60m"] }
 def prefix-match-completer [] { ["exact" "subnet" "supernet"] }
-def type-completer-15 [] { ["advanced_ddos" "threshold" "zscore"] }
+def type-completer-17 [] { ["advanced_ddos" "threshold" "zscore"] }
 def zscore-sensitivity-completer [] { ["high" "low" "medium"] }
 def zscore-target-completer [] { ["bits" "packets"] }
-def type-completer-16 [] { ["publish_subscribe" "subscribe"] }
+def type-completer-18 [] { ["publish_subscribe" "subscribe"] }
 def token-endpoint-auth-method-completer [] { ["client_secret_basic" "client_secret_post" "none"] }
 def visibility-completer [] { ["public"] }
 def env-completer [] { ["preview" "production"] }
 def commit-dirty-completer [] { ["false" "true"] }
-def type-completer-17 [] { ["github" "gitlab"] }
+def type-completer-19 [] { ["github" "gitlab"] }
 def system-completer [] { ["magic-transit"] }
-def type-completer-18 [] { ["full" "simple"] }
+def type-completer-20 [] { ["full" "simple"] }
 def accept-completer-9 [] { ["application/json" "application/vnd.tcpdump.pcap"] }
-def type-completer-19 [] { ["r2" "r2_data_catalog"] }
-def type-completer-20 [] { ["http_pull" "worker"] }
-def order-completer-10 [] { ["name"] }
+def type-completer-21 [] { ["r2" "r2_data_catalog"] }
+def type-completer-22 [] { ["http_pull" "worker"] }
+def order-completer-11 [] { ["name"] }
 def locationHint-completer [] { ["apac" "eeur" "enam" "oc" "weur" "wnam"] }
 def storageClass-completer [] { ["InfrequentAccess" "Standard"] }
 def minTLS-completer [] { ["1.0" "1.1" "1.2" "1.3"] }
+def cf-r2-storage-class-completer [] { ["InfrequentAccess" "Standard"] }
 def permission-completer [] { ["admin-read-only" "admin-read-write" "object-read-only" "object-read-write"] }
-def status-completer-10 [] { ["ERRORED" "IDLE" "INVOKED" "LIVE"] }
+def status-completer-14 [] { ["ERRORED" "IDLE" "INVOKED" "LIVE"] }
 def sort-order-completer-2 [] { ["ASC" "DSC"] }
-def status-completer-11 [] { ["ACTIVE" "INACTIVE"] }
-def sort-by-completer-5 [] { ["invokedTime"] }
+def status-completer-15 [] { ["ACTIVE" "INACTIVE"] }
+def sort-by-completer-6 [] { ["invokedTime"] }
 def action-completer-3 [] { ["pause" "resume" "stop"] }
-def sort-by-completer-6 [] { ["createdAt" "minutesConsumed"] }
-def status-completer-12 [] { ["ENDED" "LIVE"] }
+def sort-by-completer-7 [] { ["createdAt" "minutesConsumed"] }
+def status-completer-16 [] { ["ENDED" "LIVE"] }
 def filters-completer [] { ["device_info" "events" "ip_information" "precall_network_information" "quality_stats"] }
-def sort-by-completer-7 [] { ["duration" "joinedAt"] }
+def sort-by-completer-8 [] { ["duration" "joinedAt"] }
 def view-completer [] { ["consolidated" "raw"] }
 def format-completer-3 [] { ["CSV" "JSON" "SRT" "VTT"] }
-def sort-by-completer-8 [] { ["name" "registry_created_at" "registry_expires_at"] }
+def sort-by-completer-9 [] { ["name" "registry_created_at" "registry_expires_at"] }
 def privacy-mode-completer [] { ["false" "redaction"] }
 def Prefer-completer [] { ["respond-async"] }
 def kind-completer-5 [] { ["asn" "hostname" "ip" "redirect"] }
 def kind-completer-6 [] { ["custom" "managed" "root" "zone"] }
 def phase-completer [] { ["ddos_l4" "ddos_l7" "http_config_settings" "http_custom_errors" "http_log_custom_fields" "http_ratelimit" "http_request_cache_settings" "http_request_dynamic_redirect" "http_request_firewall_custom" "http_request_firewall_managed" "http_request_late_transform" "http_request_origin" "http_request_redirect" "http_request_sanitize" "http_request_sbfm" "http_request_transform" "http_response_cache_settings" "http_response_compression" "http_response_firewall_managed" "http_response_headers_transform" "magic_transit" "magic_transit_ids_managed" "magic_transit_managed" "magic_transit_ratelimit"] }
-def order-completer-11 [] { ["comment" "created" "modified" "name" "status"] }
+def order-by-completer-3 [] { ["created" "host"] }
+def order-completer-12 [] { ["comment" "created" "modified" "name" "status"] }
 def field-changed-completer [] { ["status" "user_classification"] }
 def issue-type-completer [] { ["compliance_violation" "configuration_suggestion" "email_security" "exposed_infrastructure" "insecure_configuration" "weak_authentication"] }
-def classification-completer [] { ["accept_risk" "false_positive" "other"] }
-def status-completer-13 [] { ["active" "deleted" "deleting"] }
+def classification-completer [] { ["" "accept_risk" "false_positive" "other"] }
+def status-completer-17 [] { ["active" "deleted" "deleting"] }
 def kind-completer-7 [] { ["received" "sent"] }
 def target-type-completer [] { ["account" "organization"] }
-def order-completer-12 [] { ["created" "name"] }
+def order-completer-13 [] { ["created" "name"] }
 def resource-type-completer [] { ["custom-ruleset" "gateway-block-page-settings" "gateway-destination-ip" "gateway-extended-email-matching" "gateway-policy" "idp-federation-grant"] }
 def vendor-completer [] { ["s3"] }
 def jurisdiction-completer-1 [] { ["default" "eu" "fedramp"] }
 def vendor-completer-1 [] { ["r2"] }
-def order-completer-13 [] { ["id" "title"] }
-def type-completer-21 [] { ["json" "text"] }
+def order-completer-14 [] { ["id" "title"] }
+def type-completer-23 [] { ["json" "text"] }
+def status-completer-18 [] { ["downloading" "error" "inprogress" "live-inprogress" "pendingupload" "queued" "ready"] }
+def Tus-Resumable-completer [] { ["1.0.0"] }
 def frequency-completer-1 [] { ["monthly" "quarterly" "weekly" "yearly"] }
-def resource-type-completer-1 [] { ["access_application" "access_group" "account" "ai_gateway" "alerting_policy" "alerting_webhook" "cloudflared_tunnel" "d1_database" "durable_object_namespace" "gateway_list" "gateway_rule" "image" "kv_namespace" "queue" "r2_bucket" "resource_share" "stream_live_input" "stream_video" "worker" "worker_version"] }
-def type-completer-22 [] { ["access_application" "access_application_policy" "access_group" "account" "ai_gateway" "alerting_policy" "alerting_webhook" "api_gateway_operation" "cloudflared_tunnel" "custom_certificate" "custom_hostname" "d1_database" "dns_record" "durable_object_namespace" "gateway_list" "gateway_rule" "image" "kv_namespace" "managed_client_certificate" "queue" "r2_bucket" "resource_share" "stream_live_input" "stream_video" "worker" "worker_version" "zone"] }
-def status-completer-14 [] { ["active" "disabled" "expired"] }
+def resource-type-completer-1 [] { ["access_application" "access_group" "account" "ai_gateway" "alerting_policy" "alerting_webhook" "cloudflared_tunnel" "d1_database" "durable_object_namespace" "gateway_list" "gateway_rule" "image" "kv_namespace" "queue" "r2_bucket" "resource_share" "stream_live_input" "stream_video" "worker"] }
+def resource-type-completer-2 [] { ["access_application" "access_group" "account" "ai_gateway" "alerting_policy" "alerting_webhook" "cloudflared_tunnel" "d1_database" "durable_object_namespace" "gateway_list" "gateway_rule" "image" "kv_namespace" "queue" "r2_bucket" "resource_share" "stream_live_input" "stream_video" "worker" "worker_version"] }
+def type-completer-24 [] { ["access_application" "access_application_policy" "access_group" "account" "ai_gateway" "alerting_policy" "alerting_webhook" "api_gateway_operation" "cloudflared_tunnel" "custom_certificate" "custom_hostname" "d1_database" "dns_record" "durable_object_namespace" "gateway_list" "gateway_rule" "image" "kv_namespace" "managed_client_certificate" "queue" "r2_bucket" "resource_share" "stream_live_input" "stream_video" "worker" "worker_version" "zone"] }
+def tun-type-completer [] { ["cfd_tunnel" "cni" "gre" "ip_sec" "magic" "warp" "warp_connector"] }
+def status-completer-19 [] { ["active" "disabled" "expired"] }
 def country-completer [] { ["AD" "AE" "AF" "AG" "AL" "AM" "AO" "AR" "AT" "AU" "AZ" "BA" "BB" "BD" "BE" "BF" "BG" "BH" "BI" "BJ" "BM" "BN" "BO" "BR" "BS" "BT" "BW" "BY" "BZ" "CA" "CD" "CF" "CG" "CH" "CI" "CL" "CM" "CN" "CO" "CR" "CU" "CV" "CY" "CZ" "DE" "DJ" "DK" "DM" "DO" "DZ" "EC" "EE" "EG" "ER" "ES" "ET" "FI" "FJ" "FM" "FR" "GA" "GB" "GD" "GE" "GH" "GL" "GM" "GN" "GQ" "GR" "GT" "GW" "GY" "HN" "HR" "HT" "HU" "ID" "IE" "IL" "IN" "IQ" "IR" "IS" "IT" "JM" "JO" "JP" "KE" "KG" "KH" "KI" "KM" "KN" "KP" "KR" "KW" "KY" "KZ" "LA" "LB" "LC" "LI" "LK" "LR" "LS" "LT" "LU" "LV" "LY" "MA" "MC" "MD" "MG" "MK" "ML" "MM" "MN" "MO" "MR" "MS" "MU" "MV" "MW" "MX" "MY" "MZ" "NA" "NE" "NG" "NI" "NL" "NO" "NP" "NR" "NZ" "OM" "PA" "PE" "PG" "PH" "PK" "PL" "PS" "PT" "PY" "QA" "RO" "RS" "RU" "RW" "SA" "SB" "SC" "SD" "SE" "SH" "SI" "SK" "SL" "SM" "SN" "SO" "SR" "SS" "ST" "SV" "SY" "SZ" "TD" "TG" "TH" "TJ" "TL" "TM" "TN" "TO" "TR" "TT" "TW" "TZ" "UA" "UG" "US" "UY" "UZ" "VC" "VE" "VN" "VU" "WS" "YE" "ZA" "ZM" "ZW"] }
 def visibility-completer-1 [] { ["Public" "Unlisted"] }
 def resolution-completer [] { ["desktop" "mobile" "tablet"] }
@@ -304,32 +329,33 @@ def scan-type-completer [] { ["bola"] }
 def ha-mode-completer [] { ["aws" "disabled" "local" "none"] }
 def base64-completer [] { ["true"] }
 def bindings-inherit-completer [] { ["strict"] }
-def type-completer-23 [] { ["secret_key" "secret_text"] }
+def type-completer-25 [] { ["secret_key" "secret_text"] }
 def format-completer-4 [] { ["jwk" "pkcs8" "raw" "spki"] }
 def orderBy-completer-2 [] { ["created" "updated"] }
 def view-completer-1 [] { ["agents" "calculations" "events" "invocations" "requests" "traces"] }
 def view-completer-2 [] { ["calculations" "events" "invocations"] }
 def filterCombination-completer [] { ["AND" "OR" "and" "or"] }
-def type-completer-24 [] { ["boolean" "number" "string"] }
-def order-by-completer-3 [] { ["created_on" "modified_on" "name"] }
+def type-completer-26 [] { ["boolean" "number" "string"] }
+def order-by-completer-4 [] { ["created_on" "modified_on" "name"] }
 def accept-completer-10 [] { ["application/javascript" "multipart/form-data"] }
 def strategy-completer-2 [] { ["percentage"] }
 def usage-model-completer [] { ["bundled" "standard" "unbound"] }
 def success-completer [] { ["true"] }
-def order-by-completer-4 [] { ["created_on" "deployed_on" "name" "updated_on"] }
+def order-by-completer-5 [] { ["created_on" "deployed_on" "name" "updated_on"] }
 def include-completer [] { ["modules"] }
-def status-completer-15 [] { ["complete" "errored" "paused" "queued" "rollingBack" "running" "terminated" "waiting" "waitingForPause"] }
+def status-completer-20 [] { ["complete" "errored" "paused" "queued" "rollingBack" "running" "terminated" "waiting" "waitingForPause"] }
 def simple-completer [] { ["false" "true"] }
-def status-completer-16 [] { ["pause"] }
-def type-completer-25 [] { ["step" "waitForEvent"] }
+def status-completer-21 [] { ["pause"] }
+def type-completer-27 [] { ["step" "waitForEvent"] }
 def accept-completer-11 [] { ["application/json" "application/octet-stream"] }
+def address-family-completer [] { ["v4" "v6"] }
 def subnet-types-completer [] { ["cloudflare_source" "warp"] }
 def integration-type-completer [] { ["Okta"] }
 def request-type-completer [] { ["keyless-certificate" "origin-ecc" "origin-rsa"] }
 def requested-validity-completer [] { ["1095" "30" "365" "5475" "7" "730" "90"] }
-def order-completer-14 [] { ["account.name" "id" "status"] }
-def status-completer-17 [] { ["accepted" "rejected"] }
-def order-by-completer-5 [] { ["account_name"] }
+def order-completer-15 [] { ["account.name" "id" "status"] }
+def status-completer-22 [] { ["accepted" "rejected"] }
+def order-by-completer-6 [] { ["account_name"] }
 def format-completer-5 [] { ["CSV" "JSON"] }
 def aggInterval-completer [] { ["15m" "1d" "1h" "1w"] }
 def normalization-completer [] { ["MIN0_MAX" "PERCENTAGE" "PERCENTAGE_CHANGE"] }
@@ -367,79 +393,88 @@ def rankingType-completer [] { ["POPULAR" "TRENDING_RISE" "TRENDING_STEADY"] }
 def userAgentCategory-completer [] { ["AI"] }
 def directive-completer [] { ["ALLOW" "DISALLOW"] }
 def tldType-completer [] { ["COUNTRY_CODE" "GENERIC" "GENERIC_RESTRICTED" "INFRASTRUCTURE" "SPONSORED"] }
-def status-completer-18 [] { ["UNVERIFIED" "VERIFIED"] }
-def order-completer-15 [] { ["action" "occurred_at" "type"] }
-def order-completer-16 [] { ["id" "name" "status"] }
-def status-completer-19 [] { ["invited" "member"] }
-def status-completer-20 [] { ["active" "initializing" "moved" "pending"] }
-def order-completer-17 [] { ["account.id" "account.name" "name" "plan.id" "status"] }
-def type-completer-26 [] { ["full" "internal" "partial" "secondary"] }
+def status-completer-23 [] { ["UNVERIFIED" "VERIFIED"] }
+def order-completer-16 [] { ["action" "occurred_at" "type"] }
+def order-completer-17 [] { ["id" "name" "status"] }
+def status-completer-24 [] { ["invited" "member"] }
+def status-completer-25 [] { ["active" "initializing" "moved" "pending"] }
+def order-completer-18 [] { ["account.id" "account.name" "name" "plan.id" "status"] }
+def type-completer-28 [] { ["full" "internal" "partial" "secondary"] }
 def certificate-authority-completer [] { ["google" "lets_encrypt" "ssl_com"] }
-def order-completer-18 [] { ["endpoint" "host" "method" "traffic_stats.last_updated" "traffic_stats.requests"] }
+def order-completer-19 [] { ["endpoint" "host" "method" "traffic_stats.last_updated" "traffic_stats.requests"] }
 def origin-completer [] { ["LabelDiscovery" "ML" "SessionIdentifier"] }
 def state-completer-2 [] { ["ignored" "review" "saved"] }
-def order-completer-19 [] { ["created_at" "description" "last_updated" "mapped_resources.operations" "name"] }
-def source-completer [] { ["managed" "user"] }
-def order-completer-20 [] { ["endpoint" "host" "method" "thresholds.$key"] }
+def order-completer-20 [] { ["created_at" "description" "last_updated" "mapped_resources.operations" "name"] }
+def source-completer-1 [] { ["managed" "user"] }
+def order-completer-21 [] { ["endpoint" "host" "method" "thresholds.$key"] }
 def method-completer [] { ["CONNECT" "DELETE" "GET" "HEAD" "OPTIONS" "PATCH" "POST" "PUT" "TRACE"] }
-def mitigation-action-completer [] { ["block" "log" "none"] }
-def validation-default-mitigation-action-completer [] { ["block" "log" "none"] }
-def validation-override-mitigation-action-completer [] { ["disable_override" "none"] }
+def mitigation-action-completer [] { ["" "block" "log" "none"] }
+def validation-default-mitigation-action-completer [] { ["" "block" "log" "none"] }
+def validation-override-mitigation-action-completer [] { ["" "disable_override" "none"] }
+def validation-default-mitigation-action-completer-1 [] { ["block" "log" "none"] }
 def kind-completer-9 [] { ["openapi_v3"] }
 def validation-enabled-completer [] { ["false" "true"] }
 def operation-status-completer [] { ["existing" "new"] }
 def value-completer [] { ["off" "on"] }
-def type-completer-27 [] { ["false_negative" "false_positive"] }
+def type-completer-29 [] { ["false_negative" "false_positive"] }
 def vendor-completer-2 [] { ["aws" "azure" "gcp" "oci"] }
 def value-completer-1 [] { ["off" "preferred" "supported"] }
-def status-completer-21 [] { ["active" "all" "pending_reactivation" "pending_revocation" "revoked"] }
+def status-completer-26 [] { ["active" "all" "pending_reactivation" "pending_revocation" "revoked"] }
 def value-completer-2 [] { ["disabled" "enabled"] }
-def status-completer-22 [] { ["active" "deleted" "expired" "initializing" "pending"] }
+def status-completer-27 [] { ["active" "deleted" "expired" "initializing" "pending"] }
 def bundle-method-completer [] { ["force" "optimal" "ubiquitous"] }
 def deploy-completer [] { ["production" "staging"] }
-def type-completer-28 [] { ["legacy_custom" "sni_custom"] }
-def order-completer-21 [] { ["ssl" "ssl_status"] }
+def type-completer-30 [] { ["legacy_custom" "sni_custom"] }
+def order-completer-22 [] { ["ssl" "ssl_status"] }
 def ssl-status-completer [] { ["active" "backup_issued" "deactivating" "deleted" "deletion_timed_out" "deployment_timed_out" "expired" "holding_deployment" "inactive" "initializing" "initializing_timed_out" "issuance_timed_out" "pending_cleanup" "pending_deletion" "pending_deployment" "pending_expiration" "pending_issuance" "pending_validation" "staging_active" "staging_deployment" "validation_timed_out"] }
 def hostname-status-completer [] { ["active" "active_redeploying" "blocked" "deleted" "moved" "pending" "pending_blocked" "pending_deletion" "pending_migration" "pending_provisioned" "provisioned" "test_active" "test_active_apex" "test_blocked" "test_failed" "test_pending"] }
 def ssl-completer [] { ["0" "1"] }
-def status-completer-23 [] { ["active" "disabled"] }
+def type-completer-31 [] { ["A" "AAAA" "CAA" "CERT" "CNAME" "DNSKEY" "DS" "HTTPS" "LOC" "MX" "NAPTR" "NS" "OPENPGPKEY" "PTR" "SMIMEA" "SRV" "SSHFP" "SVCB" "TLSA" "TXT" "URI"] }
+def tag-match-completer [] { ["all" "any"] }
+def order-completer-23 [] { ["content" "name" "proxied" "ttl" "type"] }
+def status-completer-28 [] { ["active" "disabled"] }
 def enabled-completer [] { ["false" "true"] }
 def cascade-completer [] { ["aggressive" "basic" "none"] }
 def action-mode-completer [] { ["block" "challenge" "simulate"] }
 def sensitivity-completer [] { ["high" "low" "medium" "off"] }
-def order-completer-22 [] { ["mode" "rules_count"] }
+def order-completer-24 [] { ["mode" "rules_count"] }
 def mode-completer-4 [] { ["off" "on"] }
 def mode-completer-5 [] { ["BLK" "CHL" "DIS" "SIM"] }
-def order-completer-23 [] { ["description" "group_id" "priority"] }
+def order-completer-25 [] { ["description" "group_id" "priority"] }
 def mode-completer-6 [] { ["block" "challenge" "default" "disable" "off" "on" "simulate"] }
 def user-profiles-completer [] { ["disabled" "enabled"] }
 def session-affinity-completer [] { ["cookie" "header" "ip_cookie" "none"] }
 def steering-policy-completer [] { ["" "dynamic_latency" "geo" "least_connections" "least_outstanding_requests" "off" "proximity" "random"] }
-def status-completer-24 [] { ["active" "all" "deleted" "deletion_timed_out" "deployment_timed_out" "pending_deletion" "pending_deployment"] }
-def order-by-completer-6 [] { ["first_seen_at" "last_seen_at"] }
+def timestamps-completer [] { ["rfc3339" "unix" "unixnano"] }
+def status-completer-29 [] { ["active" "all" "deleted" "deletion_timed_out" "deployment_timed_out" "pending_deletion" "pending_deployment"] }
+def order-by-completer-7 [] { ["first_seen_at" "last_seen_at"] }
 def export-completer [] { ["csv"] }
 def same-site-completer [] { ["lax" "none" "strict"] }
-def type-completer-29 [] { ["first_party" "unknown"] }
+def type-completer-32 [] { ["first_party" "unknown"] }
 def action-completer-4 [] { ["add_reporting_directives" "allow" "log"] }
-def order-completer-24 [] { ["priority" "status"] }
-def validation-override-mitigation-action-completer-1 [] { ["none"] }
+def order-completer-26 [] { ["priority" "status"] }
+def validation-override-mitigation-action-completer-1 [] { ["" "none"] }
 def id-completer [] { ["csam_scanner"] }
 def value-completer-3 [] { ["1" "2"] }
 def value-completer-4 [] { ["auto" "custom"] }
 def sortField-completer [] { ["created_at" "description" "id" "updated_at" "user_id"] }
-def time-delta-completer [] { ["day" "dekaminute" "hour" "minute" "month" "quarter" "week" "year"] }
-def order-completer-25 [] { ["app_id" "created_on" "dns" "modified_on" "protocol"] }
-def status-completer-25 [] { ["all"] }
-def type-completer-30 [] { ["advanced"] }
+def time-delta-completer-1 [] { ["day" "dekaminute" "hour" "minute" "month" "quarter" "week" "year"] }
+def order-completer-27 [] { ["app_id" "created_on" "dns" "modified_on" "protocol"] }
+def region-completer-1 [] { ["asia-east1" "asia-northeast1" "asia-northeast2" "asia-south1" "asia-southeast1" "australia-southeast1" "europe-north1" "europe-southwest1" "europe-west1" "europe-west2" "europe-west3" "europe-west4" "europe-west8" "europe-west9" "me-west1" "southamerica-east1" "us-central1" "us-east1" "us-east4" "us-south1" "us-west1"] }
+def deviceType-completer [] { ["DESKTOP" "MOBILE"] }
+def frequency-completer-2 [] { ["DAILY" "WEEKLY"] }
+def status-completer-30 [] { ["all"] }
+def type-completer-33 [] { ["advanced"] }
 def validation-method-completer [] { ["email" "http" "txt"] }
 def validity-days-completer [] { ["14" "30" "365" "90"] }
 def retry-completer [] { ["true"] }
 def validation-method-completer-1 [] { ["cname" "email" "http" "txt"] }
-def resource-type-completer-2 [] { ["access_application_policy" "api_gateway_operation" "custom_certificate" "custom_hostname" "dns_record" "managed_client_certificate" "zone"] }
+def resource-type-completer-3 [] { ["api_gateway_operation" "custom_certificate" "custom_hostname" "dns_record" "managed_client_certificate" "zone"] }
+def resource-type-completer-4 [] { ["access_application_policy" "api_gateway_operation" "custom_certificate" "custom_hostname" "dns_record" "managed_client_certificate" "zone"] }
 def token-type-completer [] { ["JWT"] }
 def action-completer-5 [] { ["block" "log"] }
 def scope-completer [] { ["both" "incoming" "none"] }
-def type-completer-31 [] { ["cloudflare" "rfc3986"] }
+def type-completer-34 [] { ["cloudflare" "rfc3986"] }
 def default-template-language-completer [] { ["ar-EG" "bg-BG" "cs-CZ" "da-DK" "de-DE" "el-GR" "en-US" "es-ES" "fa-IR" "fi-FI" "fr-FR" "he-IL" "hi-IN" "hr-HR" "hu-HU" "id-ID" "it-IT" "ja-JP" "ko-KR" "lt-LT" "ms-MY" "nb-NO" "nl-NL" "pl-PL" "pt-BR" "ro-RO" "ru-RU" "sk-SK" "sl-SI" "sr-BA" "sv-SE" "th-TH" "tl-PH" "tr-TR" "uk-UA" "vi-VN" "zh-CN" "zh-TW"] }
 def queueing-method-completer [] { ["fifo" "passthrough" "random" "reject"] }
 def queueing-status-code-completer [] { ["200" "202" "429"] }
@@ -448,7 +483,7 @@ def turnstile-mode-completer [] { ["invisible" "off" "visible_managed" "visible_
 def action-completer-6 [] { ["bypass_waiting_room"] }
 def target-completer [] { ["ethereum" "ipfs" "ipfs_universal_path"] }
 def action-completer-7 [] { ["block"] }
-def type-completer-32 [] { ["cid" "content_path"] }
+def type-completer-35 [] { ["cid" "content_path"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -875,9 +910,9 @@ export def "accounts-abuse-reports ListAbuseReports" [
   --domain: string # Filter by domain name related to the abuse report (e.g. example.com)
   --created-before: string # Returns reports created before the specified date (e.g. 2009-11-10T23:00:00Z)
   --created-after: string # Returns reports created after the specified date (e.g. 2009-11-10T23:00:00Z)
-  --status: string # Filter by the status of the report. (e.g. denied)
-  --type: string # Filter by the type of the report. (e.g. denied)
-  --mitigation-status: string # Filter reports that have any mitigations in the given status. (e.g. active)
+  --status: string@status-completer # Filter by the status of the report. (e.g. denied)
+  --type: string@type-completer-1 # Filter by the type of the report. (e.g. denied)
+  --mitigation-status: string@mitigation-status-completer # Filter reports that have any mitigations in the given status. (e.g. active)
 ]: nothing -> record<errors: table<message: string>, messages: table<message: string>, result: record<reports: list<record>>, result_info: record<count: float, page: float, per_page: float, total_count: float, total_pages: float>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -931,11 +966,11 @@ export def "accounts-abuse-reports-mitigations ListMitigations" [
   --page: int # Where in pagination to start listing abuse reports
   --per-page: int # How many abuse reports per page to list
   --qp-sort: string@sort-completer # A property to sort by, followed by the order (e.g. type,desc)
-  --type: string # Filter by the type of mitigation. This filter parameter can be specified multiple times to include multiple types of mitigations in the result set, e.g. ?type=rate_limit_cache&type=legal_block.
+  --type: string@type-completer-2 # Filter by the type of mitigation. This filter parameter can be specified multiple times to include multiple types of mitigations in the result set, e.g. ?type=rate_limit_cache&type=legal_block.
   --effective-before: string # Returns mitigations that were dispatched before the given date (e.g. 2009-11-10T23:00:00Z)
   --effective-after: string # Returns mitigation that were dispatched after the given date (e.g. 2009-11-10T23:00:00Z)
-  --status: string # Filter by the status of the mitigation.
-  --entity-type: string # Filter by the type of entity the mitigation impacts.
+  --status: string@status-completer-1 # Filter by the status of the mitigation.
+  --entity-type: string@entity-type-completer # Filter by the type of entity the mitigation impacts.
 ]: nothing -> record<errors: table<message: string>, messages: table<message: string>, result: record<mitigations: list<record>>, result_info: record<count: float, page: float, per_page: float, total_count: float, total_pages: float>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2201,7 +2236,7 @@ export def "accounts-access-custom-pages access-custom-pages-create-a-custom-pag
   --created-at: any
   custom_html: string # Custom page HTML. (e.g. <html><body><h1>Access Denied</h1></body></html>)
   name: string # Custom page name.
-  type: string@type-completer-1 # Custom page type.
+  type: string@type-completer-3 # Custom page type.
   --uid: string # UUID. (e.g. f174e90a-fafe-4643-bbbc-4a0ed4fc8415)
   --updated-at: any
 ]: any -> record {
@@ -2280,7 +2315,7 @@ export def "accounts-access-custom-pages access-custom-pages-update-a-custom-pag
   --created-at: any
   custom_html: string # Custom page HTML. (e.g. <html><body><h1>Access Denied</h1></body></html>)
   name: string # Custom page name.
-  type: string@type-completer-1 # Custom page type.
+  type: string@type-completer-3 # Custom page type.
   --uid: string # UUID. (e.g. f174e90a-fafe-4643-bbbc-4a0ed4fc8415)
   --updated-at: any
 ]: any -> record {
@@ -2656,15 +2691,15 @@ export def "accounts-access-identity-providers-scim-groups access-identity-provi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-resource-id: string
-  --idp-resource-id: string
-  --name: string
+  --cf-resource-id: list # e.g. [a2abeb50-59c9-4c01-8c5c-963d3bf5700f]
+  --idp-resource-id: list # e.g. [all_employees]
+  --name: string # e.g. ALL_EMPLOYEES
   --page: int # default: 1
   --per-page: int # default: 100
 ]: nothing -> record<result: table<displayName: string, externalId: string, id: string, meta: record, schemas: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cf_resource_id" $cf_resource_id "scalar") (serialize-qp "idp_resource_id" $idp_resource_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cf_resource_id" $cf_resource_id "multi") (serialize-qp "idp_resource_id" $idp_resource_id "multi") (serialize-qp "name" $name "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/accounts/($account_id)/access/identity_providers/($identity_provider_id)/scim/groups" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2685,17 +2720,17 @@ export def "accounts-access-identity-providers-scim-users access-identity-provid
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-resource-id: string
-  --idp-resource-id: string
-  --username: string
-  --email: string
-  --name: string
+  --cf-resource-id: list # e.g. [bd97ef8d-7986-43e3-9ee0-c25dda33e4b0]
+  --idp-resource-id: list # e.g. [john_smith_01]
+  --username: string # e.g. John Smith
+  --email: string # e.g. john.smith@example.com
+  --name: string # e.g. John Smith
   --page: int # default: 1
   --per-page: int # default: 100
 ]: nothing -> record<result: table<active: bool, displayName: string, emails: list, externalId: string, id: string, meta: record, schemas: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "cf_resource_id" $cf_resource_id "scalar") (serialize-qp "idp_resource_id" $idp_resource_id "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "cf_resource_id" $cf_resource_id "multi") (serialize-qp "idp_resource_id" $idp_resource_id "multi") (serialize-qp "username" $username "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/accounts/($account_id)/access/identity_providers/($identity_provider_id)/scim/users" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2887,9 +2922,9 @@ export def "accounts-access-logs-access-requests access-authentication-logs-get-
   --until: string # The latest event timestamp to query. (format: date-time, e.g. 2020-10-01T05:20:00Z)
   --page: int # default: 1
   --per-page: int # default: 25
-  --email: string # Filter by user email. Match mode is controlled by `emailOp` (preferred) or the legacy `email_exact` flag. - Default (no `emailOp`, `email_exact=false` or unset): substring match — `email=@example.com` returns all events with that domain. - Exact match: set `emailOp=eq` (preferred) or `email_exact=true` — e.g. `email=user@example.com&email_exact=true` returns only that user. - Explicit substring match: set `emailOp=contains` (without `email_exact=true`). When both are set, `email_exact=true` takes precedence and the match is exact. - Exclusion: set `emailOp=neq`. With `email_exact=true` this is an exact-value exclusion; without it, a fuzzy substring exclusion.
+  --email: string # Filter by user email. Match mode is controlled by `emailOp` (preferred) or the legacy `email_exact` flag. - Default (no `emailOp`, `email_exact=false` or unset): substring match — `email=@example.com` returns all events with that domain. - Exact match: set `emailOp=eq` (preferred) or `email_exact=true` — e.g. `email=user@example.com&email_exact=true` returns only that user. - Explicit substring match: set `emailOp=contains` (without `email_exact=true`). When both are set, `email_exact=true` takes precedence and the match is exact. - Exclusion: set `emailOp=neq`. With `email_exact=true` this is an exact-value exclusion; without it, a fuzzy substring exclusion.  (format: email, e.g. user@example.com)
   --email-exact: string@bool-completer # When true, `email` is matched exactly instead of substring matching. (default: false, e.g. true)
-  --user-id: string # Deprecated. Accepted for backward compatibility but no longer applied as a filter. Use `email` instead.  (DEPRECATED)
+  --user-id: string # Deprecated. Accepted for backward compatibility but no longer applied as a filter. Use `email` instead.  (DEPRECATED, format: uuid, e.g. f757c5c3-c1b2-50f7-9126-150a099b6f7e)
   --allowedOp: string@allowedOp-completer # Operator for the `allowed` filter. (default: eq)
   --country-codeOp: string@country-codeOp-completer # Operator for the `country_code` filter. (default: eq)
   --app-typeOp: string@app-typeOp-completer # Operator for the `app_type` filter. (default: eq)
@@ -2923,24 +2958,24 @@ export def "accounts-access-logs-scim-updates access-scim-update-logs-list-acces
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --limit: string
-  --direction: string # e.g. desc
-  --since: string
-  --until: string
-  --idp-id: string
-  --status: string
-  --resource-type: string
-  --request-method: string
-  --resource-user-email: string
-  --resource-group-name: string
-  --cf-resource-id: string
-  --idp-resource-id: string
+  --limit: int # default: 20, e.g. 10
+  --direction: string@direction-completer # default: desc, e.g. desc
+  --since: string # format: date-time, e.g. 2025-01-01T00:00:00Z
+  --until: string # format: date-time, e.g. 2025-01-02T00:00:00Z
+  --idp-id: list # e.g. [df7e2w5f-02b7-4d9d-af26-8d1988fca630, 0194ae2c-efcf-7cfb-8884-055f1a161fa5]
+  --status: list # e.g. [FAILURE, SUCCESS]
+  --resource-type: list # e.g. [USER, GROUP]
+  --request-method: list # e.g. [DELETE, PATCH]
+  --resource-user-email: list # e.g. [john.smith@example.com]
+  --resource-group-name: list # e.g. [ALL_EMPLOYEES]
+  --cf-resource-id: list # e.g. [bd97ef8d-7986-43e3-9ee0-c25dda33e4b0]
+  --idp-resource-id: list # e.g. [all_employees]
   --page: int # default: 1
   --per-page: int # default: 20
 ]: nothing -> record<result: table<cf_resource_id: string, error_description: string, idp_id: string, idp_resource_id: string, logged_at: string, request_body: string, request_method: string, resource_group_name: string, resource_type: string, resource_user_email: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "idp_id" $idp_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "resource_type" $resource_type "scalar") (serialize-qp "request_method" $request_method "scalar") (serialize-qp "resource_user_email" $resource_user_email "scalar") (serialize-qp "resource_group_name" $resource_group_name "scalar") (serialize-qp "cf_resource_id" $cf_resource_id "scalar") (serialize-qp "idp_resource_id" $idp_resource_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "idp_id" $idp_id "multi") (serialize-qp "status" $status "multi") (serialize-qp "resource_type" $resource_type "multi") (serialize-qp "request_method" $request_method "multi") (serialize-qp "resource_user_email" $resource_user_email "multi") (serialize-qp "resource_group_name" $resource_group_name "multi") (serialize-qp "cf_resource_id" $cf_resource_id "multi") (serialize-qp "idp_resource_id" $idp_resource_id "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/accounts/($account_id)/access/logs/scim/updates" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3356,7 +3391,7 @@ export def "accounts-access-policy-tests-users access-policy-tests-get-a-user-pa
   --allow-errors(-e) # Return full response without error handling
   --page: int # default: 1
   --per-page: int # default: 25
-  --status: string@status-completer # Filter users by their policy evaluation status.
+  --status: string@status-completer-2 # Filter users by their policy evaluation status.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -4992,7 +5027,7 @@ export def "accounts-ai-gateway-billing-invoice-history aig-billing-get-invoice-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --type: string@type-completer-2 # Filter invoice type: auto, manual, or all. (default: all, e.g. all)
+  --type: string@type-completer-4 # Filter invoice type: auto, manual, or all. (default: all, e.g. all)
 ]: nothing -> record<errors: table<code: float, message: string>, messages: table<code: float, message: string>, result: record<invoices: list<record>, pagination: record<has_more: bool, page: float, per_page: float, total_count: float>>, result_info: record<has_more: bool, page: float, per_page: float, total_count: float>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6651,7 +6686,7 @@ export def "accounts-ai-search-instances ai-search-create-instance" [
   --source-params: record # nullable — shape: {exclude_items?: list, include_items?: list, prefix?: string, r2_jurisdiction?: string, web_crawler?: record}
   --sync-interval: any # Interval between automatic syncs, in seconds. Allowed values: 900 (15min), 1800 (30min), 3600 (1h), 7200 (2h), 14400 (4h), 21600 (6h), 43200 (12h), 86400 (24h). (default: 21600)
   --token-id: string # format: uuid
-  --type: string@type-completer-3 # nullable
+  --type: string@type-completer-5 # nullable
 ]: any -> record<result: record<ai_gateway_id: string, ai_search_model: string, cache: bool, cache_threshold: string, cache_ttl: any, chunk_overlap: int, chunk_size: int, created_at: string, created_by: string, custom_metadata: list<record>, embedding_model: string, enable: bool, engine_version: float, fusion_method: string, hybrid_search_enabled: bool, id: string, index_method: record<keyword: bool, vector: bool>, indexing_options: record<keyword_tokenizer: string>, last_activity: string, max_num_results: int, metadata: record<created_from_aisearch_wizard: bool, worker_domain: string>, modified_at: string, modified_by: string, namespace: string, paused: bool, public_endpoint_id: string, public_endpoint_params: record<authorized_hosts: list, chat_completions_endpoint: record, enabled: bool, mcp: record, rate_limit: record, search_endpoint: record>, reranking: bool, reranking_model: string, retrieval_options: record<boost_by: list, keyword_match_mode: string>, rewrite_model: string, rewrite_query: bool, score_threshold: float, source: string, source_params: record<exclude_items: list, include_items: list, prefix: string, r2_jurisdiction: string, web_crawler: record>, status: string, sync_interval: any, token_id: string, type: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7230,7 +7265,7 @@ export def "accounts-ai-search-namespaces-instances ai-search-namespace-create-i
   --source-params: record # nullable — shape: {exclude_items?: list, include_items?: list, prefix?: string, r2_jurisdiction?: string, web_crawler?: record}
   --sync-interval: any # Interval between automatic syncs, in seconds. Allowed values: 900 (15min), 1800 (30min), 3600 (1h), 7200 (2h), 14400 (4h), 21600 (6h), 43200 (12h), 86400 (24h). (default: 21600)
   --token-id: string # format: uuid
-  --type: string@type-completer-3 # nullable
+  --type: string@type-completer-5 # nullable
 ]: any -> record<result: record<ai_gateway_id: string, ai_search_model: string, cache: bool, cache_threshold: string, cache_ttl: any, chunk_overlap: int, chunk_size: int, created_at: string, created_by: string, custom_metadata: list<record>, embedding_model: string, enable: bool, engine_version: float, fusion_method: string, hybrid_search_enabled: bool, id: string, index_method: record<keyword: bool, vector: bool>, indexing_options: record<keyword_tokenizer: string>, last_activity: string, max_num_results: int, metadata: record<created_from_aisearch_wizard: bool, worker_domain: string>, modified_at: string, modified_by: string, namespace: string, paused: bool, public_endpoint_id: string, public_endpoint_params: record<authorized_hosts: list, chat_completions_endpoint: record, enabled: bool, mcp: record, rate_limit: record, search_endpoint: record>, reranking: bool, reranking_model: string, retrieval_options: record<boost_by: list, keyword_match_mode: string>, rewrite_model: string, rewrite_query: bool, score_threshold: float, source: string, source_params: record<exclude_items: list, include_items: list, prefix: string, r2_jurisdiction: string, web_crawler: record>, status: string, sync_interval: any, token_id: string, type: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7436,7 +7471,7 @@ export def "accounts-ai-search-namespaces-instances-items ai-search-namespace-in
   --per-page: int # default: 20
   --search: string
   --sort-by: string@sort-by-completer # Sort order for items. "status" (default) sorts by status priority then last_seen_at. "modified_at" sorts by file modification time (most recent first), falling back to created_at. (default: status)
-  --status: string@status-completer-1
+  --status: string@status-completer-3
   --qp-source: string # Filter items by source_id. Use "builtin" for uploaded files, or a source identifier like "web-crawler:https://example.com".
   --metadata-filter: string # JSON-encoded metadata filter using Vectorize filter syntax. Examples: {"folder":"reports/"}, {"timestamp":{"$gte":1700000000000}}, {"folder":{"$in":["docs/","reports/"]}}
   --item-id: string # Filter items by their unique ID. Returns at most one item.
@@ -13073,8 +13108,8 @@ export def "accounts-alerting-history notification-history-list-history" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --per-page: string
-  --before: string
+  --per-page: float # default: 25
+  --before: string # format: date-time, e.g. 2022-05-20T20:29:58.679897Z
   --page: float # default: 1
   --since: string # format: date-time, e.g. 2022-05-19T20:29:58.679897Z
 ]: nothing -> record<result: table<alert_body: string, alert_type: string, description: string, id: string, mechanism: string, mechanism_type: string, name: string, policy_id: string, sent: string>, result_info: record> {
@@ -13955,7 +13990,7 @@ export def "accounts-autorag-rags-files autorag-config-files" [
   --page: int # default: 1
   --per-page: int # default: 20
   --search: string
-  --status: string@status-completer-2
+  --status: string@status-completer-4
 ]: nothing -> record<result: table<error: string, key: string>, result_info: record<count: int, page: int, per_page: int, total_count: int>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14156,7 +14191,7 @@ export def "accounts-billing-profile account-billing-profile--deprecated-billing
 # operationId: botnet-threat-feed-get-day-report
 export def "accounts-botnet-feed-asn-day-report botnet-threat-feed-get-day-report" [
   account_id: string
-  asn_id: string
+  asn_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14164,7 +14199,7 @@ export def "accounts-botnet-feed-asn-day-report botnet-threat-feed-get-day-repor
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --date: string
+  --date: string # format: date-time, e.g. 2014-01-01T05:20:00.12345Z
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -14181,7 +14216,7 @@ export def "accounts-botnet-feed-asn-day-report botnet-threat-feed-get-day-repor
 # operationId: botnet-threat-feed-get-full-report
 export def "accounts-botnet-feed-asn-full-report botnet-threat-feed-get-full-report" [
   account_id: string
-  asn_id: string
+  asn_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14226,7 +14261,7 @@ export def "accounts-botnet-feed-configs-asn botnet-threat-feed-list-asn" [
 # operationId: botnet-threat-feed-delete-asn
 export def "accounts-botnet-feed-configs-asn botnet-threat-feed-delete-asn" [
   account_id: string
-  asn_id: string
+  asn_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15168,7 +15203,7 @@ export def "accounts-browser-rendering-crawl CrawlResult" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --cacheTTL: float # Cache TTL default is 5s. Set to 0 to disable. (default: 5)
-  --status: string@status-completer-3 # Filter by URL status.
+  --status: string@status-completer-5 # Filter by URL status.
   --cursor: float # Cursor for pagination. (default: 0)
   --limit: float # Limit for pagination. (default: 50)
 ]: nothing -> record<errors: table<code: float, message: string>, result: record<browserSecondsUsed: float, cursor: string, finished: float, id: string, records: list<record>, skipped: float, status: string, total: float>, success: bool> {
@@ -15770,7 +15805,7 @@ export def "accounts-builds-builds list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --version-ids: string
+  --version-ids: string # e.g. 123e4567-e89b-12d3-a456-426614174000,223e4567-e89b-12d3-a456-426614174001
 ]: nothing -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<builds: record>, result_info: record<count: int, page: int, per_page: int, total_count: int, total_pages: int>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15794,7 +15829,7 @@ export def "accounts-builds-builds-latest get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --external-script-ids: string
+  --external-script-ids: string # e.g. dd7160bb9cef458093557736f4b9e75b,42fb14fe81df47139d3be684e4c637a6,ff7cf9a7582f4c0d90a4b95cb17d659e
 ]: nothing -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<builds: record>, result_info: record<count: int, page: int, per_page: int, total_count: int, total_pages: int>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15865,7 +15900,7 @@ export def "accounts-builds-builds-logs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cursor: string
+  --cursor: string # e.g. eyJsaW5lIjoxMDAsInRpbWVzdGFtcCI6MTYzNjQ3MjQwMH0
 ]: nothing -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<cursor: string, lines: list<list>, truncated: bool>, result_info: record<count: int, page: int, per_page: int, total_count: int, total_pages: int>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15945,8 +15980,8 @@ export def "accounts-builds-repos-config-autofill get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --branch: string
-  --root-directory: string
+  --branch: string # e.g. main
+  --root-directory: string # e.g. /
 ]: nothing -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<config_file: string, default_worker_name: string, env_worker_names: record, package_manager: string, scripts: record>, result_info: record<count: int, page: int, per_page: int, total_count: int, total_pages: int>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16687,17 +16722,17 @@ export def "accounts-cfd-tunnel cloudflare-tunnel-list-cloudflare-tunnels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --name: string
+  --name: string # e.g. blog
   --is-deleted: string@bool-completer # e.g. true
-  --existed-at: string
-  --uuid: string
+  --existed-at: string # format: url-encoded-date-time, e.g. 2019-10-12T07%3A20%3A50.52Z
+  --uuid: string # format: uuid, e.g. f70ff985-a4ef-4643-bbbc-4a0ed4fc8415
   --was-active-at: string # format: date-time, e.g. 2009-11-10T23:00:00Z
   --was-inactive-at: string # format: date-time, e.g. 2009-11-10T23:00:00Z
   --include-prefix: string # e.g. vpc1-
   --exclude-prefix: string # e.g. vpc1-
-  --status: string
-  --per-page: string
-  --page: string
+  --status: string@status-completer-6 # e.g. healthy
+  --per-page: float
+  --page: float # default: 1
 ]: nothing -> record<result: table<account_tag: string, config_src: string, connections: list, conns_active_at: string, conns_inactive_at: string, created_at: string, deleted_at: string, id: string, metadata: record, name: string, remote_config: bool, status: string, tun_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -16878,7 +16913,7 @@ export def "accounts-cfd-tunnel-connections cloudflare-tunnel-clean-up-cloudflar
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --client-id: string
+  --client-id: string # format: uuid, e.g. 1bedc50d-42b3-473c-b108-ff3d10c0d925
   --body: record
 ]: any -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, result: record, success: bool> {
   let input = $in
@@ -19452,7 +19487,7 @@ export def "accounts-cloudforce-one-requests cloudforce-one-request-list" [
   --request-type: string # Requested information from request. (e.g. Victomology)
   --sort-by: string # Field to sort results by. (e.g. created)
   --sort-order: string@sort-order-completer # Sort order (asc or desc).
-  --status: string@status-completer-4 # Request Status.
+  --status: string@status-completer-7 # Request Status.
 ]: any -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: table<completed: record, created: record, id: string, message_tokens: int, priority: string, readable_id: string, request: string, status: string, summary: string, tlp: string, tokens: int, updated: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -20861,7 +20896,7 @@ export def "accounts-cloudforce-one-brand-protection-takedown-notices TakedownNo
   --matchId: int
   --matchType: string@matchType-completer
   --queryId: int
-  --status: string@status-completer-5 # default: draft
+  --status: string@status-completer-8 # default: draft
 ]: any -> record<createdAt: string, domain: string, id: float, matchId: float, matchType: string, queryId: float, status: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -20966,7 +21001,7 @@ export def "accounts-cloudforce-one-brand-protection-takedown-notices TakedownNo
   --matchId: int # nullable
   --matchType: string@matchType-completer # nullable
   --queryId: int # nullable
-  --status: string@status-completer-5
+  --status: string@status-completer-8
 ]: any -> record<createdAt: string, domain: string, id: float, matchId: float, matchType: string, queryId: float, status: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -21275,7 +21310,7 @@ export def "accounts-cloudforce-one-collections-columns ColumnAdd" [
   --default: record # nullable
   name: string
   --required: string@bool-completer # default: false
-  type: string@type-completer-4
+  type: string@type-completer-6
 ]: any -> record<result: record<id: string, name: string, position: float, required: bool, type: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -21330,7 +21365,7 @@ export def "accounts-cloudforce-one-collections-columns ColumnUpdate" [
   --name: string # New column name (must be unique)
   --position: float # Column display order
   --required: string@bool-completer # Whether column is required
-  --type: string@type-completer-4 # Column type: text, number, boolean, or date
+  --type: string@type-completer-6 # Column type: text, number, boolean, or date
 ]: any -> record<result: record<id: string, name: string, position: float, required: bool, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -22874,7 +22909,7 @@ export def "accounts-d1-database-time-travel-bookmark d1-time-travel-get-bookmar
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --timestamp: string # An optional ISO 8601 timestamp. If provided, returns the nearest available bookmark at or before this timestamp. If omitted, returns the current bookmark.
+  --timestamp: string # An optional ISO 8601 timestamp. If provided, returns the nearest available bookmark at or before this timestamp. If omitted, returns the current bookmark. (format: date-time, e.g. 2024-01-15T12:00:00Z)
 ]: nothing -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, result: record<bookmark: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -22899,8 +22934,8 @@ export def "accounts-d1-database-time-travel-restore d1-time-travel-restore" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --bookmark: string # A bookmark to restore the database to. Required if `timestamp` is not provided.
-  --timestamp: string # An ISO 8601 timestamp to restore the database to. Required if `bookmark` is not provided.
+  --bookmark: string # A bookmark to restore the database to. Required if `timestamp` is not provided. (e.g. 00000001-00000002-00004e2f-0a83ea2fceebc654de0640c422be4653)
+  --timestamp: string # An ISO 8601 timestamp to restore the database to. Required if `bookmark` is not provided. (format: date-time, e.g. 2024-01-15T12:00:00Z)
 ]: nothing -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, result: record<bookmark: record, message: string, previous_bookmark: record>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -23285,7 +23320,7 @@ export def "accounts-devices-networks device-managed-networks-create-device-mana
   --allow-errors(-e) # Return full response without error handling
   config: record # The configuration object containing information for the WARP client to detect the managed network. (e.g. {sha256: b5bb9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944c, tls_sockaddr: foo.bar:1234}) — shape: {sha256?: string, tls_sockaddr?: string}
   name: string # The name of the device managed network. This name must be unique. (e.g. managed-network-1)
-  type: string@type-completer-5 # The type of device managed network. (e.g. tls)
+  type: string@type-completer-7 # The type of device managed network. (e.g. tls)
 ]: any -> record<result: record<config: record, name: string, network_id: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -23364,7 +23399,7 @@ export def "accounts-devices-networks device-managed-networks-update-device-mana
   --allow-errors(-e) # Return full response without error handling
   --config: record # The configuration object containing information for the WARP client to detect the managed network. (e.g. {sha256: b5bb9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944c, tls_sockaddr: foo.bar:1234}) — shape: {sha256?: string, tls_sockaddr?: string}
   --name: string # The name of the device managed network. This name must be unique. (e.g. managed-network-1)
-  --type: string@type-completer-5 # The type of device managed network. (e.g. tls)
+  --type: string@type-completer-7 # The type of device managed network. (e.g. tls)
 ]: any -> record<result: record<config: record, name: string, network_id: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -24058,7 +24093,7 @@ export def "accounts-devices-posture device-posture-rules-create-device-posture-
   --body-match: list # The conditions that the client must match to run the rule. — item shape: {platform?: "windows"|"mac"|"linux"|"android"|"ios"|"chromeos"}
   name: string # The name of the device posture rule. (e.g. Admin Serial Numbers)
   --schedule: string # Polling frequency for the WARP client posture check. Default: `5m` (poll every five minutes). Minimum: `1m`. (e.g. 1h)
-  type: string@type-completer-6 # The type of device posture rule. (e.g. file)
+  type: string@type-completer-8 # The type of device posture rule. (e.g. file)
 ]: any -> record<result: record<description: string, expiration: string, id: string, input: record, match: list<record>, name: string, schedule: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -24110,7 +24145,7 @@ export def "accounts-devices-posture-integration device-posture-integrations-cre
   config: record # The configuration object containing third-party integration information. (e.g. {api_url: https://as123.awmdm.com/API, auth_url: https://na.uemauth.workspaceone.com/connect/token, client_id: example client id, client_secret: example client secret}) — shape: {api_url?: string, auth_url?: string, client_id?: string, client_secret?: string, customer_id?: string, client_key?: string, access_client_id?: string, access_client_secret?: string}
   interval: string # The interval between each posture check with the third-party API. Use `m` for minutes (e.g. `5m`) and `h` for hours (e.g. `12h`). (e.g. 10m)
   name: string # The name of the device posture integration. (e.g. My Workspace One Integration)
-  type: string@type-completer-7 # The type of device posture integration. (e.g. workspace_one)
+  type: string@type-completer-9 # The type of device posture integration. (e.g. workspace_one)
 ]: any -> record<result: record<config: record, id: string, interval: string, name: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -24190,7 +24225,7 @@ export def "accounts-devices-posture-integration device-posture-integrations-upd
   --config: record # The configuration object containing third-party integration information. (e.g. {api_url: https://as123.awmdm.com/API, auth_url: https://na.uemauth.workspaceone.com/connect/token, client_id: example client id, client_secret: example client secret}) — shape: {api_url?: string, auth_url?: string, client_id?: string, client_secret?: string, customer_id?: string, client_key?: string, access_client_id?: string, access_client_secret?: string}
   --interval: string # The interval between each posture check with the third-party API. Use `m` for minutes (e.g. `5m`) and `h` for hours (e.g. `12h`). (e.g. 10m)
   --name: string # The name of the device posture integration. (e.g. My Workspace One Integration)
-  --type: string@type-completer-7 # The type of device posture integration. (e.g. workspace_one)
+  --type: string@type-completer-9 # The type of device posture integration. (e.g. workspace_one)
 ]: any -> record<result: record<config: record, id: string, interval: string, name: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -24274,7 +24309,7 @@ export def "accounts-devices-posture device-posture-rules-update-device-posture-
   --body-match: list # The conditions that the client must match to run the rule. — item shape: {platform?: "windows"|"mac"|"linux"|"android"|"ios"|"chromeos"}
   name: string # The name of the device posture rule. (e.g. Admin Serial Numbers)
   --schedule: string # Polling frequency for the WARP client posture check. Default: `5m` (poll every five minutes). Minimum: `1m`. (e.g. 1h)
-  type: string@type-completer-6 # The type of device posture rule. (e.g. file)
+  type: string@type-completer-8 # The type of device posture rule. (e.g. file)
 ]: any -> record<result: record<description: string, expiration: string, id: string, input: record, match: list<record>, name: string, schedule: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -24327,7 +24362,7 @@ export def "accounts-devices-registrations list-registrations" [
   --userid: list # Filter by user ID.
   --seen-after: string # Filter by the last_seen timestamp - returns only registrations last seen after this timestamp.
   --seen-before: string # Filter by the last_seen timestamp - returns only registrations last seen before this timestamp.
-  --status: string@status-completer-6 # Filter by registration status. Defaults to 'active'.
+  --status: string@status-completer-9 # Filter by registration status. Defaults to 'active'.
   --per-page: int # The maximum number of devices to return in a single response. (format: uint64)
   --search: string # Filter by registration details.
   --sort-by: string@sort-by-completer-2 # The registration field to order results by.
@@ -24776,7 +24811,7 @@ export def "accounts-dex-commands get-commands" [
   --device-id: string # Unique identifier for a device
   --user-email: string # Email tied to the device
   --command-type: string@command-type-completer # Optionally filter executed commands by command type
-  --status: string@status-completer-7 # Optionally filter executed commands by status
+  --status: string@status-completer-10 # Optionally filter executed commands by status
 ]: nothing -> record<result: record<commands: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -25042,9 +25077,9 @@ export def "accounts-dex-devices-fleet-status-live devices-live-status" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --since-minutes: string # Number of minutes before current time
-  --time-now: string # Number of minutes before current time
-  --colo: string # List of data centers to filter results
+  --since-minutes: float # Number of minutes before current time (default: 10, e.g. 10)
+  --time-now: string # Number of minutes before current time (e.g. 2023-10-11T00:00:00Z)
+  --colo: string # List of data centers to filter results (e.g. SJC)
 ]: nothing -> record<alwaysOn: bool, batteryCharging: bool, batteryCycles: int, batteryPct: float, colo: string, connectionType: string, cpuPct: float, cpuPctByApp: list<list<record>>, deviceId: string, deviceIpv4: record<address: string, asn: int, aso: string, location: record<city: string, country_iso: string, state_iso: string, zip: string>, netmask: string, version: string>, deviceIpv6: record<address: string, asn: int, aso: string, location: record<city: string, country_iso: string, state_iso: string, zip: string>, netmask: string, version: string>, deviceName: string, deviceRegistration: string, diskReadBps: int, diskUsagePct: float, diskWriteBps: int, dohSubdomain: string, estimatedLossPct: float, firewallEnabled: bool, gatewayIpv4: record<address: string, asn: int, aso: string, location: record<city: string, country_iso: string, state_iso: string, zip: string>, netmask: string, version: string>, gatewayIpv6: record<address: string, asn: int, aso: string, location: record<city: string, country_iso: string, state_iso: string, zip: string>, netmask: string, version: string>, handshakeLatencyMs: float, ispIpv4: record<address: string, asn: int, aso: string, location: record<city: string, country_iso: string, state_iso: string, zip: string>, netmask: string, version: string>, ispIpv6: record<address: string, asn: int, aso: string, location: record<city: string, country_iso: string, state_iso: string, zip: string>, netmask: string, version: string>, metal: string, mode: string, networkRcvdBps: int, networkSentBps: int, networkSsid: string, personEmail: string, platform: string, ramAvailableKb: int, ramUsedPct: float, ramUsedPctByApp: list<list<record>>, registrationId: string, status: string, switchLocked: bool, timestamp: string, version: string, wifiStrengthDbm: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -25099,18 +25134,18 @@ export def "accounts-dex-fleet-status-devices dex-fleet-status-devices" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-to: string # Time range end in ISO format
-  --qp-from: string # Time range beginning in ISO format
-  --page: string # Page number
-  --per-page: string # Number of results per page
-  --sort-by: string # Dimension to sort results by
-  --colo: string # Cloudflare colo
-  --device-id: string # Device-specific ID, given as UUID v4
-  --mode: string # The mode under which the WARP client is run
-  --status: string # Network status
-  --platform: string # Operating system
-  --version: string # WARP client version
-  --qp-source: string # Source:   * `hourly` - device details aggregated hourly, up to 7 days prior   * `last_seen` - device details, up to 60 minutes prior. Time windows exceeding 60 minutes will be rejected from June 1st, 2026. Please use 'hourly' or 'raw' instead for longer time ranges.   * `raw` - device details, up to 7 days prior
+  --qp-to: string # Time range end in ISO format (e.g. 2023-10-11T00:00:00Z)
+  --qp-from: string # Time range beginning in ISO format (e.g. 2023-10-11T00:00:00Z)
+  --page: float # Page number (default: 1, e.g. 1)
+  --per-page: float # Number of results per page (e.g. 10)
+  --sort-by: string@sort-by-completer-4 # Dimension to sort results by (default: timestamp)
+  --colo: string # Cloudflare colo (e.g. SJC)
+  --device-id: string # Device-specific ID, given as UUID v4 (e.g. cb49c27f-7f97-49c5-b6f3-f7c01ead0fd7)
+  --mode: string # The mode under which the WARP client is run (e.g. proxy)
+  --status: string # Network status (e.g. connected)
+  --platform: string # Operating system (e.g. windows)
+  --version: string # WARP client version (e.g. 1.0.0)
+  --qp-source: string@source-completer # Source:   * `hourly` - device details aggregated hourly, up to 7 days prior   * `last_seen` - device details, up to 60 minutes prior. Time windows exceeding 60 minutes will be rejected from June 1st, 2026. Please use 'hourly' or 'raw' instead for longer time ranges.   * `raw` - device details, up to 7 days prior  (default: last_seen, e.g. last_seen)
 ]: nothing -> record<result: table<alwaysOn: bool, batteryCharging: bool, batteryCycles: int, batteryPct: float, colo: string, connectionType: string, cpuPct: float, cpuPctByApp: list, deviceId: string, deviceIpv4: record, deviceIpv6: record, deviceName: string, deviceRegistration: string, diskReadBps: int, diskUsagePct: float, diskWriteBps: int, dohSubdomain: string, estimatedLossPct: float, firewallEnabled: bool, gatewayIpv4: record, gatewayIpv6: record, handshakeLatencyMs: float, ispIpv4: record, ispIpv6: record, metal: string, mode: string, networkRcvdBps: int, networkSentBps: int, networkSsid: string, personEmail: string, platform: string, ramAvailableKb: int, ramUsedPct: float, ramUsedPctByApp: list, registrationId: string, status: string, switchLocked: bool, timestamp: string, version: string, wifiStrengthDbm: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -25134,7 +25169,7 @@ export def "accounts-dex-fleet-status-live dex-fleet-status-live" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --since-minutes: string # Number of minutes before current time
+  --since-minutes: float # Number of minutes before current time (default: 10, e.g. 10)
 ]: nothing -> record<result: record<deviceStats: record<byColo: list, byMode: list, byPlatform: list, byStatus: list, byVersion: list, uniqueDevicesTotal: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -25158,10 +25193,10 @@ export def "accounts-dex-fleet-status-over-time dex-fleet-status-over-time" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-to: string # Time range end in ISO format
-  --qp-from: string # Time range beginning in ISO format
-  --colo: string # Cloudflare colo
-  --device-id: string # Device-specific ID, given as UUID v4
+  --qp-to: string # Time range end in ISO format (e.g. 2023-10-11T00:00:00Z)
+  --qp-from: string # Time range beginning in ISO format (e.g. 2023-10-11T00:00:00Z)
+  --colo: string # Cloudflare colo (e.g. SJC)
+  --device-id: string # Device-specific ID, given as UUID v4 (e.g. cb49c27f-7f97-49c5-b6f3-f7c01ead0fd7)
 ]: nothing -> record<result: record<deviceStats: record<byMode: list, byStatus: list, uniqueDevicesTotal: float>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -25245,7 +25280,7 @@ export def "accounts-dex-rules list-dex-rules" [
   --page: float # Page number of paginated results
   --per-page: float # Number of items per page
   --sort-order: string@sort-order-completer-1 # Sort direction for sort_by property (default: ASC)
-  --sort-by: string@sort-by-completer-4 # Which property to sort results by (default: name)
+  --sort-by: string@sort-by-completer-5 # Which property to sort results by (default: name)
   --name: string # Filter results by rule name
 ]: nothing -> record<result: record<rules: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -25540,7 +25575,7 @@ export def "accounts-dex-warp-change-events list-warp-change-events" [
   --per-page: float # Number of items per page
   --qp-from: string # Start time for the query in ISO (RFC3339 - ISO 8601) format (e.g. 2023-09-20T17:00:00Z)
   --qp-to: string # End time for the query in ISO (RFC3339 - ISO 8601) format (e.g. 2023-09-20T17:00:00Z)
-  --type: string@type-completer-8 # Filter events by type 'config' or 'toggle'
+  --type: string@type-completer-10 # Filter events by type 'config' or 'toggle'
   --toggle: string@toggle-completer # Filter events by type toggle value. Applicable to type='toggle' events only.
   --config-name: string # Filter events by WARP configuration name changed from or to. Applicable to type='config' events only. (e.g. MASQUE)
   --account-name: string # Filter events by account name. (e.g. Myorg)
@@ -28269,7 +28304,7 @@ export def "accounts-dls-regions publicListRegions" [
   --allow-errors(-e) # Return full response without error handling
   --cursor: string # Opaque token for cursor-based pagination. Omit for the first page. Pass the value from a previous response to fetch the next page.
   --per-page: int # default: 25
-  --type: string@type-completer-9 # Filter regions by type. Omit to return all regions.
+  --type: string@type-completer-11 # Filter regions by type. Omit to return all regions.
 ]: nothing -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, result: table<created_on: string, id: string, modified_on: string, name: string, region_key: string, version: int, version_created_on: string>, result_info: record<count: int, cursor: string, per_page: int>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -28465,13 +28500,13 @@ export def "accounts-dns-firewall-dns-analytics-report dns-firewall-analytics-ta
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --metrics: string
-  --dimensions: string
-  --since: string
-  --until: string
-  --limit: string
-  --qp-sort: string
-  --filters: string
+  --metrics: string # e.g. queryCount,uncachedCount
+  --dimensions: string # e.g. queryType
+  --since: string # format: date-time, e.g. 2023-11-11T12:00:00Z
+  --until: string # format: date-time, e.g. 2023-11-11T13:00:00Z
+  --limit: int # default: 100000, e.g. 100
+  --qp-sort: string # e.g. +responseCode,-queryName
+  --filters: string # e.g. responseCode==NOERROR,queryType==A
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -28496,14 +28531,14 @@ export def "accounts-dns-firewall-dns-analytics-report-bytime dns-firewall-analy
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --metrics: string
-  --dimensions: string
-  --since: string
-  --until: string
-  --limit: string
-  --qp-sort: string
-  --filters: string
-  --time-delta: string
+  --metrics: string # e.g. queryCount,uncachedCount
+  --dimensions: string # e.g. queryType
+  --since: string # format: date-time, e.g. 2023-11-11T12:00:00Z
+  --until: string # format: date-time, e.g. 2023-11-11T13:00:00Z
+  --limit: int # default: 100000, e.g. 100
+  --qp-sort: string # e.g. +responseCode,-queryName
+  --filters: string # e.g. responseCode==NOERROR,queryType==A
+  --time-delta: string@time-delta-completer # e.g. hour
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -28656,11 +28691,11 @@ export def "accounts-dns-settings-views dns-views-for-an-account-list-internal-d
   --nameendswith: string # e.g. ew
   --zone-id: string # e.g. ae29bea30e2e427ba9cd8d78b628177b
   --zone-name: string # e.g. www.example.com
-  --qp-match: string
-  --page: string
-  --per-page: string
-  --order: string
-  --direction: string
+  --qp-match: string@match-completer # default: all, e.g. any
+  --page: float # default: 1
+  --per-page: float # default: 100, e.g. 5
+  --order: string@order-completer-2 # default: type
+  --direction: string@direction-completer # default: asc
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -28802,7 +28837,7 @@ export def "accounts-email-security-investigate investigate" [
   --domain: string # Sender domains to filter by. (e.g. example.com)
   --message-id: string
   --subject: string
-  --delivery-status: string # Delivery status to filter by.
+  --delivery-status: string@delivery-status-completer # Delivery status to filter by.
   --cursor: string
   --per-page: int # The number of results per page. Maximum value is 1000. (default: 20, e.g. 20)
   --page: int # Deprecated: Use cursor pagination instead. End of life: November 1, 2026. (DEPRECATED, nullable, default: 1)
@@ -29137,7 +29172,7 @@ export def "accounts-email-security-settings-allow-policies policies" [
   --page: int # Current page within paginated list of results. (default: 1, e.g. 1)
   --per-page: int # The number of results per page. Maximum value is 1000. (default: 20, e.g. 20)
   --search: string # Search term for filtering records. Behavior may change.
-  --order: string@order-completer-2 # Field to sort by.
+  --order: string@order-completer-3 # Field to sort by.
   --direction: string@direction-completer # The sorting direction.
   --is-exempt-recipient: string@bool-completer # Filter to show only policies where messages to the recipient bypass all detections.
   --is-trusted-sender: string@bool-completer # Filter to show only policies where messages from the sender bypass all detections and link following.
@@ -29329,7 +29364,7 @@ export def "accounts-email-security-settings-block-senders senders" [
   --page: int # Current page within paginated list of results. (default: 1, e.g. 1)
   --per-page: int # The number of results per page. Maximum value is 1000. (default: 20, e.g. 20)
   --search: string # Search term for filtering records. Behavior may change.
-  --order: string@order-completer-2 # Field to sort by.
+  --order: string@order-completer-3 # Field to sort by.
   --direction: string@direction-completer # The sorting direction.
   --pattern-type: string # Filter by pattern type.
   --pattern: string # Filter by pattern value.
@@ -29497,13 +29532,13 @@ export def "accounts-email-security-settings-domains domains" [
   --page: int # Current page within paginated list of results. (default: 1, e.g. 1)
   --per-page: int # The number of results per page. Maximum value is 1000. (default: 20, e.g. 20)
   --search: string # Search term for filtering records. Behavior may change.
-  --order: string@order-completer-3 # Field to sort by.
+  --order: string@order-completer-4 # Field to sort by.
   --direction: string@direction-completer # The sorting direction.
-  --allowed-delivery-mode: string # Delivery mode to filter by.
+  --allowed-delivery-mode: string@allowed-delivery-mode-completer # Delivery mode to filter by.
   --domain: list # Domain names to filter by.
-  --active-delivery-mode: string # Currently active delivery mode to filter by.
+  --active-delivery-mode: string@active-delivery-mode-completer # Currently active delivery mode to filter by.
   --integration-id: string # Integration ID to filter by. (format: uuid)
-  --status: string # Filters response to domains with the provided status.
+  --status: string@status-completer-11 # Filters response to domains with the provided status.
 ]: nothing -> record<result: table<allowed_delivery_modes: list, authorization: record, created_at: record, dmarc_status: string, domain: string, drop_dispositions: list, emails_processed: record, folder: string, id: string, inbox_provider: string, integration_id: string, ip_restrictions: list, last_modified: record, lookback_hops: int, modified_at: record, o365_tenant_id: string, regions: list, require_tls_inbound: bool, require_tls_outbound: bool, spf_status: string, status: string, transport: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -29613,9 +29648,9 @@ export def "accounts-email-security-settings-impersonation-registry registry-by-
   --page: int # Current page within paginated list of results. (default: 1, e.g. 1)
   --per-page: int # The number of results per page. Maximum value is 1000. (default: 20, e.g. 20)
   --search: string # Search term for filtering records. Behavior may change.
-  --order: string@order-completer-4 # Field to sort by.
+  --order: string@order-completer-5 # Field to sort by.
   --direction: string@direction-completer # The sorting direction.
-  --provenance: string
+  --provenance: string@provenance-completer
 ]: nothing -> record<result: table<comments: string, created_at: record, directory_id: int, directory_node_id: int, email: string, external_directory_node_id: string, id: record, is_email_regex: bool, last_modified: record, modified_at: record, name: string, provenance: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -29757,7 +29792,7 @@ export def "accounts-email-security-settings-sending-domain-restrictions restric
   --page: int # Current page within paginated list of results. (default: 1, e.g. 1)
   --per-page: int # The number of results per page. Maximum value is 1000. (default: 20, e.g. 20)
   --search: string # Search term for filtering records. Behavior may change.
-  --order: string@order-completer-3 # Field to sort by.
+  --order: string@order-completer-4 # Field to sort by.
   --direction: string@direction-completer # The sorting direction.
 ]: nothing -> record<result: table<comments: string, created_at: record, domain: string, exclude: list, id: record, last_modified: record, modified_at: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -29915,7 +29950,7 @@ export def "accounts-email-security-settings-trusted-domains domains" [
   --page: int # Current page within paginated list of results. (default: 1, e.g. 1)
   --per-page: int # The number of results per page. Maximum value is 1000. (default: 20, e.g. 20)
   --search: string # Search term for filtering records. Behavior may change.
-  --order: string@order-completer-2 # Field to sort by.
+  --order: string@order-completer-3 # Field to sort by.
   --direction: string@direction-completer # The sorting direction.
   --is-recent: string@bool-completer # Filter to show only recently registered domains that are trusted to prevent triggering Suspicious or Malicious dispositions.
   --is-similarity: string@bool-completer # Filter to show only proximity domains (partner or approved domains with similar spelling to connected domains) that prevent Spoof dispositions.
@@ -30244,11 +30279,11 @@ export def "accounts-email-security-submissions submissions" [
   --allow-errors(-e) # Return full response without error handling
   --start: string # The beginning of the search date range. Defaults to `now - 30 days`. (format: date-time, e.g. 2022-06-25T14:30:00Z)
   --end: string # The end of the search date range. Defaults to `now`. (format: date-time, e.g. 2022-07-25T14:30:00Z)
-  --type: string@type-completer-10
+  --type: string@type-completer-12
   --submission-id: string
-  --original-disposition: string
-  --requested-disposition: string
-  --outcome-disposition: string
+  --original-disposition: string@original-disposition-completer
+  --requested-disposition: string@requested-disposition-completer
+  --outcome-disposition: string@outcome-disposition-completer
   --status: string
   --qp-query: string # nullable
   --escalated-from-user: string@bool-completer # When true, return only submissions that were escalated by an end user (vs. by the security team). When false, return only submissions that were not escalated by an end user. When omitted, no filter is applied.
@@ -30378,7 +30413,7 @@ export def "accounts-email-routing-suppression publicListSuppressionRouting" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # default: 1
   --per-page: int # default: 100
-  --order: string@order-completer-5 # default: created_at
+  --order: string@order-completer-6 # default: created_at
   --direction: string@direction-completer # default: desc
 ]: nothing -> record<page: int, per_page: int, result: table<created_at: string, email: string, expires_at: string, id: string, reason: string, zones: list>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -30588,7 +30623,7 @@ export def "accounts-email-sending-suppression publicListSuppressionSending" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # default: 1
   --per-page: int # default: 100
-  --order: string@order-completer-5 # default: created_at
+  --order: string@order-completer-6 # default: created_at
   --direction: string@direction-completer # default: desc
 ]: nothing -> record<page: int, per_page: int, result: table<created_at: string, email: string, expires_at: string, id: string, reason: string, zones: list>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -30687,7 +30722,7 @@ export def "accounts-event-notifications-r2-configuration r2-get-event-notificat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
 ]: nothing -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<bucketName: string, queues: list<record>>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -30714,7 +30749,7 @@ export def "accounts-event-notifications-r2-configuration-queues r2-event-notifi
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
   --ruleIds: list # Array of rule ids to delete.
 ]: any -> record<errors: table<code: int, message: string>, messages: list<string>, result: record, success: bool> {
   let input = $in
@@ -30773,7 +30808,7 @@ export def "accounts-event-notifications-r2-configuration-queues r2-put-event-no
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
   rules: list # Array of rules to drive notifications. — item shape: {actions: list, description?: string, prefix?: string, suffix?: string}
 ]: any -> record<errors: table<code: int, message: string>, messages: list<string>, result: record, success: bool> {
   let input = $in
@@ -30804,7 +30839,7 @@ export def "accounts-event-subscriptions-subscriptions subscriptions-list" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page number for pagination (default: 1)
   --per-page: int # Number of items per page (default: 20)
-  --order: string@order-completer-6 # Field to sort by (default: name)
+  --order: string@order-completer-7 # Field to sort by (default: name)
   --direction: string@direction-completer # Sort direction (default: asc)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -30938,14 +30973,14 @@ export def "accounts-firewall-access-rules-rules ip-access-rules-for-an-account-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --mode: string
+  --mode: string@mode-completer-3 # e.g. challenge
   --configurationtarget: string@configurationtarget-completer # e.g. ip
   --configurationvalue: string # e.g. 198.51.100.4
   --notes: string # e.g. my note
   --qp-match: string@match-completer # default: all
   --page: float # e.g. 1
   --per-page: float # e.g. 20
-  --order: string@order-completer-7 # e.g. mode
+  --order: string@order-completer-8 # e.g. mode
   --direction: string@direction-completer # e.g. desc
 ]: nothing -> record<result: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -31259,7 +31294,7 @@ export def "accounts-flagship-apps-flags flag-by-account_id-app_id" [
   --enabled: string@bool-completer # When false, the flag bypasses all rules and always serves `default_variation`.
   key: string # Unique identifier for the flag within an app. Used in all evaluation and SDK calls.
   rules: list # Targeting rules evaluated in ascending `priority`; the first matching rule wins. An empty array means the flag always serves `default_variation`. — item shape: {conditions: list, priority: int, rollout?: record, serve_variation: string}
-  --type: string@type-completer-11 # Value type of the flag's variations. Inferred from the variation values on write, so it may be omitted in requests.
+  --type: string@type-completer-13 # Value type of the flag's variations. Inferred from the variation values on write, so it may be omitted in requests.
   variations: record # Map of variation name to value. All values must be the same type (boolean, string, number, or JSON object/array). Each serialized value must be 10KB or smaller.
 ]: any -> record<errors: table<message: string>, messages: table<message: string>, result: record<default_variation: string, description: string, enabled: bool, key: string, rules: list<record>, type: string, updated_at: string, updated_by: string, variations: record>, success: bool> {
   let input = $in
@@ -31342,7 +31377,7 @@ export def "accounts-flagship-apps-flags flag-by-account_id-app_id-flag_key-2" [
   --enabled: string@bool-completer # When false, the flag bypasses all rules and always serves `default_variation`.
   key: string # Unique identifier for the flag within an app. Used in all evaluation and SDK calls.
   rules: list # Targeting rules evaluated in ascending `priority`; the first matching rule wins. An empty array means the flag always serves `default_variation`. — item shape: {conditions: list, priority: int, rollout?: record, serve_variation: string}
-  --type: string@type-completer-11 # Value type of the flag's variations. Inferred from the variation values on write, so it may be omitted in requests.
+  --type: string@type-completer-13 # Value type of the flag's variations. Inferred from the variation values on write, so it may be omitted in requests.
   variations: record # Map of variation name to value. All values must be the same type (boolean, string, number, or JSON object/array). Each serialized value must be 10KB or smaller.
 ]: any -> record<errors: table<message: string>, messages: table<message: string>, result: record<default_variation: string, description: string, enabled: bool, key: string, rules: list<record>, type: string, updated_at: string, updated_by: string, variations: record>, success: bool> {
   let input = $in
@@ -31897,7 +31932,7 @@ export def "accounts-gateway-lists zero-trust-lists-list-zero-trust-lists" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --type: string
+  --type: string@type-completer-14 # e.g. SERIAL
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -31925,7 +31960,7 @@ export def "accounts-gateway-lists zero-trust-lists-create-zero-trust-list" [
   --description: string # Provide the list description. (e.g. The serial numbers for administrators)
   --items: list # Add items to the list. — item shape: {description?: string, value?: string}
   name: string # Specify the list name. (e.g. Admin Serial Numbers)
-  type: string@type-completer-12 # Specify the list type. (e.g. SERIAL)
+  type: string@type-completer-14 # Specify the list type. (e.g. SERIAL)
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -33854,7 +33889,7 @@ export def "accounts-images cloudflare-images-list-images-v2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --continuation-token: string
+  --continuation-token: string # nullable, e.g. iD0bxlWFSVUWsDHbzIqvDkgBW4otifAAuGXLz1n8BQA
   --per-page: float # default: 1000
   --sort-order: string@sort-order-completer # default: desc
   --creator: string # nullable
@@ -33930,7 +33965,7 @@ export def "accounts-infrastructure-targets infra-targets-list" [
   --ipv6-end: string # Defines an IPv6 filter range's ending value (inclusive). Requires `ipv6_start` to be specified as well. (nullable)
   --page: int # Current page in the response (format: int32, default: 1)
   --per-page: int # Max amount of entries returned per page (format: int32, default: 1000)
-  --order: string@order-completer-8 # The field to sort by.
+  --order: string@order-completer-9 # The field to sort by.
   --direction: string # The sorting direction.
 ]: nothing -> record<result: table<created_at: string, hostname: string, id: string, ip: record, modified_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -34129,7 +34164,7 @@ export def "accounts-infrastructure-targets infra-targets-put" [
 # GET /accounts/{account_id}/intel/asn/{asn}
 # operationId: asn-intelligence-get-asn-overview
 export def "accounts-intel-asn asn-intelligence-get-asn-overview" [
-  asn: string
+  asn: int
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -34152,7 +34187,7 @@ export def "accounts-intel-asn asn-intelligence-get-asn-overview" [
 # GET /accounts/{account_id}/intel/asn/{asn}/subnets
 # operationId: asn-intelligence-get-asn-subnets
 export def "accounts-intel-asn-subnets asn-intelligence-get-asn-subnets" [
-  asn: string
+  asn: int
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -34207,23 +34242,23 @@ export def "accounts-intel-attack-surface-report-issues get-security-center-issu
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string
-  --issue-class: string
-  --issue-type: string
-  --product: string
-  --severity: string
-  --subject: string
-  --issue-classneq: string
-  --issue-typeneq: string
-  --productneq: string
-  --severityneq: string
-  --subjectneq: string
+  --dismissed: string@bool-completer # e.g. false
+  --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-type: list # e.g. [compliance_violation, email_security]
+  --product: list # e.g. [access, dns]
+  --severity: list # e.g. [low, moderate]
+  --subject: list
+  --issue-classneq: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-typeneq: list # e.g. [compliance_violation, email_security]
+  --productneq: list # e.g. [access, dns]
+  --severityneq: list # e.g. [low, moderate]
+  --subjectneq: list
   --page: string # default: 1
   --per-page: string # default: 25
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "scalar") (serialize-qp "issue_type" $issue_type "scalar") (serialize-qp "product" $product "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "subject" $subject "scalar") (serialize-qp "issue_class~neq" $issue_classneq "scalar") (serialize-qp "issue_type~neq" $issue_typeneq "scalar") (serialize-qp "product~neq" $productneq "scalar") (serialize-qp "severity~neq" $severityneq "scalar") (serialize-qp "subject~neq" $subjectneq "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "multi") (serialize-qp "issue_type" $issue_type "multi") (serialize-qp "product" $product "multi") (serialize-qp "severity" $severity "multi") (serialize-qp "subject" $subject "multi") (serialize-qp "issue_class~neq" $issue_classneq "multi") (serialize-qp "issue_type~neq" $issue_typeneq "multi") (serialize-qp "product~neq" $productneq "multi") (serialize-qp "severity~neq" $severityneq "multi") (serialize-qp "subject~neq" $subjectneq "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/accounts/($account_id)/intel/attack-surface-report/issues" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -34245,21 +34280,21 @@ export def "accounts-intel-attack-surface-report-issues-class get-security-cente
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string
-  --issue-class: string
-  --issue-type: string
-  --product: string
-  --severity: string
-  --subject: string
-  --issue-classneq: string
-  --issue-typeneq: string
-  --productneq: string
-  --severityneq: string
-  --subjectneq: string
+  --dismissed: string@bool-completer # e.g. false
+  --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-type: list # e.g. [compliance_violation, email_security]
+  --product: list # e.g. [access, dns]
+  --severity: list # e.g. [low, moderate]
+  --subject: list
+  --issue-classneq: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-typeneq: list # e.g. [compliance_violation, email_security]
+  --productneq: list # e.g. [access, dns]
+  --severityneq: list # e.g. [low, moderate]
+  --subjectneq: list
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "scalar") (serialize-qp "issue_type" $issue_type "scalar") (serialize-qp "product" $product "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "subject" $subject "scalar") (serialize-qp "issue_class~neq" $issue_classneq "scalar") (serialize-qp "issue_type~neq" $issue_typeneq "scalar") (serialize-qp "product~neq" $productneq "scalar") (serialize-qp "severity~neq" $severityneq "scalar") (serialize-qp "subject~neq" $subjectneq "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "multi") (serialize-qp "issue_type" $issue_type "multi") (serialize-qp "product" $product "multi") (serialize-qp "severity" $severity "multi") (serialize-qp "subject" $subject "multi") (serialize-qp "issue_class~neq" $issue_classneq "multi") (serialize-qp "issue_type~neq" $issue_typeneq "multi") (serialize-qp "product~neq" $productneq "multi") (serialize-qp "severity~neq" $severityneq "multi") (serialize-qp "subject~neq" $subjectneq "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/accounts/($account_id)/intel/attack-surface-report/issues/class" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -34281,21 +34316,21 @@ export def "accounts-intel-attack-surface-report-issues-severity get-security-ce
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string
-  --issue-class: string
-  --issue-type: string
-  --product: string
-  --severity: string
-  --subject: string
-  --issue-classneq: string
-  --issue-typeneq: string
-  --productneq: string
-  --severityneq: string
-  --subjectneq: string
+  --dismissed: string@bool-completer # e.g. false
+  --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-type: list # e.g. [compliance_violation, email_security]
+  --product: list # e.g. [access, dns]
+  --severity: list # e.g. [low, moderate]
+  --subject: list
+  --issue-classneq: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-typeneq: list # e.g. [compliance_violation, email_security]
+  --productneq: list # e.g. [access, dns]
+  --severityneq: list # e.g. [low, moderate]
+  --subjectneq: list
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "scalar") (serialize-qp "issue_type" $issue_type "scalar") (serialize-qp "product" $product "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "subject" $subject "scalar") (serialize-qp "issue_class~neq" $issue_classneq "scalar") (serialize-qp "issue_type~neq" $issue_typeneq "scalar") (serialize-qp "product~neq" $productneq "scalar") (serialize-qp "severity~neq" $severityneq "scalar") (serialize-qp "subject~neq" $subjectneq "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "multi") (serialize-qp "issue_type" $issue_type "multi") (serialize-qp "product" $product "multi") (serialize-qp "severity" $severity "multi") (serialize-qp "subject" $subject "multi") (serialize-qp "issue_class~neq" $issue_classneq "multi") (serialize-qp "issue_type~neq" $issue_typeneq "multi") (serialize-qp "product~neq" $productneq "multi") (serialize-qp "severity~neq" $severityneq "multi") (serialize-qp "subject~neq" $subjectneq "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/accounts/($account_id)/intel/attack-surface-report/issues/severity" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -34317,21 +34352,21 @@ export def "accounts-intel-attack-surface-report-issues-type get-security-center
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string
-  --issue-class: string
-  --issue-type: string
-  --product: string
-  --severity: string
-  --subject: string
-  --issue-classneq: string
-  --issue-typeneq: string
-  --productneq: string
-  --severityneq: string
-  --subjectneq: string
+  --dismissed: string@bool-completer # e.g. false
+  --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-type: list # e.g. [compliance_violation, email_security]
+  --product: list # e.g. [access, dns]
+  --severity: list # e.g. [low, moderate]
+  --subject: list
+  --issue-classneq: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-typeneq: list # e.g. [compliance_violation, email_security]
+  --productneq: list # e.g. [access, dns]
+  --severityneq: list # e.g. [low, moderate]
+  --subjectneq: list
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "scalar") (serialize-qp "issue_type" $issue_type "scalar") (serialize-qp "product" $product "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "subject" $subject "scalar") (serialize-qp "issue_class~neq" $issue_classneq "scalar") (serialize-qp "issue_type~neq" $issue_typeneq "scalar") (serialize-qp "product~neq" $productneq "scalar") (serialize-qp "severity~neq" $severityneq "scalar") (serialize-qp "subject~neq" $subjectneq "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "multi") (serialize-qp "issue_type" $issue_type "multi") (serialize-qp "product" $product "multi") (serialize-qp "severity" $severity "multi") (serialize-qp "subject" $subject "multi") (serialize-qp "issue_class~neq" $issue_classneq "multi") (serialize-qp "issue_type~neq" $issue_typeneq "multi") (serialize-qp "product~neq" $productneq "multi") (serialize-qp "severity~neq" $severityneq "multi") (serialize-qp "subject~neq" $subjectneq "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/accounts/($account_id)/intel/attack-surface-report/issues/type" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -34380,14 +34415,14 @@ export def "accounts-intel-dns passive-dns-by-ip-get-passive-dns-by-ip" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --start-end-params: string
+  --start-end-params: record
   --ipv4: string
   --page: float # e.g. 1
   --per-page: float # e.g. 20
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "start_end_params" $start_end_params "scalar") (serialize-qp "ipv4" $ipv4 "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "start_end_params" $start_end_params "multi") (serialize-qp "ipv4" $ipv4 "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/accounts/($account_id)/intel/dns" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -34625,7 +34660,7 @@ export def "accounts-intel-indicator-feeds-permissions-view custom-indicator-fee
 # operationId: custom-indicator-feeds-get-indicator-feed-metadata
 export def "accounts-intel-indicator-feeds custom-indicator-feeds-get-indicator-feed-metadata" [
   account_id: string
-  feed_id: string
+  feed_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -34648,7 +34683,7 @@ export def "accounts-intel-indicator-feeds custom-indicator-feeds-get-indicator-
 # operationId: custom-indicator-feeds-update-indicator-feed-metadata
 export def "accounts-intel-indicator-feeds custom-indicator-feeds-update-indicator-feed-metadata" [
   account_id: string
-  feed_id: string
+  feed_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -34679,7 +34714,7 @@ export def "accounts-intel-indicator-feeds custom-indicator-feeds-update-indicat
 # operationId: custom-indicator-feeds-get-indicator-feed-data
 export def "accounts-intel-indicator-feeds-data custom-indicator-feeds-get-indicator-feed-data" [
   account_id: string
-  feed_id: string
+  feed_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -34702,7 +34737,7 @@ export def "accounts-intel-indicator-feeds-data custom-indicator-feeds-get-indic
 # operationId: custom-indicator-feeds-download-indicator-feed-data
 export def "accounts-intel-indicator-feeds-download custom-indicator-feeds-download-indicator-feed-data" [
   account_id: string
-  feed_id: string
+  feed_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -34725,7 +34760,7 @@ export def "accounts-intel-indicator-feeds-download custom-indicator-feeds-downl
 # operationId: custom-indicator-feeds-update-indicator-feed-data
 export def "accounts-intel-indicator-feeds-snapshot custom-indicator-feeds-update-indicator-feed-data" [
   account_id: string
-  feed_id: string
+  feed_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -35250,7 +35285,7 @@ export def "accounts-load-balancers-monitors account-load-balancer-monitors-crea
   --probe-zone: string # Assign this monitor to emulate the specified zone while probing. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. example.com)
   --retries: int # The number of retries to attempt in case of a timeout before marking the origin as unhealthy. Retries are attempted immediately. (default: 2)
   --timeout: int # The timeout (in seconds) before marking the health check as failed. (default: 5)
-  --type: string@type-completer-13 # The protocol to use for the health check. Currently supported protocols are 'HTTP','HTTPS', 'TCP', 'ICMP-PING', 'UDP-ICMP', and 'SMTP'. (default: http, e.g. https)
+  --type: string@type-completer-15 # The protocol to use for the health check. Currently supported protocols are 'HTTP','HTTPS', 'TCP', 'ICMP-PING', 'UDP-ICMP', and 'SMTP'. (default: http, e.g. https)
 ]: any -> record<result: record<allow_insecure: bool, consecutive_down: int, consecutive_up: int, description: string, expected_body: string, expected_codes: string, follow_redirects: bool, header: record, interval: int, method: string, path: string, port: int, probe_zone: string, retries: int, timeout: int, type: string, created_on: string, id: string, modified_on: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -35341,7 +35376,7 @@ export def "accounts-load-balancers-monitors account-load-balancer-monitors-patc
   --probe-zone: string # Assign this monitor to emulate the specified zone while probing. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. example.com)
   --retries: int # The number of retries to attempt in case of a timeout before marking the origin as unhealthy. Retries are attempted immediately. (default: 2)
   --timeout: int # The timeout (in seconds) before marking the health check as failed. (default: 5)
-  --type: string@type-completer-13 # The protocol to use for the health check. Currently supported protocols are 'HTTP','HTTPS', 'TCP', 'ICMP-PING', 'UDP-ICMP', and 'SMTP'. (default: http, e.g. https)
+  --type: string@type-completer-15 # The protocol to use for the health check. Currently supported protocols are 'HTTP','HTTPS', 'TCP', 'ICMP-PING', 'UDP-ICMP', and 'SMTP'. (default: http, e.g. https)
 ]: any -> record<result: record<allow_insecure: bool, consecutive_down: int, consecutive_up: int, description: string, expected_body: string, expected_codes: string, follow_redirects: bool, header: record, interval: int, method: string, path: string, port: int, probe_zone: string, retries: int, timeout: int, type: string, created_on: string, id: string, modified_on: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -35383,7 +35418,7 @@ export def "accounts-load-balancers-monitors account-load-balancer-monitors-upda
   --probe-zone: string # Assign this monitor to emulate the specified zone while probing. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. example.com)
   --retries: int # The number of retries to attempt in case of a timeout before marking the origin as unhealthy. Retries are attempted immediately. (default: 2)
   --timeout: int # The timeout (in seconds) before marking the health check as failed. (default: 5)
-  --type: string@type-completer-13 # The protocol to use for the health check. Currently supported protocols are 'HTTP','HTTPS', 'TCP', 'ICMP-PING', 'UDP-ICMP', and 'SMTP'. (default: http, e.g. https)
+  --type: string@type-completer-15 # The protocol to use for the health check. Currently supported protocols are 'HTTP','HTTPS', 'TCP', 'ICMP-PING', 'UDP-ICMP', and 'SMTP'. (default: http, e.g. https)
 ]: any -> record<result: record<allow_insecure: bool, consecutive_down: int, consecutive_up: int, description: string, expected_body: string, expected_codes: string, follow_redirects: bool, header: record, interval: int, method: string, path: string, port: int, probe_zone: string, retries: int, timeout: int, type: string, created_on: string, id: string, modified_on: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -35425,7 +35460,7 @@ export def "accounts-load-balancers-monitors-preview account-load-balancer-monit
   --probe-zone: string # Assign this monitor to emulate the specified zone while probing. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. example.com)
   --retries: int # The number of retries to attempt in case of a timeout before marking the origin as unhealthy. Retries are attempted immediately. (default: 2)
   --timeout: int # The timeout (in seconds) before marking the health check as failed. (default: 5)
-  --type: string@type-completer-13 # The protocol to use for the health check. Currently supported protocols are 'HTTP','HTTPS', 'TCP', 'ICMP-PING', 'UDP-ICMP', and 'SMTP'. (default: http, e.g. https)
+  --type: string@type-completer-15 # The protocol to use for the health check. Currently supported protocols are 'HTTP','HTTPS', 'TCP', 'ICMP-PING', 'UDP-ICMP', and 'SMTP'. (default: http, e.g. https)
 ]: any -> record<result: record<pools: record, preview_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -35742,7 +35777,7 @@ export def "accounts-load-balancers-pools-preview account-load-balancer-pools-pr
   --probe-zone: string # Assign this monitor to emulate the specified zone while probing. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. example.com)
   --retries: int # The number of retries to attempt in case of a timeout before marking the origin as unhealthy. Retries are attempted immediately. (default: 2)
   --timeout: int # The timeout (in seconds) before marking the health check as failed. (default: 5)
-  --type: string@type-completer-13 # The protocol to use for the health check. Currently supported protocols are 'HTTP','HTTPS', 'TCP', 'ICMP-PING', 'UDP-ICMP', and 'SMTP'. (default: http, e.g. https)
+  --type: string@type-completer-15 # The protocol to use for the health check. Currently supported protocols are 'HTTP','HTTPS', 'TCP', 'ICMP-PING', 'UDP-ICMP', and 'SMTP'. (default: http, e.g. https)
 ]: any -> record<result: record<pools: record, preview_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -35814,8 +35849,8 @@ export def "accounts-load-balancers-regions load-balancer-regions-list-regions" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --subdivision-code: string
-  --subdivision-code-a2: string
+  --subdivision-code: string # e.g. CA
+  --subdivision-code-a2: string # e.g. CA
   --country-code-a2: string # e.g. US
 ]: nothing -> record<result: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -35991,7 +36026,7 @@ export def "accounts-logpush-jobs id-logpush-jobs-by-account_id-1" [
 # DELETE /accounts/{account_id}/logpush/jobs/{job_id}
 # operationId: delete-accounts-account_id-logpush-jobs-job_id
 export def "accounts-logpush-jobs id-by-job_id-account_id" [
-  job_id: string
+  job_id: int
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -36017,7 +36052,7 @@ export def "accounts-logpush-jobs id-by-job_id-account_id" [
 # GET /accounts/{account_id}/logpush/jobs/{job_id}
 # operationId: get-accounts-account_id-logpush-jobs-job_id
 export def "accounts-logpush-jobs id-by-job_id-account_id-1" [
-  job_id: string
+  job_id: int
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -36043,7 +36078,7 @@ export def "accounts-logpush-jobs id-by-job_id-account_id-1" [
 @deprecated --flag frequency
 @deprecated --flag logpull-options
 export def "accounts-logpush-jobs id-by-job_id-account_id-2" [
-  job_id: string
+  job_id: int
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -38217,7 +38252,7 @@ export def "accounts-magic-cloud-catalog-syncs-prebuilt-policies catalog-syncs-p
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --destination-type: string # Specify type of destination, omit to return all.
+  --destination-type: string@destination-type-completer # Specify type of destination, omit to return all.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -38414,7 +38449,7 @@ export def "accounts-magic-cloud-onramps onramps-create" [
   --manage-vpc-to-hub-attachments: string@bool-completer
   name: string
   --region: string
-  type: string@type-completer-14
+  type: string@type-completer-16
   --vpc: string # format: uuid
 ]: any -> record {
   let input = $in
@@ -40146,7 +40181,7 @@ export def "accounts-magic-sites magic-sites-list-sites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --connectorid: string
+  --connectorid: string # e.g. 023e105f4ecef8ad9ca31a8372d0c353
 ]: nothing -> record<result: table<connector_id: string, description: string, ha_mode: bool, id: string, location: record, name: string, secondary_connector_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -41144,8 +41179,8 @@ export def "accounts-members account-members-list-members" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --order: string@order-completer-9 # e.g. status
-  --status: string@status-completer-8 # e.g. accepted
+  --order: string@order-completer-10 # e.g. status
+  --status: string@status-completer-12 # e.g. accepted
   --page: float # default: 1
   --per-page: float # default: 20
   --direction: string@direction-completer # e.g. desc
@@ -41175,7 +41210,7 @@ export def "accounts-members account-members-add-member" [
   --allow-errors(-e) # Return full response without error handling
   --email: string # The contact email address of the user. (e.g. user@example.com)
   --roles: list # Array of roles associated with this member.
-  --status: string@status-completer-9 # Status of the member invitation. If not provided during creation, defaults to 'pending'. Changing from 'accepted' back to 'pending' will trigger a replacement of the member resource in Terraform.
+  --status: string@status-completer-13 # Status of the member invitation. If not provided during creation, defaults to 'pending'. Changing from 'accepted' back to 'pending' will trigger a replacement of the member resource in Terraform.
   --policies: list # Array of policies associated with this member. — item shape: {access: "allow"|"deny", permission_groups: list, resource_groups: list}
 ]: any -> record<result: record<email: string, id: string, policies: list<record>, roles: list<record>, status: any, user: record<email: string, first_name: string, id: string, last_name: string, two_factor_authentication_enabled: bool>>> {
   let input = $in
@@ -41470,7 +41505,7 @@ export def "accounts-mnm-rules magic-network-monitoring-rules-create-rules" [
   --packet-threshold: float # The number of packets per second for the rule. When this value is exceeded for the set duration, an alert notification is sent. Minimum of 1 and no maximum. (e.g. 10000)
   --prefix-match: string@prefix-match-completer # Prefix match type to be applied for a prefix auto advertisement when using an advanced_ddos rule. (nullable, e.g. exact)
   prefixes: list
-  type: string@type-completer-15 # MNM rule type. (e.g. zscore)
+  type: string@type-completer-17 # MNM rule type. (e.g. zscore)
   --zscore-sensitivity: string@zscore-sensitivity-completer # Level of sensitivity set for zscore rules. (nullable, e.g. high)
   --zscore-target: string@zscore-target-completer # Target of the zscore rule analysis. (nullable, e.g. bits)
 ]: any -> record<result: record<automatic_advertisement: bool, bandwidth_threshold: float, duration: string, id: string, name: string, packet_threshold: float, prefix_match: string, prefixes: list<string>, type: string, zscore_sensitivity: string, zscore_target: string>> {
@@ -41505,7 +41540,7 @@ export def "accounts-mnm-rules magic-network-monitoring-rules-update-rules" [
   --packet-threshold: float # The number of packets per second for the rule. When this value is exceeded for the set duration, an alert notification is sent. Minimum of 1 and no maximum. (e.g. 10000)
   --prefix-match: string@prefix-match-completer # Prefix match type to be applied for a prefix auto advertisement when using an advanced_ddos rule. (nullable, e.g. exact)
   prefixes: list
-  type: string@type-completer-15 # MNM rule type. (e.g. zscore)
+  type: string@type-completer-17 # MNM rule type. (e.g. zscore)
   --zscore-sensitivity: string@zscore-sensitivity-completer # Level of sensitivity set for zscore rules. (nullable, e.g. high)
   --zscore-target: string@zscore-target-completer # Target of the zscore rule analysis. (nullable, e.g. bits)
 ]: any -> record<result: record<automatic_advertisement: bool, bandwidth_threshold: float, duration: string, id: string, name: string, packet_threshold: float, prefix_match: string, prefixes: list<string>, type: string, zscore_sensitivity: string, zscore_target: string>> {
@@ -41590,7 +41625,7 @@ export def "accounts-mnm-rules magic-network-monitoring-rules-update-rule" [
   --packet-threshold: float # The number of packets per second for the rule. When this value is exceeded for the set duration, an alert notification is sent. Minimum of 1 and no maximum. (e.g. 10000)
   --prefix-match: string@prefix-match-completer # Prefix match type to be applied for a prefix auto advertisement when using an advanced_ddos rule. (nullable, e.g. exact)
   prefixes: list
-  type: string@type-completer-15 # MNM rule type. (e.g. zscore)
+  type: string@type-completer-17 # MNM rule type. (e.g. zscore)
   --zscore-sensitivity: string@zscore-sensitivity-completer # Level of sensitivity set for zscore rules. (nullable, e.g. high)
   --zscore-target: string@zscore-target-completer # Target of the zscore rule analysis. (nullable, e.g. bits)
 ]: any -> record<result: record<automatic_advertisement: bool, bandwidth_threshold: float, duration: string, id: string, name: string, packet_threshold: float, prefix_match: string, prefixes: list<string>, type: string, zscore_sensitivity: string, zscore_target: string>> {
@@ -41789,7 +41824,7 @@ export def "accounts-moq-relays-tokens-rotate post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  type: string@type-completer-16 # Which token type to rotate.
+  type: string@type-completer-18 # Which token type to rotate.
 ]: any -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, success: bool, result: record<token: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -42675,7 +42710,7 @@ export def "accounts-pages-projects-source pages-project-connect-project-source"
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   config: record # shape: {deployments_enabled: bool, owner: string, owner_id: string, path_excludes: list, path_includes: list, pr_comments_enabled: bool, preview_branch_excludes: list, preview_branch_includes: list, preview_deployment_setting: "all"|"none"|"custom", production_branch: string, production_deployments_enabled: bool, repo_id: string, repo_name: string}
-  type: string@type-completer-17 # The source control management provider. (e.g. github)
+  type: string@type-completer-19 # The source control management provider. (e.g. github)
 ]: any -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<build_config: record<build_caching: bool, build_command: string, destination_dir: string, root_dir: string, web_analytics_tag: string, web_analytics_token: string>, canonical_deployment: record<aliases: list, build_config: record, created_on: string, deployment_trigger: record, env_vars: record, environment: string, id: string, is_skipped: bool, latest_stage: record, modified_on: string, project_id: string, project_name: string, short_id: string, source: record, stages: list, url: string, uses_functions: bool>, created_on: string, deployment_configs: record<preview: record, production: record>, domains: list<string>, framework: string, framework_version: string, id: string, latest_deployment: record<aliases: list, build_config: record, created_on: string, deployment_trigger: record, env_vars: record, environment: string, id: string, is_skipped: bool, latest_stage: record, modified_on: string, project_id: string, project_name: string, short_id: string, source: record, stages: list, url: string, uses_functions: bool>, name: string, preview_script_name: string, production_branch: string, production_script_name: string, source: record<config: record, type: string>, subdomain: string, uses_functions: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -42940,7 +42975,7 @@ export def "accounts-pcaps magic-pcap-collection-create-pcap-request" [
   --packet-limit: float # The limit of packets contained in a packet capture. (e.g. 10000)
   --system: string@system-completer # The system used to collect packet captures. (e.g. magic-transit)
   --time-limit: float # The packet capture duration in seconds. (e.g. 300)
-  --type: string@type-completer-18 # The type of packet capture. `Simple` captures sampled packets, and `full` captures entire payloads and non-sampled packets. (e.g. simple)
+  --type: string@type-completer-20 # The type of packet capture. `Simple` captures sampled packets, and `full` captures entire payloads and non-sampled packets. (e.g. simple)
   --byte-limit: float # The maximum number of bytes to capture. This field only applies to `full` packet captures. (e.g. 500000)
   --colo-name: string # The name of the data center used for the packet capture. This can be a specific colo (ord02) or a multi-colo name (ORD). This field only applies to `full` packet captures. (e.g. ord02)
   --destination-conf: string # The full URI for the bucket. This field only applies to `full` packet captures. (e.g. s3://pcaps-bucket?region=us-east-1)
@@ -43327,7 +43362,7 @@ export def "accounts-pipelines-sinks idPipelinesV1Sinks-by-account_id-1" [
   --format: any
   name: string # Defines the name of the Sink. (e.g. my_sink)
   --schema: record # shape: {fields?: list, format?: any, inferred?: bool}
-  type: string@type-completer-19 # Specifies the type of sink. (e.g. r2)
+  type: string@type-completer-21 # Specifies the type of sink. (e.g. r2)
 ]: any -> record<result: record<config: any, created_at: string, format: any, id: string, modified_at: string, name: string, schema: record<fields: list, format: record, inferred: bool>, type: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -43401,7 +43436,7 @@ export def "accounts-pipelines-streams idPipelinesV1Streams-by-account_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --pipeline-id: string
+  --pipeline-id: string # e.g. 043e105f4ecef8ad9ca31a8372d0c353
   --name: string # Filters streams by name (case-insensitive substring).
   --page: float # default: 1
   --per-page: float
@@ -43880,7 +43915,7 @@ export def "accounts-queues-consumers queues-create-consumer" [
   --dead-letter-queue: string # e.g. example-queue
   --script-name: string # Name of a Worker (e.g. my-consumer-worker)
   --settings: record # shape: {batch_size?: float, max_concurrency?: float, max_retries?: float, max_wait_time_ms?: float, retry_delay?: float}
-  type: string@type-completer-20
+  type: string@type-completer-22
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -43961,7 +43996,7 @@ export def "accounts-queues-consumers queues-update-consumer" [
   --dead-letter-queue: string # e.g. example-queue
   --script-name: string # Name of a Worker (e.g. my-consumer-worker)
   --settings: record # shape: {batch_size?: float, max_concurrency?: float, max_retries?: float, max_wait_time_ms?: float, retry_delay?: float}
-  type: string@type-completer-20
+  type: string@type-completer-22
 ]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -44521,10 +44556,10 @@ export def "accounts-r2-buckets r2-list-buckets" [
   --name-contains: string # e.g. my-bucket
   --start-after: string # e.g. my-bucket
   --per-page: float # default: 20
-  --order: string@order-completer-10
+  --order: string@order-completer-11
   --direction: string@direction-completer # e.g. desc
   --cursor: string
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
 ]: nothing -> record<result: record<buckets: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -44550,7 +44585,7 @@ export def "accounts-r2-buckets r2-create-bucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
   --locationHint: string@locationHint-completer # Location of the bucket.
   name: string # Name of the bucket. (e.g. example-bucket)
   --storageClass: string@storageClass-completer # Storage class for newly uploaded objects, unless specified otherwise. (default: Standard)
@@ -44582,7 +44617,7 @@ export def "accounts-r2-buckets r2-delete-bucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
 ]: nothing -> record<errors: table<code: int, message: string>, messages: list<string>, result: record, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -44608,7 +44643,7 @@ export def "accounts-r2-buckets r2-get-bucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
 ]: nothing -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<creation_date: string, jurisdiction: string, location: string, name: string, storage_class: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -44634,7 +44669,7 @@ export def "accounts-r2-buckets r2-patch-bucket" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
   --cf-r2-storage-class: string
 ]: nothing -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<creation_date: string, jurisdiction: string, location: string, name: string, storage_class: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -44661,7 +44696,7 @@ export def "accounts-r2-buckets-cors r2-delete-bucket-cors-policy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
 ]: nothing -> record<errors: table<code: int, message: string>, messages: list<string>, result: record, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -44687,7 +44722,7 @@ export def "accounts-r2-buckets-cors r2-get-bucket-cors-policy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
 ]: nothing -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<rules: list<record>>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -44714,7 +44749,7 @@ export def "accounts-r2-buckets-cors r2-put-bucket-cors-policy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
   --rules: list # item shape: {allowed: record, exposeHeaders?: list, id?: string, maxAgeSeconds?: float}
 ]: any -> record<errors: table<code: int, message: string>, messages: list<string>, result: record, success: bool> {
   let input = $in
@@ -44744,7 +44779,7 @@ export def "accounts-r2-buckets-domains-custom r2-list-custom-domains" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
 ]: nothing -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<domains: list<record>>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -44770,7 +44805,7 @@ export def "accounts-r2-buckets-domains-custom r2-add-custom-domain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
   --ciphers: list # An allowlist of ciphers for TLS termination. These ciphers must be in the BoringSSL format.
   domain: string # Name of the custom domain to be added.
   --enabled: string@bool-completer # Whether to enable public bucket access at the custom domain. If undefined, the domain will be enabled.
@@ -44805,7 +44840,7 @@ export def "accounts-r2-buckets-domains-custom r2-delete-custom-domain" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
 ]: nothing -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<domain: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -44832,7 +44867,7 @@ export def "accounts-r2-buckets-domains-custom r2-get-custom-domain-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
 ]: nothing -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<ciphers: list<string>, domain: string, enabled: bool, minTLS: string, status: record<ownership: string, ssl: string>, zoneId: string, zoneName: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -44859,7 +44894,7 @@ export def "accounts-r2-buckets-domains-custom r2-edit-custom-domain-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
   --ciphers: list # An allowlist of ciphers for TLS termination. These ciphers must be in the BoringSSL format.
   --enabled: string@bool-completer # Whether to enable public bucket access at the specified custom domain.
   --minTLS: string@minTLS-completer # Minimum TLS Version the custom domain will accept for incoming connections. If not set, defaults to previous value.
@@ -44891,7 +44926,7 @@ export def "accounts-r2-buckets-domains-managed r2-get-bucket-public-policy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
 ]: nothing -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<bucketId: string, domain: string, enabled: bool>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -44917,7 +44952,7 @@ export def "accounts-r2-buckets-domains-managed r2-put-bucket-public-policy" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
   --enabled: string@bool-completer # Whether to enable public bucket access at the r2.dev domain.
 ]: any -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<bucketId: string, domain: string, enabled: bool>, success: bool> {
   let input = $in
@@ -44947,7 +44982,7 @@ export def "accounts-r2-buckets-lifecycle r2-get-bucket-lifecycle-configuration"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
 ]: nothing -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<rules: list<record>>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -44974,7 +45009,7 @@ export def "accounts-r2-buckets-lifecycle r2-put-bucket-lifecycle-configuration"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
   --rules: list # item shape: {abortMultipartUploadsTransition?: record, conditions: record, deleteObjectsTransition?: record, enabled: bool, id: string, storageClassTransitions?: list}
 ]: any -> record<errors: table<code: int, message: string>, messages: list<string>, result: record, success: bool> {
   let input = $in
@@ -45054,7 +45089,7 @@ export def "accounts-r2-buckets-lock r2-get-bucket-lock-configuration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
 ]: nothing -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<rules: list<record>>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -45081,7 +45116,7 @@ export def "accounts-r2-buckets-lock r2-put-bucket-lock-configuration" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
   --rules: list # item shape: {condition: any, enabled: bool, id: string, prefix?: string}
 ]: any -> record<errors: table<code: int, message: string>, messages: list<string>, result: record, success: bool> {
   let input = $in
@@ -45112,7 +45147,7 @@ export def "accounts-r2-buckets-objects r2-delete-objects" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --prefix: string
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
   --body: record
 ]: any -> record<errors: table<code: int, message: string>, messages: list<string>, result: any, success: bool> {
   let input = $in
@@ -45147,7 +45182,7 @@ export def "accounts-r2-buckets-objects r2-list-objects" [
   --delimiter: string
   --cursor: string
   --start-after: string
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
 ]: nothing -> record<errors: table<code: int, message: string>, messages: list<string>, result: table<custom_metadata: record, etag: string, http_metadata: record, key: string, last_modified: string, size: int, ssec: bool, storage_class: string>, result_info: record<cursor: string, delimited: list<string>, is_truncated: bool, per_page: int>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -45175,7 +45210,7 @@ export def "accounts-r2-buckets-objects r2-delete-object" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
 ]: nothing -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<key: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -45202,7 +45237,7 @@ export def "accounts-r2-buckets-objects r2-get-object" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
   --If-None-Match: string
   --If-Modified-Since: string
 ]: nothing -> any {
@@ -45231,10 +45266,10 @@ export def "accounts-r2-buckets-objects r2-put-object" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
   --Content-Type: string
   --Content-Length: int
-  --cf-r2-storage-class: string # Storage class for this object. Overrides the bucket default.
+  --cf-r2-storage-class: string@cf-r2-storage-class-completer # Storage class for this object. Overrides the bucket default.
   --body: record
 ]: any -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<etag: string, key: string, size: string, storage_class: string, uploaded: string, version: string>, success: bool> {
   let input = $in
@@ -45263,7 +45298,7 @@ export def "accounts-r2-buckets-sippy r2-delete-bucket-sippy-config" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
 ]: nothing -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<enabled: bool>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -45289,7 +45324,7 @@ export def "accounts-r2-buckets-sippy r2-get-bucket-sippy-config" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
 ]: nothing -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<destination: record<accessKeyId: string, account: string, bucket: string, provider: string>, enabled: bool, source: record<bucket: string, bucketUrl: string, provider: string, region: string>>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -45317,7 +45352,7 @@ export def "accounts-r2-buckets-sippy r2-put-bucket-sippy-config" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cf-r2-jurisdiction: string
+  --cf-r2-jurisdiction: string@cf-r2-jurisdiction-completer
   --destination: record # R2 bucket to copy objects to. — shape: {accessKeyId?: string, provider?: "r2", secretAccessKey?: string}
   --body-source: record # AWS S3 bucket to copy objects from. — shape: {accessKeyId?: string, bucket?: string, provider?: "aws", region?: string, secretAccessKey?: string}
 ]: any -> record<errors: table<code: int, message: string>, messages: list<string>, result: record<destination: record<accessKeyId: string, account: string, bucket: string, provider: string>, enabled: bool, source: record<bucket: string, bucketUrl: string, provider: string, region: string>>, success: bool> {
@@ -45560,7 +45595,7 @@ export def "accounts-realtime-kit-livestreams livestreams" [
   --exclude-meetings: string@bool-completer # Exclude the RealtimeKit meetings that are livestreamed. (default: false)
   --per-page: int # Number of results per page.
   --page-no: int # The page number from which you want your page search results to be displayed.
-  --status: string@status-completer-10 # Specifies the status of the operation.
+  --status: string@status-completer-14 # Specifies the status of the operation.
   --start-time: string # Specify the start time range in ISO format to access the live stream. (format: date-time)
   --end-time: string # Specify the end time range in ISO format to access the live stream. (format: date-time)
   --sort-order: string@sort-order-completer-2 # Specifies the sorting order for the results.
@@ -45694,7 +45729,7 @@ export def "accounts-realtime-kit-meetings meetings" [
   --start-time: string # The start time range for which you want to retrieve the meetings. The time must be specified in ISO format. (format: date-time)
   --end-time: string # The end time range for which you want to retrieve the meetings. The time must be specified in ISO format. (format: date-time)
   --search: string # The search query string. You can search using the meeting ID or title.
-  --status: string@status-completer-11 # Filter meetings by status.
+  --status: string@status-completer-15 # Filter meetings by status.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -45793,7 +45828,7 @@ export def "accounts-realtime-kit-meetings meeting-by-account_id-app_id-meeting_
   --record-on-start: string@bool-completer # Specifies if the meeting should start getting recorded as soon as someone joins the meeting. (default: false)
   --recording-config: record # Recording Configurations to be used for this meeting. This level of configs takes higher preference over App level configs on the RealtimeKit developer portal. — shape: {audio_config?: record, file_name_prefix?: string, live_streaming_config?: record, max_seconds?: float, realtimekit_bucket_config?: record, storage_config?: record, video_config?: record}
   --session-keep-alive-time-in-secs: float # Time in seconds, for which a session remains active, after the last participant has left the meeting. (default: 60)
-  --status: string@status-completer-11 # Whether the meeting is `ACTIVE` or `INACTIVE`. Users will not be able to join an `INACTIVE` meeting. (e.g. INACTIVE)
+  --status: string@status-completer-15 # Whether the meeting is `ACTIVE` or `INACTIVE`. Users will not be able to join an `INACTIVE` meeting. (e.g. INACTIVE)
   --summarize-on-end: string@bool-completer # Automatically generate summary of meetings using transcripts. Requires Transcriptions to be enabled, and can be retrieved via Webhooks or summary API. (default: false)
   --title: string # Title of the meeting
   --transcribe-on-end: string@bool-completer # Automatically generate transcripts when the meeting ends. (default: false)
@@ -46520,7 +46555,7 @@ export def "accounts-realtime-kit-recordings recordings" [
   --per-page: float # Number of results per page (allows empty value)
   --expired: string@bool-completer # If passed, only shows expired/non-expired recordings on RealtimeKit's bucket
   --search: string # The search query string. You can search using the meeting ID or title.
-  --sort-by: string@sort-by-completer-5
+  --sort-by: string@sort-by-completer-6
   --sort-order: string@sort-order-completer-1
   --start-time: string # The start time range for which you want to retrieve the meetings. The time must be specified in ISO format. (format: date-time)
   --end-time: string # The end time range for which you want to retrieve the meetings. The time must be specified in ISO format. (format: date-time)
@@ -46699,12 +46734,12 @@ export def "accounts-realtime-kit-sessions GetSessions" [
   --allow-errors(-e) # Return full response without error handling
   --page-no: float # The page number from which you want your page search results to be displayed. (allows empty value)
   --per-page: float # Number of results per page (allows empty value)
-  --sort-by: string@sort-by-completer-6
+  --sort-by: string@sort-by-completer-7
   --sort-order: string@sort-order-completer-1
   --start-time: string # The start time range for which you want to retrieve the meetings. The time must be specified in ISO format. (format: date-time)
   --end-time: string # The end time range for which you want to retrieve the meetings. The time must be specified in ISO format. (format: date-time)
   --participants: string # e.g. 1:10
-  --status: string@status-completer-12
+  --status: string@status-completer-16
   --search: string # Search string that matches sessions based on meeting title, meeting ID, and session ID
   --associated-id: string # ID of the meeting that sessions should be associated with (format: uuid)
 ]: nothing -> any {
@@ -46840,7 +46875,7 @@ export def "accounts-realtime-kit-sessions-participants GetSessionParticipants" 
   --page-no: float # The page number from which you want your page search results to be displayed. (allows empty value)
   --per-page: float # Number of results per page (allows empty value)
   --sort-order: string@sort-order-completer-1
-  --sort-by: string@sort-by-completer-7
+  --sort-by: string@sort-by-completer-8
   --include-peer-events: string@bool-completer # if true, response includes all the peer events of participants. (default: false)
   --view: string@view-completer # In breakout room sessions, the view parameter can be set to `raw` for session specific duration for participants or `consolidated` to accumulate breakout room durations. (default: raw)
 ]: nothing -> any {
@@ -47289,7 +47324,7 @@ export def "accounts-registrar-registrations registrar-domain-registration-list"
   --cursor: string # Opaque token from a previous response's `result_info.cursor`. Pass this value to fetch the next page of results. Omit (or pass an empty string) for the first page.
   --per-page: int # Number of items to return per page. (default: 20)
   --direction: string@direction-completer # Sort direction for results. Defaults to ascending order.  (default: asc)
-  --sort-by: string@sort-by-completer-8 # Column to sort results by. Defaults to registration date (`registry_created_at`) when omitted.  (default: registry_created_at)
+  --sort-by: string@sort-by-completer-9 # Column to sort results by. Defaults to registration date (`registry_created_at`) when omitted.  (default: registry_created_at)
 ]: nothing -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, result: table<auto_renew: bool, created_at: string, domain_name: string, expires_at: string, locked: bool, privacy_mode: string, status: string>, success: bool, result_info: record<count: int, cursor: string, per_page: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -47908,8 +47943,8 @@ export def "accounts-rulesets listAccountRulesets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cursor: string
-  --per-page: string
+  --cursor: string # e.g. dGhpc2lzYW5leGFtcGxlCg
+  --per-page: int # e.g. 3
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -48348,9 +48383,9 @@ export def "accounts-rum-site-info-list web-analytics-list-sites" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --per-page: string
-  --page: string
-  --order-by: string
+  --per-page: float # e.g. 10
+  --page: float # e.g. 1
+  --order-by: string@order-by-completer-3 # e.g. host
 ]: nothing -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, success: bool, result: table<auto_install: bool, created: string, rules: list, ruleset: record, site_tag: string, site_token: string, snippet: string>, result_info: record<count: int, page: int, per_page: int, total_count: int, total_pages: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -49425,7 +49460,7 @@ export def "accounts-secrets-store-stores secrets-store-list" [
   --direction: string@direction-completer # Direction to sort objects (default: desc)
   --page: int # Page number (e.g. 2)
   --per-page: int # Number of objects to return per page (e.g. 20)
-  --order: string@order-completer-11 # Order secrets by values in the given field (default: created)
+  --order: string@order-completer-12 # Order secrets by values in the given field (default: created)
 ]: nothing -> record<result: table<account_id: string, created: string, id: string, modified: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -49555,7 +49590,7 @@ export def "accounts-secrets-store-stores-secrets secrets-store-secrets-list" [
   --page: int # Page number (e.g. 2)
   --per-page: int # Number of objects to return per page (e.g. 20)
   --search: string # Search secrets using a filter string, filtering across name and comment
-  --order: string@order-completer-11 # Order secrets by values in the given field (default: created)
+  --order: string@order-completer-12 # Order secrets by values in the given field (default: created)
   --scopes: list # Only secrets with the given scopes will be returned
 ]: nothing -> record<result: table<comment: string, created: string, id: string, modified: string, name: string, scopes: list, status: string, store_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -49714,23 +49749,23 @@ export def "accounts-security-center-insights get-security-center-insights" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string
-  --issue-class: string
-  --issue-type: string
-  --product: string
-  --severity: string
-  --subject: string
-  --issue-classneq: string
-  --issue-typeneq: string
-  --productneq: string
-  --severityneq: string
-  --subjectneq: string
+  --dismissed: string@bool-completer # e.g. false
+  --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-type: list # e.g. [compliance_violation, email_security]
+  --product: list # e.g. [access, dns]
+  --severity: list # e.g. [low, moderate]
+  --subject: list
+  --issue-classneq: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-typeneq: list # e.g. [compliance_violation, email_security]
+  --productneq: list # e.g. [access, dns]
+  --severityneq: list # e.g. [low, moderate]
+  --subjectneq: list
   --page: string # default: 1
   --per-page: string # default: 25
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "scalar") (serialize-qp "issue_type" $issue_type "scalar") (serialize-qp "product" $product "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "subject" $subject "scalar") (serialize-qp "issue_class~neq" $issue_classneq "scalar") (serialize-qp "issue_type~neq" $issue_typeneq "scalar") (serialize-qp "product~neq" $productneq "scalar") (serialize-qp "severity~neq" $severityneq "scalar") (serialize-qp "subject~neq" $subjectneq "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "multi") (serialize-qp "issue_type" $issue_type "multi") (serialize-qp "product" $product "multi") (serialize-qp "severity" $severity "multi") (serialize-qp "subject" $subject "multi") (serialize-qp "issue_class~neq" $issue_classneq "multi") (serialize-qp "issue_type~neq" $issue_typeneq "multi") (serialize-qp "product~neq" $productneq "multi") (serialize-qp "severity~neq" $severityneq "multi") (serialize-qp "subject~neq" $subjectneq "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/accounts/($account_id)/security-center/insights" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -49780,21 +49815,21 @@ export def "accounts-security-center-insights-class get-security-center-insight-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string
-  --issue-class: string
-  --issue-type: string
-  --product: string
-  --severity: string
-  --subject: string
-  --issue-classneq: string
-  --issue-typeneq: string
-  --productneq: string
-  --severityneq: string
-  --subjectneq: string
+  --dismissed: string@bool-completer # e.g. false
+  --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-type: list # e.g. [compliance_violation, email_security]
+  --product: list # e.g. [access, dns]
+  --severity: list # e.g. [low, moderate]
+  --subject: list
+  --issue-classneq: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-typeneq: list # e.g. [compliance_violation, email_security]
+  --productneq: list # e.g. [access, dns]
+  --severityneq: list # e.g. [low, moderate]
+  --subjectneq: list
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "scalar") (serialize-qp "issue_type" $issue_type "scalar") (serialize-qp "product" $product "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "subject" $subject "scalar") (serialize-qp "issue_class~neq" $issue_classneq "scalar") (serialize-qp "issue_type~neq" $issue_typeneq "scalar") (serialize-qp "product~neq" $productneq "scalar") (serialize-qp "severity~neq" $severityneq "scalar") (serialize-qp "subject~neq" $subjectneq "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "multi") (serialize-qp "issue_type" $issue_type "multi") (serialize-qp "product" $product "multi") (serialize-qp "severity" $severity "multi") (serialize-qp "subject" $subject "multi") (serialize-qp "issue_class~neq" $issue_classneq "multi") (serialize-qp "issue_type~neq" $issue_typeneq "multi") (serialize-qp "product~neq" $productneq "multi") (serialize-qp "severity~neq" $severityneq "multi") (serialize-qp "subject~neq" $subjectneq "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/accounts/($account_id)/security-center/insights/class" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -49863,21 +49898,21 @@ export def "accounts-security-center-insights-severity get-security-center-insig
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string
-  --issue-class: string
-  --issue-type: string
-  --product: string
-  --severity: string
-  --subject: string
-  --issue-classneq: string
-  --issue-typeneq: string
-  --productneq: string
-  --severityneq: string
-  --subjectneq: string
+  --dismissed: string@bool-completer # e.g. false
+  --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-type: list # e.g. [compliance_violation, email_security]
+  --product: list # e.g. [access, dns]
+  --severity: list # e.g. [low, moderate]
+  --subject: list
+  --issue-classneq: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-typeneq: list # e.g. [compliance_violation, email_security]
+  --productneq: list # e.g. [access, dns]
+  --severityneq: list # e.g. [low, moderate]
+  --subjectneq: list
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "scalar") (serialize-qp "issue_type" $issue_type "scalar") (serialize-qp "product" $product "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "subject" $subject "scalar") (serialize-qp "issue_class~neq" $issue_classneq "scalar") (serialize-qp "issue_type~neq" $issue_typeneq "scalar") (serialize-qp "product~neq" $productneq "scalar") (serialize-qp "severity~neq" $severityneq "scalar") (serialize-qp "subject~neq" $subjectneq "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "multi") (serialize-qp "issue_type" $issue_type "multi") (serialize-qp "product" $product "multi") (serialize-qp "severity" $severity "multi") (serialize-qp "subject" $subject "multi") (serialize-qp "issue_class~neq" $issue_classneq "multi") (serialize-qp "issue_type~neq" $issue_typeneq "multi") (serialize-qp "product~neq" $productneq "multi") (serialize-qp "severity~neq" $severityneq "multi") (serialize-qp "subject~neq" $subjectneq "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/accounts/($account_id)/security-center/insights/severity" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -49897,21 +49932,21 @@ export def "accounts-security-center-insights-type get-security-center-insight-c
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string
-  --issue-class: string
-  --issue-type: string
-  --product: string
-  --severity: string
-  --subject: string
-  --issue-classneq: string
-  --issue-typeneq: string
-  --productneq: string
-  --severityneq: string
-  --subjectneq: string
+  --dismissed: string@bool-completer # e.g. false
+  --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-type: list # e.g. [compliance_violation, email_security]
+  --product: list # e.g. [access, dns]
+  --severity: list # e.g. [low, moderate]
+  --subject: list
+  --issue-classneq: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-typeneq: list # e.g. [compliance_violation, email_security]
+  --productneq: list # e.g. [access, dns]
+  --severityneq: list # e.g. [low, moderate]
+  --subjectneq: list
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "scalar") (serialize-qp "issue_type" $issue_type "scalar") (serialize-qp "product" $product "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "subject" $subject "scalar") (serialize-qp "issue_class~neq" $issue_classneq "scalar") (serialize-qp "issue_type~neq" $issue_typeneq "scalar") (serialize-qp "product~neq" $productneq "scalar") (serialize-qp "severity~neq" $severityneq "scalar") (serialize-qp "subject~neq" $subjectneq "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "multi") (serialize-qp "issue_type" $issue_type "multi") (serialize-qp "product" $product "multi") (serialize-qp "severity" $severity "multi") (serialize-qp "subject" $subject "multi") (serialize-qp "issue_class~neq" $issue_classneq "multi") (serialize-qp "issue_type~neq" $issue_typeneq "multi") (serialize-qp "product~neq" $productneq "multi") (serialize-qp "severity~neq" $severityneq "multi") (serialize-qp "subject~neq" $subjectneq "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/accounts/($account_id)/security-center/insights/type" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -50040,11 +50075,11 @@ export def "accounts-shares shares-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string@status-completer-13 # Filter shares by status.
+  --status: string@status-completer-17 # Filter shares by status.
   --kind: string@kind-completer-7 # Filter shares by kind.
   --target-type: string@target-type-completer # Filter shares by target_type.
   --resource-types: list # Filter share resources by resource_types.
-  --order: string@order-completer-12 # Order shares by values in the given field. (default: created)
+  --order: string@order-completer-13 # Order shares by values in the given field. (default: created)
   --direction: string@direction-completer # Direction to sort objects. (default: asc)
   --page: int # Page number. Defaults to `1` when `per_page` is supplied without `page`. May be omitted entirely along with `per_page` to receive a non-paginated response. (default: 1, e.g. 2)
   --per-page: int # Number of objects to return per page. Defaults to `20` when `page` is supplied without `per_page`. May be omitted entirely along with `page` to receive a non-paginated response. (default: 20, e.g. 20)
@@ -50314,7 +50349,7 @@ export def "accounts-shares-resources share-resources-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string@status-completer-13 # Filter share resources by status.
+  --status: string@status-completer-17 # Filter share resources by status.
   --resource-type: string@resource-type-completer # Filter share resources by resource_type.
   --page: int # Page number. Defaults to `1` when `per_page` is supplied without `page`. May be omitted entirely along with `per_page` to receive a non-paginated response. (default: 1, e.g. 2)
   --per-page: int # Number of objects to return per page. Defaults to `20` when `page` is supplied without `per_page`. May be omitted entirely along with `page` to receive a non-paginated response. (default: 20, e.g. 20)
@@ -50901,7 +50936,7 @@ export def "accounts-storage-kv-namespaces workers-kv-namespace-list-namespaces"
   --allow-errors(-e) # Return full response without error handling
   --page: float # default: 1
   --per-page: float # default: 20
-  --order: string@order-completer-13 # e.g. id
+  --order: string@order-completer-14 # e.g. id
   --direction: string@direction-completer # e.g. asc
 ]: nothing -> record<result: table<id: string, supports_url_encoding: bool, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -51110,7 +51145,7 @@ export def "accounts-storage-kv-namespaces-bulk-get workers-kv-namespace-get-mul
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   keys: list # Array of keys to retrieve (maximum of 100).
-  --type: string@type-completer-21 # Whether to parse JSON values in the response. (default: text)
+  --type: string@type-completer-23 # Whether to parse JSON values in the response. (default: text)
   --withMetadata: string@bool-completer # Whether to include metadata in the response. (default: false)
 ]: any -> record<result: any> {
   let input = $in
@@ -51241,8 +51276,8 @@ export def "accounts-storage-kv-namespaces-values workers-kv-namespace-write-key
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --expiration: string
-  --expiration-ttl: string
+  --expiration: float # e.g. 1578435000
+  --expiration-ttl: float # e.g. 300
   --metadata: any
   value: any # A byte sequence to be stored, up to 25 MiB in length. (e.g. Some Value)
 ]: any -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, success: bool, result: record> {
@@ -51271,15 +51306,15 @@ export def "accounts-stream stream-videos-list-videos" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string
-  --creator: string
-  --type: string
-  --asc: string
-  --video-name: string
-  --search: string
-  --start: string
-  --end: string
-  --include-counts: string
+  --status: string@status-completer-18 # e.g. inprogress
+  --creator: string # e.g. creator-id_abcde12345
+  --type: string # e.g. live
+  --asc: string@bool-completer # default: false, e.g. true
+  --video-name: string # e.g. puppy.mp4
+  --search: string # e.g. puppy.mp4
+  --start: string # format: date-time, e.g. 2014-01-02T02:20:00Z
+  --end: string # format: date-time, e.g. 2014-01-02T02:20:00Z
+  --include-counts: string@bool-completer # default: false, e.g. true
   --id: string # Filter by video ID(s). Can be a single ID or a comma-separated list of IDs. (e.g. ea95132c15732412d22c1476fa83f27a)
   --name: string # Filter by video name/UID(s). Can be a single name or a comma-separated list.
   --live-input-id: string # Filter by live input ID to find videos associated with a specific live stream.
@@ -51309,11 +51344,11 @@ export def "accounts-stream stream-videos-initiate-video-uploads-using-tus" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --direct-user: string
-  --Tus-Resumable: string
-  --Upload-Creator: string
-  --Upload-Length: string
-  --Upload-Metadata: string
+  --direct-user: string@bool-completer # default: false, e.g. true
+  --Tus-Resumable: string@Tus-Resumable-completer # e.g. 1.0.0
+  --Upload-Creator: string # e.g. creator-id_abcde12345
+  --Upload-Length: int
+  --Upload-Metadata: string # e.g. name aGVsbG8gd29ybGQ=, requiresignedurls, allowedorigins ZXhhbXBsZS5jb20sdGVzdC5jb20=
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -51379,7 +51414,7 @@ export def "accounts-stream-copy stream-videos-upload-videos-from-a-url" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Upload-Creator: string
+  --Upload-Creator: string # e.g. creator-id_abcde12345
   --allowedOrigins: list # Lists the origins allowed to display the video. Enter allowed origin domains in an array and use `*` for wildcard subdomains. Empty arrays allow the video to be viewed on any origin. (e.g. [example.com])
   --creator: string # A user-defined identifier for the media creator. (e.g. creator-id_abcde12345)
   --input: string # A video's URL. The server must be publicly routable and support `HTTP HEAD` requests and `HTTP GET` range requests. The server should respond to `HTTP HEAD` requests with a `content-range` header that includes the size of the file. This is the preferred field over `url`. (format: uri, e.g. https://example.com/myvideo.mp4)
@@ -51418,7 +51453,7 @@ export def "accounts-stream-direct-upload stream-videos-upload-videos-via-direct
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Upload-Creator: string
+  --Upload-Creator: string # e.g. creator-id_abcde12345
   --allowedOrigins: list # Lists the origins allowed to display the video. Enter allowed origin domains in an array and use `*` for wildcard subdomains. Empty arrays allow the video to be viewed on any origin. (e.g. [example.com])
   --creator: string # A user-defined identifier for the media creator. (e.g. creator-id_abcde12345)
   --expiry: string # The date and time after upload when videos will not be accepted. (format: date-time, default: Now + 30 minutes, e.g. 2021-01-02T02:20:00Z)
@@ -51528,7 +51563,7 @@ export def "accounts-stream-live-inputs stream-live-inputs-list-live-inputs" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --include-counts: string
+  --include-counts: string@bool-completer # default: false, e.g. true
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record<liveInputs: list<record>, range: int, total: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -51817,7 +51852,7 @@ export def "accounts-stream-storage-usage stream-videos-storage-usage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --creator: string
+  --creator: string # e.g. creator-id_abcde12345
 ]: nothing -> record<result: record<creator: string, totalStorageMinutes: float, totalStorageMinutesLimit: int, videoCount: int>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -52666,9 +52701,9 @@ export def "accounts-tags tags-get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --resource-id: string # The ID of the resource to retrieve tags for.
-  --resource-type: string # The type of the resource.
-  --worker-id: string # Worker identifier. Required for worker_version resources.
+  --resource-id: string # The ID of the resource to retrieve tags for. (e.g. 023e105f4ecef8ad9ca31a8372d0c353)
+  --resource-type: string@resource-type-completer-2 # The type of the resource. (e.g. worker)
+  --worker-id: string # Worker identifier. Required for worker_version resources. (e.g. 3f72a691-44b3-4c11-8642-c18a88ddaa5e)
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -52772,7 +52807,7 @@ export def "accounts-tags-values tags-list-values" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --type: string@type-completer-22 # Filter by resource type. (e.g. zone)
+  --type: string@type-completer-24 # Filter by resource type. (e.g. zone)
   --cursor: string # Cursor for pagination. (e.g. eyJhY2NvdW50X2lkIjoxMjM0NTY3ODkwfQ)
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: list<string>, result_info: record<count: int, cursor: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -52797,21 +52832,21 @@ export def "accounts-teamnet-routes tunnel-route-list-tunnel-routes" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --comment: string
+  --comment: string # default: , e.g. Example comment for this route.
   --is-deleted: string@bool-completer
   --network-subset: string
   --network-superset: string
-  --existed-at: string
-  --tunnel-id: string
-  --route-id: string
-  --tun-types: string
-  --virtual-network-id: string
-  --per-page: string
-  --page: string
+  --existed-at: string # format: url-encoded-date-time, e.g. 2019-10-12T07%3A20%3A50.52Z
+  --tunnel-id: string # format: uuid, e.g. f70ff985-a4ef-4643-bbbc-4a0ed4fc8415
+  --route-id: string # e.g. f70ff985-a4ef-4643-bbbc-4a0ed4fc8415
+  --tun-types: list # e.g. cfd_tunnel,warp_connector
+  --virtual-network-id: string # format: uuid, e.g. f70ff985-a4ef-4643-bbbc-4a0ed4fc8415
+  --per-page: float
+  --page: float # default: 1
 ]: nothing -> record<result: table<comment: string, created_at: string, deleted_at: string, id: string, network: string, tun_type: string, tunnel_id: string, tunnel_name: string, virtual_network_id: string, virtual_network_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "comment" $comment "scalar") (serialize-qp "is_deleted" $is_deleted "scalar") (serialize-qp "network_subset" $network_subset "scalar") (serialize-qp "network_superset" $network_superset "scalar") (serialize-qp "existed_at" $existed_at "scalar") (serialize-qp "tunnel_id" $tunnel_id "scalar") (serialize-qp "route_id" $route_id "scalar") (serialize-qp "tun_types" $tun_types "scalar") (serialize-qp "virtual_network_id" $virtual_network_id "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "comment" $comment "scalar") (serialize-qp "is_deleted" $is_deleted "scalar") (serialize-qp "network_subset" $network_subset "scalar") (serialize-qp "network_superset" $network_superset "scalar") (serialize-qp "existed_at" $existed_at "scalar") (serialize-qp "tunnel_id" $tunnel_id "scalar") (serialize-qp "route_id" $route_id "scalar") (serialize-qp "tun_types" $tun_types "multi") (serialize-qp "virtual_network_id" $virtual_network_id "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/accounts/($account_id)/teamnet/routes" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -52860,7 +52895,7 @@ export def "accounts-teamnet-routes-ip tunnel-route-get-tunnel-route-by-ip" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --virtual-network-id: string
+  --virtual-network-id: string # format: uuid, e.g. f70ff985-a4ef-4643-bbbc-4a0ed4fc8415
   --default-virtual-network-fallback: string@bool-completer # When the virtual_network_id parameter is not provided the request filter will default search routes that are in the default virtual network for the account. If this parameter is set to false, the search will include routes that do not have a virtual network. (default: true)
 ]: nothing -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, result: record<comment: string, created_at: string, deleted_at: string, id: string, network: string, tun_type: string, tunnel_id: string, tunnel_name: string, virtual_network_id: string, virtual_network_name: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -52888,9 +52923,9 @@ export def "accounts-teamnet-routes-network tunnel-route-delete-a-tunnel-route-w
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --virtual-network-id: string
-  --tun-type: string
-  --tunnel-id: string
+  --virtual-network-id: string # format: uuid, e.g. f70ff985-a4ef-4643-bbbc-4a0ed4fc8415
+  --tun-type: string@tun-type-completer # e.g. cfd_tunnel
+  --tunnel-id: string # format: uuid, e.g. f70ff985-a4ef-4643-bbbc-4a0ed4fc8415
 ]: nothing -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, result: record<comment: string, created_at: string, deleted_at: string, id: string, network: string, tunnel_id: string, virtual_network_id: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -53045,8 +53080,8 @@ export def "accounts-teamnet-virtual-networks tunnel-virtual-network-list-virtua
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --id: string
-  --name: string
+  --id: string # format: uuid, e.g. f70ff985-a4ef-4643-bbbc-4a0ed4fc8415
+  --name: string # e.g. us-east-1-vpc
   --is-default: string@bool-completer # DEPRECATED
   --is-default-network: string@bool-completer
   --is-deleted: string@bool-completer
@@ -53349,7 +53384,7 @@ export def "accounts-tokens account-api-tokens-update-token" [
   name: string # Token name. (e.g. readonly token)
   --not-before: string # The time before which the token MUST NOT be accepted for processing. (format: date-time, e.g. 2018-07-01T05:20:00Z)
   policies: list # List of access policies assigned to the token. — item shape: {effect: "allow"|"deny", permission_groups: list, resources: any}
-  --status: string@status-completer-14 # Status of the token. (e.g. active)
+  --status: string@status-completer-19 # Status of the token. (e.g. active)
 ]: any -> record<result: record<condition: record<request_ip: record>, expires_on: string, id: string, issued_on: string, last_used_on: string, modified_on: string, name: string, not_before: string, policies: list<record>, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -53403,20 +53438,20 @@ export def "accounts-tunnels cloudflare-tunnel-list-all-tunnels" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # e.g. blog
   --is-deleted: string@bool-completer # e.g. true
-  --existed-at: string
-  --uuid: string
+  --existed-at: string # format: url-encoded-date-time, e.g. 2019-10-12T07%3A20%3A50.52Z
+  --uuid: string # format: uuid, e.g. f70ff985-a4ef-4643-bbbc-4a0ed4fc8415
   --was-active-at: string # format: date-time, e.g. 2009-11-10T23:00:00Z
   --was-inactive-at: string # format: date-time, e.g. 2009-11-10T23:00:00Z
   --include-prefix: string # e.g. vpc1-
   --exclude-prefix: string # e.g. vpc1-
-  --tun-types: string
-  --status: string
-  --per-page: string
-  --page: string
+  --tun-types: list # e.g. cfd_tunnel,warp_connector
+  --status: string@status-completer-6 # e.g. healthy
+  --per-page: float
+  --page: float # default: 1
 ]: nothing -> record<result: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "is_deleted" $is_deleted "scalar") (serialize-qp "existed_at" $existed_at "scalar") (serialize-qp "uuid" $uuid "scalar") (serialize-qp "was_active_at" $was_active_at "scalar") (serialize-qp "was_inactive_at" $was_inactive_at "scalar") (serialize-qp "include_prefix" $include_prefix "scalar") (serialize-qp "exclude_prefix" $exclude_prefix "scalar") (serialize-qp "tun_types" $tun_types "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "is_deleted" $is_deleted "scalar") (serialize-qp "existed_at" $existed_at "scalar") (serialize-qp "uuid" $uuid "scalar") (serialize-qp "was_active_at" $was_active_at "scalar") (serialize-qp "was_inactive_at" $was_inactive_at "scalar") (serialize-qp "include_prefix" $include_prefix "scalar") (serialize-qp "exclude_prefix" $exclude_prefix "scalar") (serialize-qp "tun_types" $tun_types "multi") (serialize-qp "status" $status "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/accounts/($account_id)/tunnels" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -55062,15 +55097,15 @@ export def "accounts-warp-connector cloudflare-tunnel-list-warp-connector-tunnel
   --allow-errors(-e) # Return full response without error handling
   --name: string # e.g. blog
   --is-deleted: string@bool-completer # e.g. true
-  --existed-at: string
-  --uuid: string
+  --existed-at: string # format: url-encoded-date-time, e.g. 2019-10-12T07%3A20%3A50.52Z
+  --uuid: string # format: uuid, e.g. f70ff985-a4ef-4643-bbbc-4a0ed4fc8415
   --was-active-at: string # format: date-time, e.g. 2009-11-10T23:00:00Z
   --was-inactive-at: string # format: date-time, e.g. 2009-11-10T23:00:00Z
   --include-prefix: string # e.g. vpc1-
   --exclude-prefix: string # e.g. vpc1-
-  --status: string
-  --per-page: string
-  --page: string
+  --status: string@status-completer-6 # e.g. healthy
+  --per-page: float
+  --page: float # default: 1
 ]: nothing -> record<result: table<account_tag: string, connections: list, conns_active_at: string, conns_inactive_at: string, created_at: string, deleted_at: string, id: string, metadata: record, name: string, status: string, tun_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -55848,7 +55883,7 @@ export def "accounts-workers-dispatch-namespaces-scripts-secrets namespace-worke
   --allow-errors(-e) # Return full response without error handling
   --name: string # A JavaScript variable name for the binding. (e.g. myBinding)
   --text: string # The secret value to use. (e.g. My secret.)
-  type: string@type-completer-23 # The kind of resource that the binding provides.
+  type: string@type-completer-25 # The kind of resource that the binding provides.
   --algorithm: record # Algorithm-specific key parameters. [Learn more](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/importKey#algorithm).
   --format: string@format-completer-4 # Data format of the key. [Learn more](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/importKey#format). (e.g. raw)
   --key-base64: string # Base64-encoded key data. Required if `format` is "raw", "pkcs8", or "spki".
@@ -55909,7 +55944,7 @@ export def "accounts-workers-dispatch-namespaces-scripts-secrets namespace-worke
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --url-encoded: string
+  --url-encoded: string@bool-completer # e.g. true
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -55936,7 +55971,7 @@ export def "accounts-workers-dispatch-namespaces-scripts-secrets namespace-worke
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --url-encoded: string
+  --url-encoded: string@bool-completer # e.g. true
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -56712,7 +56747,7 @@ export def "accounts-workers-observability-telemetry-values telemetryvalueslist"
   --limit: float # default: 50
   --needle: record # Full-text search expression to match events containing the specified text or pattern. — shape: {isRegex?: bool, matchCase?: bool, value: any}
   timeframe: record # shape: {from: float, to: float}
-  type: string@type-completer-24
+  type: string@type-completer-26
 ]: any -> record<errors: table<message: string>, messages: table<message: string>, result: table<dataset: string, key: string, type: string, value: any>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -56811,7 +56846,7 @@ export def "accounts-workers-scripts-search worker-script-search-workers" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # e.g. my-worker
   --id: string # e.g. bdf3567828824b74aadd550004cf4913
-  --order-by: string@order-by-completer-3 # default: name, e.g. created_on
+  --order-by: string@order-by-completer-4 # default: name, e.g. created_on
   --page: int # Current page. (default: 1)
   --per-page: int # Items per page. (default: 10)
 ]: nothing -> record<result: table<created_on: string, environment_is_default: bool, environment_name: string, id: string, modified_on: string, script_name: string, service_name: string>> {
@@ -57237,7 +57272,7 @@ export def "accounts-workers-scripts-secrets worker-put-script-secret" [
   --allow-errors(-e) # Return full response without error handling
   --name: string # A JavaScript variable name for the binding. (e.g. myBinding)
   --text: string # The secret value to use. (e.g. My secret.)
-  type: string@type-completer-23 # The kind of resource that the binding provides.
+  type: string@type-completer-25 # The kind of resource that the binding provides.
   --algorithm: record # Algorithm-specific key parameters. [Learn more](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/importKey#algorithm).
   --format: string@format-completer-4 # Data format of the key. [Learn more](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/importKey#format). (e.g. raw)
   --key-base64: string # Base64-encoded key data. Required if `format` is "raw", "pkcs8", or "spki".
@@ -57296,7 +57331,7 @@ export def "accounts-workers-scripts-secrets worker-delete-script-secret" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --url-encoded: string
+  --url-encoded: string@bool-completer # e.g. true
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -57322,7 +57357,7 @@ export def "accounts-workers-scripts-secrets worker-get-script-secret" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --url-encoded: string
+  --url-encoded: string@bool-completer # e.g. true
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -57868,7 +57903,7 @@ export def "accounts-workers-workers listWorkers" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Current page. (default: 1)
   --per-page: int # Items per-page. (default: 10)
-  --order-by: string@order-by-completer-4 # Property to sort results by. (default: deployed_on)
+  --order-by: string@order-by-completer-5 # Property to sort results by. (default: deployed_on)
   --order: string@order-completer-1 # Sort direction. (default: desc)
 ]: nothing -> record<result: table<created_on: string, deployed_on: string, id: string, logpush: bool, name: string, observability: record, references: record, subdomain: record, tags: list, tail_consumers: list, updated_on: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -58278,7 +58313,7 @@ export def "accounts-workflows-instances wor-list-workflow-instances" [
   --per-page: float # default: 50
   --cursor: string # Opaque token for cursor-based pagination. Mutually exclusive with `page`.
   --direction: string@direction-completer # Defines the direction for cursor-based pagination.
-  --status: string@status-completer-15
+  --status: string@status-completer-20
   --date-start: string # Accepts ISO 8601 with no timezone offsets and in UTC. (format: date-time)
   --date-end: string # Accepts ISO 8601 with no timezone offsets and in UTC. (format: date-time)
 ]: nothing -> record<errors: table<code: float, message: string>, messages: table<code: float, message: string>, result: table<created_on: string, ended_on: string, id: string, modified_on: string, started_on: string, status: string, trigger_source: string, version_id: string, workflow_id: string>, result_info: record<count: float, cursor: string, page: float, per_page: float, total_count: float, total_pages: float>, success: bool> {
@@ -58467,7 +58502,7 @@ export def "accounts-workflows-instances-status wor-change-status-workflow-insta
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string@status-completer-16
+  --status: string@status-completer-21
   --rollback: string@bool-completer # Run rollback before terminating.
   --body-from: record # Step to restart from. — shape: {count?: int, name: string, type?: "do"|"sleep"|"waitForEvent"}
 ]: any -> record<errors: table<code: float, message: string>, messages: table<code: float, message: string>, result: record<status: string, timestamp: string>, result_info: record<count: float, cursor: string, page: float, per_page: float, total_count: float, total_pages: float>, success: bool> {
@@ -58499,7 +58534,7 @@ export def "accounts-workflows-instances-step wor-get-workflow-instance-step" [
   --allow-errors(-e) # Return full response without error handling
   --accept: string@accept-completer-11 # Response content type
   --name: string # Exact step name from the instance logs response, including the generated counter suffix.
-  --type: string@type-completer-25 # Step type to disambiguate step.do and waitForEvent entries that share the same name.
+  --type: string@type-completer-27 # Step type to disambiguate step.do and waitForEvent entries that share the same name.
   --attempt: int # Specific attempt number to retrieve output or error for.
 ]: nothing -> record<errors: table<code: float, message: string>, messages: table<code: float, message: string>, result: record<error: record<message: string, name: string>, output: record, status: string>, result_info: record<count: float, cursor: string, page: float, per_page: float, total_count: float, total_pages: float>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -58671,14 +58706,14 @@ export def "accounts-zerotrust-routes-hostname zero-trust-networks-route-hostnam
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --id: string
-  --hostname: string # If set, only list hostname routes that contain a substring of the given value, the filter is case-insensitive.
-  --tunnel-id: string # If set, only list hostname routes that point to a specific tunnel.
-  --comment: string
-  --existed-at: string
+  --id: string # format: uuid, e.g. f70ff985-a4ef-4643-bbbc-4a0ed4fc8415
+  --hostname: string # If set, only list hostname routes that contain a substring of the given value, the filter is case-insensitive. (e.g. office-1.local)
+  --tunnel-id: string # If set, only list hostname routes that point to a specific tunnel. (format: uuid, e.g. f70ff985-a4ef-4643-bbbc-4a0ed4fc8415)
+  --comment: string # e.g. example%20comment
+  --existed-at: string # format: url-encoded-date-time, e.g. 2019-10-12T07%3A20%3A50.52Z
   --is-deleted: string@bool-completer # default: false, e.g. true
-  --per-page: string
-  --page: string
+  --per-page: float
+  --page: float # default: 1
 ]: nothing -> record<result: table<comment: string, created_at: string, deleted_at: string, hostname: string, id: string, tun_type: record, tunnel_id: string, tunnel_name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -58805,17 +58840,17 @@ export def "accounts-zerotrust-subnets zero-trust-networks-subnets-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --name: string # If set, only list subnets with the given name
-  --comment: string
+  --name: string # If set, only list subnets with the given name (e.g. IPv4%20Cloudflare%20Source%20IPs)
+  --comment: string # e.g. example%20comment
   --network: string
-  --existed-at: string
-  --address-family: string # If set, only include subnets in the given address family - `v4` or `v6`
+  --existed-at: string # format: url-encoded-date-time, e.g. 2019-10-12T07%3A20%3A50.52Z
+  --address-family: string@address-family-completer # If set, only include subnets in the given address family - `v4` or `v6` (e.g. v4)
   --is-default-network: string@bool-completer
   --is-deleted: string@bool-completer
   --sort-order: string@sort-order-completer
   --subnet-types: string@subnet-types-completer # e.g. cloudflare_source,warp
-  --per-page: string
-  --page: string
+  --per-page: float
+  --page: float # default: 1
 ]: nothing -> record<result: table<comment: string, created_at: string, deleted_at: string, id: string, is_default_network: bool, name: string, network: string, subnet_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -59236,7 +59271,7 @@ export def "certificates origin-ca-list-certificates" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --zone-id: string
+  --zone-id: string # e.g. 023e105f4ecef8ad9ca31a8372d0c353
   --page: float # default: 1
   --per-page: float # default: 20
   --limit: int # e.g. 10
@@ -59401,13 +59436,13 @@ export def "memberships user-s-account-memberships-list-memberships" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --accountname: string
+  --accountname: string # e.g. Demo Account
   --page: float # default: 1
   --per-page: float # default: 20
-  --order: string@order-completer-14 # e.g. status
+  --order: string@order-completer-15 # e.g. status
   --direction: string@direction-completer # e.g. desc
-  --name: string
-  --status: string@status-completer-8 # e.g. accepted
+  --name: string # e.g. Demo Account
+  --status: string@status-completer-12 # e.g. accepted
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -59478,7 +59513,7 @@ export def "memberships user-s-account-memberships-update-membership" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  status: any@status-completer-17 # Whether to accept or reject this account invitation. (e.g. accepted)
+  status: any@status-completer-22 # Whether to accept or reject this account invitation. (e.g. accepted)
 ]: any -> record<result: record<account: record<created_on: string, id: string, managed_by: record, name: string, settings: record, type: any>, api_access_enabled: bool, id: string, permissions: record<analytics: record, billing: record, cache_purge: record, dns: record, dns_records: record, lb: record, logs: record, organization: record, ssl: record, waf: record, zone_settings: record, zones: record>, policies: list<record>, roles: list<string>, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -59675,7 +59710,7 @@ export def "organizations-accounts get" [
   --namestartsWith: string # (case-insensitive) Filter the list of accounts to where the name starts with a particular string.
   --nameendsWith: string # (case-insensitive) Filter the list of accounts to where the name ends with a particular string.
   --namecontains: string # (case-insensitive) Filter the list of accounts to where the name contains a particular string.
-  --order-by: string@order-by-completer-5 # Field to order results by. Currently supported values: `account_name`. When not specified, results are ordered by internal account ID.
+  --order-by: string@order-by-completer-6 # Field to order results by. Currently supported values: `account_name`. When not specified, results are ordered by internal account ID.
   --direction: string@direction-completer # Sort direction for the order_by field. Valid values: `asc`, `desc`. Defaults to `asc` when order_by is specified.
   --page-token: string # An opaque token returned from the last list response that when provided will retrieve the next page.  Parameters used to filter the retrieved list must remain in subsequent requests with a page token.
   --page-size: int # The amount of items to return. Defaults to 10.
@@ -59978,11 +60013,11 @@ export def "organizations-shares organization-shares-list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string@status-completer-13 # Filter shares by status.
+  --status: string@status-completer-17 # Filter shares by status.
   --kind: string@kind-completer-7 # Filter shares by kind.
   --target-type: string@target-type-completer # Filter shares by target_type.
   --resource-types: list # Filter share resources by resource_types.
-  --order: string@order-completer-12 # Order shares by values in the given field. (default: created)
+  --order: string@order-completer-13 # Order shares by values in the given field. (default: created)
   --direction: string@direction-completer # Direction to sort objects. (default: asc)
   --page: int # Page number. Defaults to `1` when `per_page` is supplied without `page`. May be omitted entirely along with `per_page` to receive a non-paginated response. (default: 1, e.g. 2)
   --per-page: int # Number of objects to return per page. Defaults to `20` when `page` is supplied without `per_page`. May be omitted entirely along with `page` to receive a non-paginated response. (default: 20, e.g. 20)
@@ -69293,7 +69328,7 @@ export def "radar-traffic-anomalies radar-get-traffic-anomalies" [
   --dateRange: string # Filters results by date range. (e.g. 7d)
   --dateStart: string # Start of the date range (inclusive). (format: date-time, e.g. 2023-09-01T11:41:33.782Z)
   --dateEnd: string # End of the date range (inclusive). (format: date-time, e.g. 2023-09-01T11:41:33.782Z)
-  --status: string@status-completer-18
+  --status: string@status-completer-23
   --type: list # Filters results by entity type (LOCATION, AS, or ORIGIN). (e.g. LOCATION)
   --asn: int # Filters results by Autonomous System. Specify a single Autonomous System Number (ASN) as integer. (e.g. 174)
   --location: string # Filters results by location. Specify an alpha-2 location code. (e.g. US)
@@ -69325,7 +69360,7 @@ export def "radar-traffic-anomalies-locations radar-get-traffic-anomalies-top" [
   --dateRange: string # Filters results by date range. (e.g. 7d)
   --dateStart: string # Start of the date range (inclusive). (format: date-time, e.g. 2023-09-01T11:41:33.782Z)
   --dateEnd: string # End of the date range (inclusive). (format: date-time, e.g. 2023-09-01T11:41:33.782Z)
-  --status: string@status-completer-18
+  --status: string@status-completer-23
   --format: string@format-completer-5 # Format in which results will be returned. (e.g. json)
 ]: nothing -> record<result: record<trafficAnomalies: list<record>>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -69459,7 +69494,7 @@ export def "system-accounts-stores secrets-store-system-list" [
   --direction: string@direction-completer # Direction to sort objects (default: desc)
   --page: int # Page number (e.g. 2)
   --per-page: int # Number of objects to return per page (e.g. 20)
-  --order: string@order-completer-11 # Order secrets by values in the given field (default: created)
+  --order: string@order-completer-12 # Order secrets by values in the given field (default: created)
 ]: nothing -> record<result: table<account_id: string, created: string, id: string, modified: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -69590,7 +69625,7 @@ export def "system-accounts-stores-secrets secrets-store-system-secrets-list" [
   --page: int # Page number (e.g. 2)
   --per-page: int # Number of objects to return per page (e.g. 20)
   --search: string # Search secrets using a filter string, filtering across name and comment
-  --order: string@order-completer-11 # Order secrets by values in the given field (default: created)
+  --order: string@order-completer-12 # Order secrets by values in the given field (default: created)
   --scopes: list # Only secrets with the given scopes will be returned
 ]: nothing -> record<result: table<comment: string, created: string, id: string, modified: string, name: string, scopes: list, status: string, store_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -70018,8 +70053,8 @@ export def "user-billing-history user-billing-history--deprecated-billing-histor
   --allow-errors(-e) # Return full response without error handling
   --page: float # default: 1
   --per-page: float # default: 20
-  --order: string@order-completer-15 # e.g. occurred_at
-  --occurred-at: string
+  --order: string@order-completer-16 # e.g. occurred_at
+  --occurred-at: string # format: date-time, e.g. 2014-03-01T12:21:59.3456Z
   --type: string # e.g. charge
   --action: string # e.g. subscription
 ]: nothing -> record<result: table<action: string, amount: float, currency: string, description: string, id: string, occurred_at: string, type: string, zone: record>> {
@@ -70067,14 +70102,14 @@ export def "user-firewall-access-rules-rules ip-access-rules-for-a-user-list-ip-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --mode: string
+  --mode: string@mode-completer-3 # e.g. challenge
   --configurationtarget: string@configurationtarget-completer # e.g. ip
   --configurationvalue: string # e.g. 198.51.100.4
   --notes: string # e.g. my note
   --qp-match: string@match-completer # default: all
   --page: float # e.g. 1
   --per-page: float # e.g. 20
-  --order: string@order-completer-7 # e.g. mode
+  --order: string@order-completer-8 # e.g. mode
   --direction: string@direction-completer # e.g. desc
 ]: nothing -> record<result: table<allowed_modes: list, configuration: record, created_on: string, id: string, mode: string, modified_on: string, notes: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -70244,7 +70279,7 @@ export def "user-invites user-s-invites-respond-to-invitation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  status: any@status-completer-17 # Status of your response to the invitation (rejected or accepted). (e.g. accepted)
+  status: any@status-completer-22 # Status of your response to the invitation (rejected or accepted). (e.g. accepted)
 ]: any -> record<result: record<expires_on: string, id: string, invited_by: string, invited_member_email: string, invited_member_id: string, invited_on: string, organization_id: string, organization_is_enforcing_twofactor: bool, organization_name: string, roles: list<string>, status: any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -70305,7 +70340,7 @@ export def "user-load-balancers-monitors load-balancer-monitors-create-monitor" 
   --probe-zone: string # Assign this monitor to emulate the specified zone while probing. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. example.com)
   --retries: int # The number of retries to attempt in case of a timeout before marking the origin as unhealthy. Retries are attempted immediately. (default: 2)
   --timeout: int # The timeout (in seconds) before marking the health check as failed. (default: 5)
-  --type: string@type-completer-13 # The protocol to use for the health check. Currently supported protocols are 'HTTP','HTTPS', 'TCP', 'ICMP-PING', 'UDP-ICMP', and 'SMTP'. (default: http, e.g. https)
+  --type: string@type-completer-15 # The protocol to use for the health check. Currently supported protocols are 'HTTP','HTTPS', 'TCP', 'ICMP-PING', 'UDP-ICMP', and 'SMTP'. (default: http, e.g. https)
 ]: any -> record<result: record<allow_insecure: bool, consecutive_down: int, consecutive_up: int, description: string, expected_body: string, expected_codes: string, follow_redirects: bool, header: record, interval: int, method: string, path: string, port: int, probe_zone: string, retries: int, timeout: int, type: string, created_on: string, id: string, modified_on: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -70393,7 +70428,7 @@ export def "user-load-balancers-monitors load-balancer-monitors-patch-monitor" [
   --probe-zone: string # Assign this monitor to emulate the specified zone while probing. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. example.com)
   --retries: int # The number of retries to attempt in case of a timeout before marking the origin as unhealthy. Retries are attempted immediately. (default: 2)
   --timeout: int # The timeout (in seconds) before marking the health check as failed. (default: 5)
-  --type: string@type-completer-13 # The protocol to use for the health check. Currently supported protocols are 'HTTP','HTTPS', 'TCP', 'ICMP-PING', 'UDP-ICMP', and 'SMTP'. (default: http, e.g. https)
+  --type: string@type-completer-15 # The protocol to use for the health check. Currently supported protocols are 'HTTP','HTTPS', 'TCP', 'ICMP-PING', 'UDP-ICMP', and 'SMTP'. (default: http, e.g. https)
 ]: any -> record<result: record<allow_insecure: bool, consecutive_down: int, consecutive_up: int, description: string, expected_body: string, expected_codes: string, follow_redirects: bool, header: record, interval: int, method: string, path: string, port: int, probe_zone: string, retries: int, timeout: int, type: string, created_on: string, id: string, modified_on: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -70434,7 +70469,7 @@ export def "user-load-balancers-monitors load-balancer-monitors-update-monitor" 
   --probe-zone: string # Assign this monitor to emulate the specified zone while probing. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. example.com)
   --retries: int # The number of retries to attempt in case of a timeout before marking the origin as unhealthy. Retries are attempted immediately. (default: 2)
   --timeout: int # The timeout (in seconds) before marking the health check as failed. (default: 5)
-  --type: string@type-completer-13 # The protocol to use for the health check. Currently supported protocols are 'HTTP','HTTPS', 'TCP', 'ICMP-PING', 'UDP-ICMP', and 'SMTP'. (default: http, e.g. https)
+  --type: string@type-completer-15 # The protocol to use for the health check. Currently supported protocols are 'HTTP','HTTPS', 'TCP', 'ICMP-PING', 'UDP-ICMP', and 'SMTP'. (default: http, e.g. https)
 ]: any -> record<result: record<allow_insecure: bool, consecutive_down: int, consecutive_up: int, description: string, expected_body: string, expected_codes: string, follow_redirects: bool, header: record, interval: int, method: string, path: string, port: int, probe_zone: string, retries: int, timeout: int, type: string, created_on: string, id: string, modified_on: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -70475,7 +70510,7 @@ export def "user-load-balancers-monitors-preview load-balancer-monitors-preview-
   --probe-zone: string # Assign this monitor to emulate the specified zone while probing. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. example.com)
   --retries: int # The number of retries to attempt in case of a timeout before marking the origin as unhealthy. Retries are attempted immediately. (default: 2)
   --timeout: int # The timeout (in seconds) before marking the health check as failed. (default: 5)
-  --type: string@type-completer-13 # The protocol to use for the health check. Currently supported protocols are 'HTTP','HTTPS', 'TCP', 'ICMP-PING', 'UDP-ICMP', and 'SMTP'. (default: http, e.g. https)
+  --type: string@type-completer-15 # The protocol to use for the health check. Currently supported protocols are 'HTTP','HTTPS', 'TCP', 'ICMP-PING', 'UDP-ICMP', and 'SMTP'. (default: http, e.g. https)
 ]: any -> record<result: record<pools: record, preview_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -70785,7 +70820,7 @@ export def "user-load-balancers-pools-preview load-balancer-pools-preview-pool" 
   --probe-zone: string # Assign this monitor to emulate the specified zone while probing. This parameter is only valid for HTTP and HTTPS monitors. (default: , e.g. example.com)
   --retries: int # The number of retries to attempt in case of a timeout before marking the origin as unhealthy. Retries are attempted immediately. (default: 2)
   --timeout: int # The timeout (in seconds) before marking the health check as failed. (default: 5)
-  --type: string@type-completer-13 # The protocol to use for the health check. Currently supported protocols are 'HTTP','HTTPS', 'TCP', 'ICMP-PING', 'UDP-ICMP', and 'SMTP'. (default: http, e.g. https)
+  --type: string@type-completer-15 # The protocol to use for the health check. Currently supported protocols are 'HTTP','HTTPS', 'TCP', 'ICMP-PING', 'UDP-ICMP', and 'SMTP'. (default: http, e.g. https)
 ]: any -> record<result: record<pools: record, preview_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -70854,10 +70889,10 @@ export def "user-load-balancing-analytics-events load-balancer-healthcheck-event
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --until: string
-  --pool-name: string
-  --origin-healthy: string
-  --pool-id: string
+  --until: string # format: date-time, e.g. 2016-11-11T13:00:00Z
+  --pool-name: string # e.g. primary-dc
+  --origin-healthy: string@bool-completer # default: true, e.g. true
+  --pool-id: string # e.g. 17b5962d775c646f3f9725cbc7a53df4
   --since: string # format: date-time, e.g. 2016-11-11T12:00:00Z
   --origin-name: string # e.g. primary-dc-1
   --pool-healthy: string@bool-completer # default: true, e.g. true
@@ -70885,13 +70920,13 @@ export def "user-organizations user-s-organizations-list-organizations" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --name: string
+  --name: string # e.g. Cloudflare, Inc.
   --page: float # default: 1
   --per-page: float # default: 20
-  --order: string@order-completer-16 # e.g. status
+  --order: string@order-completer-17 # e.g. status
   --direction: string@direction-completer # e.g. desc
   --qp-match: string@match-completer # default: all
-  --status: string@status-completer-19 # e.g. member
+  --status: string@status-completer-24 # e.g. member
 ]: nothing -> record<result: table<id: string, name: string, permissions: list, roles: list, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -71221,7 +71256,7 @@ export def "user-tokens user-api-tokens-update-token" [
   name: string # Token name. (e.g. readonly token)
   --not-before: string # The time before which the token MUST NOT be accepted for processing. (format: date-time, e.g. 2018-07-01T05:20:00Z)
   policies: list # List of access policies assigned to the token. — item shape: {effect: "allow"|"deny", permission_groups: list, resources: any}
-  --status: string@status-completer-14 # Status of the token. (e.g. active)
+  --status: string@status-completer-19 # Status of the token. (e.g. active)
 ]: any -> record<result: record<condition: record<request_ip: record>, expires_on: string, id: string, issued_on: string, last_used_on: string, modified_on: string, name: string, not_before: string, policies: list<record>, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -71294,13 +71329,13 @@ export def "zones zones-get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --name: string
-  --status: string@status-completer-20
+  --status: string@status-completer-25
   --type: list
   --accountid: string
   --accountname: string
   --page: float # default: 1
   --per-page: float # default: 20
-  --order: string@order-completer-17 # e.g. status
+  --order: string@order-completer-18 # e.g. status
   --direction: string@direction-completer # e.g. desc
   --qp-match: string@match-completer # default: all
 ]: nothing -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, success: bool, result_info: record<count: float, page: float, per_page: float, total_count: float, total_pages: float>, result: table<account: record, activated_on: string, cname_suffix: string, created_on: string, development_mode: float, id: string, meta: record, modified_on: string, name: string, name_servers: list, original_dnshost: string, original_name_servers: list, original_registrar: string, owner: record, paused: bool, permissions: list, plan: record, status: string, tenant: record, tenant_unit: record, type: string, vanity_name_servers: list, verification_key: string>> {
@@ -71328,7 +71363,7 @@ export def "zones zones-post" [
   --allow-errors(-e) # Return full response without error handling
   account: record # shape: {id?: string}
   name: string # The domain name. Per [RFC 1035](https://datatracker.ietf.org/doc/html/rfc1035#section-2.3.4) the overall zone name can be up to 253 characters, with each segment ("label") not exceeding 63 characters. (e.g. example.com)
-  --type: string@type-completer-26 # A full zone implies that DNS is hosted with Cloudflare. A partial zone is typically a partner-hosted zone or a CNAME setup.  (default: full, e.g. full)
+  --type: string@type-completer-28 # A full zone implies that DNS is hosted with Cloudflare. A partial zone is typically a partner-hosted zone or a CNAME setup.  (default: full, e.g. full)
 ]: any -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, success: bool, result: record<account: record<id: string, name: string>, activated_on: string, cname_suffix: string, created_on: string, development_mode: float, id: string, meta: record<cdn_only: bool, custom_certificate_quota: int, dns_only: bool, foundation_dns: bool, page_rule_quota: int, phishing_detected: bool, step: int>, modified_on: string, name: string, name_servers: list<string>, original_dnshost: string, original_name_servers: list<string>, original_registrar: string, owner: record<id: string, name: string, type: string>, paused: bool, permissions: list<string>, plan: record<can_subscribe: bool, currency: string, externally_managed: bool, frequency: string, id: string, is_subscribed: bool, legacy_discount: bool, legacy_id: string, name: string, price: float>, status: string, tenant: record<id: string, name: string>, tenant_unit: record<id: string>, type: string, vanity_name_servers: list<string>, verification_key: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -71356,7 +71391,7 @@ export def "zones-analytics-colos zone-analytics--deprecated-get-analytics-by-co
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --until: string
+  --until: string # default: 0, e.g. 2015-01-02T12:23:00Z
   --since: string # default: -10080, e.g. 2015-01-01T12:23:00Z
   --continuous: string@bool-completer # default: true
 ]: nothing -> record<query: record<since: any, time_delta: int, until: any>, result: table<colo_id: string, timeseries: list, totals: record>> {
@@ -71384,7 +71419,7 @@ export def "zones-analytics-dashboard zone-analytics--deprecated-get-dashboard" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --until: string
+  --until: string # default: 0, e.g. 2015-01-02T12:23:00Z
   --since: string # default: -10080, e.g. 2015-01-01T12:23:00Z
   --continuous: string@bool-completer # default: true
 ]: nothing -> record<query: record<since: any, time_delta: int, until: any>, result: record<timeseries: list<record>, totals: record<bandwidth: record, pageviews: record, requests: record, since: any, threats: record, uniques: record, until: any>>> {
@@ -71688,7 +71723,7 @@ export def "zones zones-0-patch" [
   --allow-errors(-e) # Return full response without error handling
   --paused: string@bool-completer # Indicates whether the zone is only using Cloudflare DNS services. A true value means the zone will not receive security or performance benefits.  (default: false)
   --plan: record # (Deprecated) Please use the `/zones/{zone_id}/subscription` API to update a zone's plan. Changing this value will create/cancel associated subscriptions. To view available plans for this zone, see Zone Plans. — shape: {id?: string}
-  --type: string@type-completer-26 # A full zone implies that DNS is hosted with Cloudflare. A partial zone is typically a partner-hosted zone or a CNAME setup. This parameter is only available to Enterprise customers or if it has been explicitly enabled on a zone.  (e.g. full)
+  --type: string@type-completer-28 # A full zone implies that DNS is hosted with Cloudflare. A partial zone is typically a partner-hosted zone or a CNAME setup. This parameter is only available to Enterprise customers or if it has been explicitly enabled on a zone.  (e.g. full)
   --vanity-name-servers: list # An array of domains used for custom name servers. This is only available for Business and Enterprise plans. (default: [], e.g. [ns1.example.com, ns2.example.com])
 ]: any -> record<errors: table<code: int, message: string>, messages: table<code: int, message: string>, success: bool, result: record<account: record<id: string, name: string>, activated_on: string, cname_suffix: string, created_on: string, development_mode: float, id: string, meta: record<cdn_only: bool, custom_certificate_quota: int, dns_only: bool, foundation_dns: bool, page_rule_quota: int, phishing_detected: bool, step: int>, modified_on: string, name: string, name_servers: list<string>, original_dnshost: string, original_name_servers: list<string>, original_registrar: string, owner: record<id: string, name: string, type: string>, paused: bool, permissions: list<string>, plan: record<can_subscribe: bool, currency: string, externally_managed: bool, frequency: string, id: string, is_subscribed: bool, legacy_discount: bool, legacy_id: string, name: string, price: float>, status: string, tenant: record<id: string, name: string>, tenant_unit: record<id: string>, type: string, vanity_name_servers: list<string>, verification_key: string>> {
   let input = $in
@@ -73349,7 +73384,7 @@ export def "zones-api-gateway-discovery-operations api-shield-api-discovery-retr
   --method: list
   --endpoint: string # e.g. /api/v1
   --direction: string@direction-completer # e.g. desc
-  --order: string@order-completer-18 # e.g. method
+  --order: string@order-completer-19 # e.g. method
   --diff: string@bool-completer
   --origin: string@origin-completer # Filter results to only include discovery results sourced from a particular discovery engine   * `ML` - Discovered operations that were sourced using ML API Discovery   * `SessionIdentifier` - Discovered operations that were sourced using Session Identifier API Discovery
   --state: string@state-completer-2 # Filter results to only include discovery results in a particular state. States are as follows   * `review` - Discovered operations that are not saved into API Shield Endpoint Management   * `saved` - Discovered operations that are already saved into API Shield Endpoint Management   * `ignored` - Discovered operations that have been marked as ignored
@@ -73479,9 +73514,9 @@ export def "zones-api-gateway-labels api-shield-labels-get-labels" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page number of paginated results. (default: 1)
   --per-page: int # Maximum number of results per page. (default: 20)
-  --order: string@order-completer-19 # e.g. description
+  --order: string@order-completer-20 # e.g. description
   --direction: string@direction-completer # e.g. desc
-  --qp-source: string@source-completer # Filter for labels with source
+  --qp-source: string@source-completer-1 # Filter for labels with source
   --filter: string # Filter for labels where the name or description matches using substring match (e.g. login)
   --with-mapped-resource-counts: string@bool-completer # Include `mapped_resources` for each label (default: false, e.g. true)
 ]: nothing -> record<result: table<mapped_resources: record>> {
@@ -73769,7 +73804,7 @@ export def "zones-api-gateway-operations api-shield-endpoint-management-retrieve
   --allow-errors(-e) # Return full response without error handling
   --page: int # Page number of paginated results. (default: 1)
   --per-page: int # Maximum number of results per page. (default: 20)
-  --order: string@order-completer-20 # e.g. method
+  --order: string@order-completer-21 # e.g. method
   --direction: string@direction-completer # e.g. desc
   --host: list
   --method: list
@@ -74238,7 +74273,7 @@ export def "zones-api-gateway-settings-schema-validation api-shield-schema-valid
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  validation_default_mitigation_action: string@validation-default-mitigation-action-completer # The default mitigation action used when there is no mitigation action defined on the operation  Mitigation actions are as follows:    * `log` - log request when request does not conform to schema   * `block` - deny access to the site when request does not conform to schema  A special value of of `none` will skip running schema validation entirely for the request when there is no mitigation action defined on the operation  (e.g. block)
+  validation_default_mitigation_action: string@validation-default-mitigation-action-completer-1 # The default mitigation action used when there is no mitigation action defined on the operation  Mitigation actions are as follows:    * `log` - log request when request does not conform to schema   * `block` - deny access to the site when request does not conform to schema  A special value of of `none` will skip running schema validation entirely for the request when there is no mitigation action defined on the operation  (e.g. block)
   --validation-override-mitigation-action: string@validation-override-mitigation-action-completer # When set, this overrides both zone level and operation level mitigation actions.    - `none` will skip running schema validation entirely for the request   - `null` indicates that no override is in place  To clear any override, use the special value `disable_override` or `null`  (nullable, e.g. none)
 ]: any -> record<validation_default_mitigation_action: string, validation_override_mitigation_action: string> {
   let input = $in
@@ -74270,7 +74305,7 @@ export def "zones-api-gateway-user-schemas api-shield-schema-validation-retrieve
   --page: int # Page number of paginated results. (default: 1)
   --per-page: int # Maximum number of results per page. (default: 20)
   --omit-source: string@bool-completer # Omit the source-files of schemas and only retrieve their meta-data. (default: false)
-  --validation-enabled: string
+  --validation-enabled: string@bool-completer
 ]: nothing -> record<result: table<created_at: record, kind: string, name: string, schema_id: record, source: string, validation_enabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -74707,7 +74742,7 @@ export def "zones-bot-management-feedback bot-management-zone-feedback-create" [
   requests_by_score: record # Map of bot scores (1-99) to request counts. Sum must equal `requests`.
   requests_by_score_src: record # Map of score source to request counts. Sum must equal `requests`.
   --subtype: string
-  type: string@type-completer-27 # Type of feedback report. (e.g. false_positive)
+  type: string@type-completer-29 # Type of feedback report. (e.g. false_positive)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -75338,7 +75373,7 @@ export def "zones-client-certificates client-certificate-for-a-zone-list-client-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string@status-completer-21 # e.g. all
+  --status: string@status-completer-26 # e.g. all
   --page: float # default: 1
   --per-page: float # default: 20
   --limit: int # e.g. 10
@@ -75727,7 +75762,7 @@ export def "zones-custom-certificates custom-ssl-for-a-zone-list-ssl-configurati
   --page: float # default: 1
   --per-page: float # default: 20
   --qp-match: string@match-completer # default: all
-  --status: string@status-completer-22 # e.g. active
+  --status: string@status-completer-27 # e.g. active
 ]: nothing -> record<result: table<bundle_method: string, custom_csr_id: string, expires_on: string, geo_restrictions: record, hosts: list, id: string, issuer: string, keyless_server: record, modified_on: string, policy_restrictions: string, priority: float, signature: string, status: string, uploaded_on: string, zone_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -75759,7 +75794,7 @@ export def "zones-custom-certificates custom-ssl-for-a-zone-create-ssl-configura
   --geo-restrictions: record # Specify the region where your private key can be held locally for optimal TLS performance. HTTPS connections to any excluded data center will still be fully encrypted, but will incur some latency while Keyless SSL is used to complete the handshake with the nearest allowed data center. Options allow distribution to only to U.S. data centers, only to E.U. data centers, or only to highest security data centers. Default distribution is to all Cloudflare datacenters, for optimal performance. — shape: {label?: "us"|"eu"|"highest_security"}
   --policy: string # Specify the policy that determines the region where your private key will be held locally. HTTPS connections to any excluded data center will still be fully encrypted, but will incur some latency while Keyless SSL is used to complete the handshake with the nearest allowed data center. Any combination of countries, specified by their two letter country code (https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Officially_assigned_code_elements) can be chosen, such as 'country: IN', as well as 'region: EU' which refers to the EU region. If there are too few data centers satisfying the policy, it will be rejected. Note: The API accepts this field as either "policy" or "policy_restrictions" in requests. Responses return this field as "policy_restrictions". (e.g. (country: US) or (region: EU))
   --private-key: string # The zone's private key. Not required if custom_csr_id is provided, in which case the private key is retrieved from the CSR record held by Cloudflare. (e.g. -----BEGIN RSA PRIVATE KEY----- MIIEowIBAAKCAQEAwQHoetcl9+5ikGzV6cMzWtWPJHqXT3wpbEkRU9Yz7lgvddmG dtcGbg/1CGZu0jJGkMoppoUo4c3dts3iwqRYmBikUP77wwY2QGmDZw2FvkJCJlKn abIRuGvBKwzESIXgKk2016aTP6/dAjEHyo6SeoK8lkIySUvK0fyOVlsiEsCmOpid tnKX/a+50GjB79CJH4ER2lLVZnhePFR/zUOyPxZQQ4naHf7yu/b5jhO0f8fwt+py FxIXjbEIdZliWRkRMtzrHOJIhrmJ2A1J7iOrirbbwillwjjNVUWPf3IJ3M12S9pE ewooaeO2izNTERcG9HzAacbVRn2Y2SWIyT/18QIDAQABAoIBACbhTYXBZYKmYPCb HBR1IBlCQA2nLGf0qRuJNJZg5iEzXows/6tc8YymZkQE7nolapWsQ+upk2y5Xdp/ axiuprIs9JzkYK8Ox0r+dlwCG1kSW+UAbX0bQ/qUqlsTvU6muVuMP8vZYHxJ3wmb +ufRBKztPTQ/rYWaYQcgC0RWI20HTFBMxlTAyNxYNWzX7RKFkGVVyB9RsAtmcc8g +j4OdosbfNoJPS0HeIfNpAznDfHKdxDk2Yc1tV6RHBrC1ynyLE9+TaflIAdo2MVv KLMLq51GqYKtgJFIlBRPQqKoyXdz3fGvXrTkf/WY9QNq0J1Vk5ERePZ54mN8iZB7 9lwy/AkCgYEA6FXzosxswaJ2wQLeoYc7ceaweX/SwTvxHgXzRyJIIT0eJWgx13Wo /WA3Iziimsjf6qE+SI/8laxPp2A86VMaIt3Z3mJN/CqSVGw8LK2AQst+OwdPyDMu iacE8lj/IFGC8mwNUAb9CzGU3JpU4PxxGFjS/eMtGeRXCWkK4NE+G08CgYEA1Kp9 N2JrVlqUz+gAX+LPmE9OEMAS9WQSQsfCHGogIFDGGcNf7+uwBM7GAaSJIP01zcoe VAgWdzXCv3FLhsaZoJ6RyLOLay5phbu1iaTr4UNYm5WtYTzMzqh8l1+MFFDl9xDB vULuCIIrglM5MeS/qnSg1uMoH2oVPj9TVst/ir8CgYEAxrI7Ws9Zc4Bt70N1As+U lySjaEVZCMkqvHJ6TCuVZFfQoE0r0whdLdRLU2PsLFP+q7qaeZQqgBaNSKeVcDYR 9B+nY/jOmQoPewPVsp/vQTCnE/R81spu0mp0YI6cIheT1Z9zAy322svcc43JaWB7 mEbeqyLOP4Z4qSOcmghZBSECgYACvR9Xs0DGn+wCsW4vze/2ei77MD4OQvepPIFX dFZtlBy5ADcgE9z0cuVB6CiL8DbdK5kwY9pGNr8HUCI03iHkW6Zs+0L0YmihfEVe PG19PSzK9CaDdhD9KFZSbLyVFmWfxOt50H7YRTTiPMgjyFpfi5j2q348yVT0tEQS fhRqaQKBgAcWPokmJ7EbYQGeMbS7HC8eWO/RyamlnSffdCdSc7ue3zdVJxpAkQ8W qu80pEIF6raIQfAf8MXiiZ7auFOSnHQTXUbhCpvDLKi0Mwq3G8Pl07l+2s6dQG6T lv6XTQaMyf6n1yjzL+fzDrH3qXMxHMO/b13EePXpDMpY7HQpoLDi -----END RSA PRIVATE KEY----- )
-  --type: string@type-completer-28 # The type 'legacy_custom' enables support for legacy clients which do not include SNI in the TLS handshake. (default: legacy_custom, e.g. sni_custom)
+  --type: string@type-completer-30 # The type 'legacy_custom' enables support for legacy clients which do not include SNI in the TLS handshake. (default: legacy_custom, e.g. sni_custom)
 ]: any -> record<result: record<bundle_method: string, custom_csr_id: string, expires_on: string, geo_restrictions: record<label: string>, hosts: list<string>, id: string, issuer: string, keyless_server: record, modified_on: string, policy_restrictions: string, priority: float, signature: string, status: string, uploaded_on: string, zone_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -76007,7 +76042,7 @@ export def "zones-custom-hostnames custom-hostname-for-a-zone-list-custom-hostna
   --id: string # e.g. 0d89c70d-ad9f-4843-b99f-6cc0252067e9
   --page: float # default: 1
   --per-page: float # default: 20
-  --order: string@order-completer-21 # default: ssl, e.g. ssl
+  --order: string@order-completer-22 # default: ssl, e.g. ssl
   --direction: string@direction-completer # e.g. desc
   --ssl-status: string@ssl-status-completer # e.g. active
   --hostname-status: string@hostname-status-completer # e.g. provisioned
@@ -76423,13 +76458,13 @@ export def "zones-dns-analytics-report dns-analytics-table" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --metrics: string
-  --dimensions: string
-  --since: string
-  --until: string
-  --limit: string
-  --qp-sort: string
-  --filters: string
+  --metrics: string # e.g. queryCount,uncachedCount
+  --dimensions: string # e.g. queryType
+  --since: string # format: date-time, e.g. 2023-11-11T12:00:00Z
+  --until: string # format: date-time, e.g. 2023-11-11T13:00:00Z
+  --limit: int # default: 100000, e.g. 100
+  --qp-sort: string # e.g. +responseCode,-queryName
+  --filters: string # e.g. responseCode==NOERROR,queryType==A
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -76453,14 +76488,14 @@ export def "zones-dns-analytics-report-bytime dns-analytics-by-time" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --metrics: string
-  --dimensions: string
-  --since: string
-  --until: string
-  --limit: string
-  --qp-sort: string
-  --filters: string
-  --time-delta: string
+  --metrics: string # e.g. queryCount,uncachedCount
+  --dimensions: string # e.g. queryType
+  --since: string # format: date-time, e.g. 2023-11-11T12:00:00Z
+  --until: string # format: date-time, e.g. 2023-11-11T13:00:00Z
+  --limit: int # default: 100000, e.g. 100
+  --qp-sort: string # e.g. +responseCode,-queryName
+  --filters: string # e.g. responseCode==NOERROR,queryType==A
+  --time-delta: string@time-delta-completer # e.g. hour
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -76489,14 +76524,14 @@ export def "zones-dns-records dns-records-for-a-zone-list-dns-records" [
   --namecontains: string # e.g. w.example.
   --namestartswith: string # e.g. www.example
   --nameendswith: string # e.g. .example.com
-  --type: string
+  --type: string@type-completer-31 # e.g. A
   --content: string # e.g. 127.0.0.1
   --contentexact: string # e.g. 127.0.0.1
   --contentcontains: string # e.g. 7.0.0.
   --contentstartswith: string # e.g. 127.0.
   --contentendswith: string # e.g. .0.1
-  --proxied: string
-  --qp-match: string
+  --proxied: string@bool-completer # default: false, e.g. true
+  --qp-match: string@match-completer # default: all, e.g. any
   --comment: string # e.g. Hello, world
   --commentpresent: string
   --commentabsent: string
@@ -76511,12 +76546,12 @@ export def "zones-dns-records dns-records-for-a-zone-list-dns-records" [
   --tagcontains: string # e.g. greeting:ello, worl
   --tagstartswith: string # e.g. greeting:Hello, w
   --tagendswith: string # e.g. greeting:o, world
-  --search: string
-  --tag-match: string
-  --page: string
-  --per-page: string
-  --order: string
-  --direction: string
+  --search: string # e.g. www.cloudflare.com
+  --tag-match: string@tag-match-completer # default: all, e.g. any
+  --page: float # default: 1
+  --per-page: float # default: 100, e.g. 5
+  --order: string@order-completer-23 # default: type
+  --direction: string@direction-completer # default: asc
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -76970,7 +77005,7 @@ export def "zones-dnssec dnssec-edit-dnssec-status" [
   --dnssec-multi-signer: string@bool-completer # If true, multi-signer DNSSEC is enabled on the zone, allowing multiple providers to serve a DNSSEC-signed zone at the same time. This is required for DNSKEY records (except those automatically generated by Cloudflare) to be added to the zone.  See [Multi-signer DNSSEC](https://developers.cloudflare.com/dns/dnssec/multi-signer-dnssec/) for details. (e.g. false)
   --dnssec-presigned: string@bool-completer # If true, allows Cloudflare to transfer in a DNSSEC-signed zone including signatures from an external provider, without requiring Cloudflare to sign any records on the fly.  Note that this feature has some limitations. See [Cloudflare as Secondary](https://developers.cloudflare.com/dns/zone-setups/zone-transfers/cloudflare-as-secondary/setup/#dnssec) for details. (e.g. true)
   --dnssec-use-nsec3: string@bool-completer # If true, enables the use of NSEC3 together with DNSSEC on the zone. Combined with setting dnssec_presigned to true, this enables the use of NSEC3 records when transferring in from an external provider. If dnssec_presigned is instead set to false (default), NSEC3 records will be generated and signed at request time.  See [DNSSEC with NSEC3](https://developers.cloudflare.com/dns/dnssec/enable-nsec3/) for details. (e.g. false)
-  --status: string@status-completer-23 # Status of DNSSEC, based on user-desired state and presence of necessary records. (e.g. active)
+  --status: string@status-completer-28 # Status of DNSSEC, based on user-desired state and presence of necessary records. (e.g. active)
 ]: any -> record<result: record<algorithm: string, digest: string, digest_algorithm: string, digest_type: string, dnssec_multi_signer: bool, dnssec_presigned: bool, dnssec_use_nsec3: bool, ds: string, flags: float, key_tag: float, key_type: string, modified_on: string, public_key: string, status: any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -77166,7 +77201,7 @@ export def "zones-email-routing-dns email-routing-settings-email-routing-dns-set
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --subdomain: string
+  --subdomain: string # e.g. example.net
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -77461,7 +77496,7 @@ export def "zones-email-routing-suppression publicListSuppressionZoneRouting" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # default: 1
   --per-page: int # default: 100
-  --order: string@order-completer-5 # default: created_at
+  --order: string@order-completer-6 # default: created_at
   --direction: string@direction-completer # default: desc
 ]: nothing -> record<page: int, per_page: int, result: table<created_at: string, email: string, expires_at: string, id: string, reason: string, zones: list>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -77750,7 +77785,7 @@ export def "zones-email-sending-suppression publicListSuppressionZoneSending" [
   --allow-errors(-e) # Return full response without error handling
   --page: int # default: 1
   --per-page: int # default: 100
-  --order: string@order-completer-5 # default: created_at
+  --order: string@order-completer-6 # default: created_at
   --direction: string@direction-completer # default: desc
 ]: nothing -> record<page: int, per_page: int, result: table<created_at: string, email: string, expires_at: string, id: string, reason: string, zones: list>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -78222,14 +78257,14 @@ export def "zones-firewall-access-rules-rules ip-access-rules-for-a-zone-list-ip
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --mode: string
+  --mode: string@mode-completer-3 # e.g. challenge
   --configurationtarget: string@configurationtarget-completer # e.g. ip
   --configurationvalue: string # e.g. 198.51.100.4
   --notes: string # e.g. my note
   --qp-match: string@match-completer # default: all
   --page: float # e.g. 1
   --per-page: float # e.g. 20
-  --order: string@order-completer-7 # e.g. mode
+  --order: string@order-completer-8 # e.g. mode
   --direction: string@direction-completer # e.g. desc
 ]: nothing -> record<result: table<allowed_modes: list, configuration: record, created_on: string, id: string, mode: string, modified_on: string, notes: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -79020,7 +79055,7 @@ export def "zones-firewall-waf-packages waf-packages-list-waf-packages" [
   --allow-errors(-e) # Return full response without error handling
   --page: float # default: 1
   --per-page: float # default: 50
-  --order: string@order-completer-10 # e.g. name
+  --order: string@order-completer-11 # e.g. name
   --direction: string@direction-completer # e.g. desc
   --qp-match: string@match-completer # default: all
   --name: string # e.g. USER
@@ -79108,7 +79143,7 @@ export def "zones-firewall-waf-packages-groups waf-rule-groups-list-waf-rule-gro
   --mode: string
   --page: float # default: 1
   --per-page: float # default: 50
-  --order: string@order-completer-22 # e.g. mode
+  --order: string@order-completer-24 # e.g. mode
   --direction: string@direction-completer # e.g. desc
   --qp-match: string@match-completer # default: all
   --name: string # e.g. Project Honey Pot
@@ -79199,7 +79234,7 @@ export def "zones-firewall-waf-packages-rules waf-rules-list-waf-rules" [
   --group-id: string
   --page: float # default: 1
   --per-page: float # default: 50
-  --order: string@order-completer-23 # e.g. status
+  --order: string@order-completer-25 # e.g. status
   --direction: string@direction-completer # e.g. desc
   --qp-match: string@match-completer # default: all
   --description: string # e.g. SQL injection prevention for SELECT statements
@@ -80596,7 +80631,7 @@ export def "zones-logpush-jobs id-logpush-jobs-by-zone_id-1" [
 # DELETE /zones/{zone_id}/logpush/jobs/{job_id}
 # operationId: delete-zones-zone_id-logpush-jobs-job_id
 export def "zones-logpush-jobs id-by-job_id-zone_id" [
-  job_id: string
+  job_id: int
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -80622,7 +80657,7 @@ export def "zones-logpush-jobs id-by-job_id-zone_id" [
 # GET /zones/{zone_id}/logpush/jobs/{job_id}
 # operationId: get-zones-zone_id-logpush-jobs-job_id
 export def "zones-logpush-jobs id-by-job_id-zone_id-1" [
-  job_id: string
+  job_id: int
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -80648,7 +80683,7 @@ export def "zones-logpush-jobs id-by-job_id-zone_id-1" [
 @deprecated --flag frequency
 @deprecated --flag logpull-options
 export def "zones-logpush-jobs id-by-job_id-zone_id-2" [
-  job_id: string
+  job_id: int
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -81050,8 +81085,8 @@ export def "zones-logs-rayids id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-fields: string
-  --timestamps: string
+  --qp-fields: string # e.g. ClientIP,RayID,EdgeStartTimestamp
+  --timestamps: string@timestamps-completer # default: unixnano, e.g. unixnano
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -81075,12 +81110,12 @@ export def "zones-logs-received id-logs-received" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --start: string
-  --end: string
-  --qp-fields: string
-  --sample: string
-  --count: string
-  --timestamps: string
+  --start: string # e.g. 2018-05-20T10:00:00Z
+  --end: string # e.g. 2018-05-20T10:01:00Z
+  --qp-fields: string # e.g. ClientIP,RayID,EdgeStartTimestamp
+  --sample: float # e.g. 0.1
+  --count: int
+  --timestamps: string@timestamps-completer # default: unixnano, e.g. unixnano
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -81422,7 +81457,7 @@ export def "zones-origin-tls-client-auth-hostnames per-hostname-authenticated-or
   --allow-errors(-e) # Return full response without error handling
   --page: float # default: 1
   --per-page: float # default: 50
-  --status: string@status-completer-24 # e.g. active
+  --status: string@status-completer-29 # e.g. active
 ]: nothing -> record<result: table<cert_id: string, created_at: string, enabled: bool, hostname: string, status: string, updated_at: string>, result_info: record<count: float, page: float, per_page: float, total_count: float, total_pages: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -81746,7 +81781,7 @@ export def "zones-page-shield-connections page-shield-list-connections" [
   --hosts: string # e.g. blog.cloudflare.com,www.example*,*cloudflare.com
   --page: string # e.g. 2
   --per-page: float # e.g. 100
-  --order-by: string@order-by-completer-6 # e.g. first_seen_at
+  --order-by: string@order-by-completer-7 # e.g. first_seen_at
   --direction: string@direction-completer # e.g. asc
   --prioritize-malicious: string@bool-completer # e.g. true
   --exclude-cdn-cgi: string@bool-completer # e.g. true
@@ -81802,7 +81837,7 @@ export def "zones-page-shield-cookies page-shield-list-cookies" [
   --hosts: string # e.g. blog.cloudflare.com,www.example*,*cloudflare.com
   --page: string # e.g. 2
   --per-page: float # e.g. 100
-  --order-by: string@order-by-completer-6 # e.g. first_seen_at
+  --order-by: string@order-by-completer-7 # e.g. first_seen_at
   --direction: string@direction-completer # e.g. asc
   --page-url: string # e.g. example.com/page,*/checkout,example.com/*,*checkout*
   --qp-export: string@export-completer # e.g. csv
@@ -81810,7 +81845,7 @@ export def "zones-page-shield-cookies page-shield-list-cookies" [
   --secure: string@bool-completer # e.g. true
   --http-only: string@bool-completer # e.g. true
   --same-site: string@same-site-completer # e.g. strict
-  --type: string@type-completer-29 # e.g. first_party
+  --type: string@type-completer-32 # e.g. first_party
   --path: string # e.g. /
   --domain: string # e.g. example.com
 ]: nothing -> record<result: table<domain_attribute: string, expires_attribute: string, first_seen_at: string, host: string, http_only_attribute: bool, id: string, last_seen_at: string, max_age_attribute: int, name: string, page_urls: list, path_attribute: string, same_site_attribute: string, secure_attribute: bool, type: string>> {
@@ -81993,7 +82028,7 @@ export def "zones-page-shield-scripts page-shield-list-scripts" [
   --hosts: string # e.g. blog.cloudflare.com,www.example*,*cloudflare.com
   --page: string # e.g. 2
   --per-page: float # e.g. 100
-  --order-by: string@order-by-completer-6 # e.g. first_seen_at
+  --order-by: string@order-by-completer-7 # e.g. first_seen_at
   --direction: string@direction-completer # e.g. asc
   --prioritize-malicious: string@bool-completer # e.g. true
   --exclude-cdn-cgi: string@bool-completer # default: true, e.g. true
@@ -82047,10 +82082,10 @@ export def "zones-pagerules page-rules-list-page-rules" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --order: string@order-completer-24 # default: priority, e.g. status
+  --order: string@order-completer-26 # default: priority, e.g. status
   --direction: string@direction-completer # default: desc, e.g. desc
   --qp-match: string@match-completer # default: all
-  --status: string@status-completer-23 # default: disabled, e.g. active
+  --status: string@status-completer-28 # default: disabled, e.g. active
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: table<actions: list, created_on: string, id: string, modified_on: string, priority: int, status: string, targets: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -82076,7 +82111,7 @@ export def "zones-pagerules page-rules-create-a-page-rule" [
   --allow-errors(-e) # Return full response without error handling
   actions: list # The set of actions to perform if the targets of this rule match the request. Actions can redirect to another URL or override settings, but not both.  (e.g. [{id: browser_check, value: on}])
   --priority: int # The priority of the rule, used to define which Page Rule is processed over another. A higher number indicates a higher priority. For example, if you have a catch-all Page Rule (rule A: `/images/*`) but want a more specific Page Rule to take precedence (rule B: `/images/special/*`), specify a higher priority for rule B so it overrides rule A.  (default: 1)
-  --status: string@status-completer-23 # The status of the Page Rule. (default: disabled, e.g. active)
+  --status: string@status-completer-28 # The status of the Page Rule. (default: disabled, e.g. active)
   targets: list # The rule targets to evaluate on each request. (e.g. [{constraint: {operator: matches, value: *example.com/images/*}, target: url}])
 ]: any -> record<result: record<actions: list<any>, created_on: string, id: string, modified_on: string, priority: int, status: string, targets: list<any>>> {
   let input = $in
@@ -82176,7 +82211,7 @@ export def "zones-pagerules page-rules-edit-a-page-rule" [
   --allow-errors(-e) # Return full response without error handling
   --actions: list # The set of actions to perform if the targets of this rule match the request. Actions can redirect to another URL or override settings, but not both.  (e.g. [{id: browser_check, value: on}])
   --priority: int # The priority of the rule, used to define which Page Rule is processed over another. A higher number indicates a higher priority. For example, if you have a catch-all Page Rule (rule A: `/images/*`) but want a more specific Page Rule to take precedence (rule B: `/images/special/*`), specify a higher priority for rule B so it overrides rule A.  (default: 1)
-  --status: string@status-completer-23 # The status of the Page Rule. (default: disabled, e.g. active)
+  --status: string@status-completer-28 # The status of the Page Rule. (default: disabled, e.g. active)
   --targets: list # The rule targets to evaluate on each request. (e.g. [{constraint: {operator: matches, value: *example.com/images/*}, target: url}])
 ]: any -> record<result: record<actions: list<any>, created_on: string, id: string, modified_on: string, priority: int, status: string, targets: list<any>>> {
   let input = $in
@@ -82206,7 +82241,7 @@ export def "zones-pagerules page-rules-update-a-page-rule" [
   --allow-errors(-e) # Return full response without error handling
   actions: list # The set of actions to perform if the targets of this rule match the request. Actions can redirect to another URL or override settings, but not both.  (e.g. [{id: browser_check, value: on}])
   --priority: int # The priority of the rule, used to define which Page Rule is processed over another. A higher number indicates a higher priority. For example, if you have a catch-all Page Rule (rule A: `/images/*`) but want a more specific Page Rule to take precedence (rule B: `/images/special/*`), specify a higher priority for rule B so it overrides rule A.  (default: 1)
-  --status: string@status-completer-23 # The status of the Page Rule. (default: disabled, e.g. active)
+  --status: string@status-completer-28 # The status of the Page Rule. (default: disabled, e.g. active)
   targets: list # The rule targets to evaluate on each request. (e.g. [{constraint: {operator: matches, value: *example.com/images/*}, target: url}])
 ]: any -> record<result: record<actions: list<any>, created_on: string, id: string, modified_on: string, priority: int, status: string, targets: list<any>>> {
   let input = $in
@@ -82488,8 +82523,8 @@ export def "zones-rulesets listZoneRulesets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --cursor: string
-  --per-page: string
+  --cursor: string # e.g. dGhpc2lzYW5leGFtcGxlCg
+  --per-page: int # e.g. 3
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -83109,7 +83144,7 @@ export def "zones-schema-validation-settings schema-validation-edit-settings" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --validation-default-mitigation-action: string@validation-default-mitigation-action-completer # The default mitigation action used Mitigation actions are as follows:    - `"log"` - log request when request does not conform to schema   - `"block"` - deny access to the site when request does not conform to schema   - `"none"` - skip running schema validation  (e.g. block)
+  --validation-default-mitigation-action: string@validation-default-mitigation-action-completer-1 # The default mitigation action used Mitigation actions are as follows:    - `"log"` - log request when request does not conform to schema   - `"block"` - deny access to the site when request does not conform to schema   - `"none"` - skip running schema validation  (e.g. block)
   --validation-override-mitigation-action: string@validation-override-mitigation-action-completer-1 # When set, this overrides both zone level and operation level mitigation actions.    - `"none"` - skip running schema validation entirely for the request   - `null` - clears any existing override  (nullable)
 ]: any -> any {
   let input = $in
@@ -83136,7 +83171,7 @@ export def "zones-schema-validation-settings schema-validation-update-settings" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  validation_default_mitigation_action: string@validation-default-mitigation-action-completer # The default mitigation action used Mitigation actions are as follows:    - `"log"` - log request when request does not conform to schema   - `"block"` - deny access to the site when request does not conform to schema   - `"none"` - skip running schema validation  (e.g. block)
+  validation_default_mitigation_action: string@validation-default-mitigation-action-completer-1 # The default mitigation action used Mitigation actions are as follows:    - `"log"` - log request when request does not conform to schema   - `"block"` - deny access to the site when request does not conform to schema   - `"none"` - skip running schema validation  (e.g. block)
   --validation-override-mitigation-action: string@validation-override-mitigation-action-completer-1 # When set, this overrides both zone level and operation level mitigation actions.    - `"none"` - skip running schema validation entirely for the request   - `null` - clears any existing override  (nullable)
 ]: any -> any {
   let input = $in
@@ -83612,23 +83647,23 @@ export def "zones-security-center-insights get-zone-security-center-insights" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string
-  --issue-class: string
-  --issue-type: string
-  --product: string
-  --severity: string
-  --subject: string
-  --issue-classneq: string
-  --issue-typeneq: string
-  --productneq: string
-  --severityneq: string
-  --subjectneq: string
+  --dismissed: string@bool-completer # e.g. false
+  --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-type: list # e.g. [compliance_violation, email_security]
+  --product: list # e.g. [access, dns]
+  --severity: list # e.g. [low, moderate]
+  --subject: list
+  --issue-classneq: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-typeneq: list # e.g. [compliance_violation, email_security]
+  --productneq: list # e.g. [access, dns]
+  --severityneq: list # e.g. [low, moderate]
+  --subjectneq: list
   --page: string # default: 1
   --per-page: string # default: 25
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "scalar") (serialize-qp "issue_type" $issue_type "scalar") (serialize-qp "product" $product "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "subject" $subject "scalar") (serialize-qp "issue_class~neq" $issue_classneq "scalar") (serialize-qp "issue_type~neq" $issue_typeneq "scalar") (serialize-qp "product~neq" $productneq "scalar") (serialize-qp "severity~neq" $severityneq "scalar") (serialize-qp "subject~neq" $subjectneq "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "multi") (serialize-qp "issue_type" $issue_type "multi") (serialize-qp "product" $product "multi") (serialize-qp "severity" $severity "multi") (serialize-qp "subject" $subject "multi") (serialize-qp "issue_class~neq" $issue_classneq "multi") (serialize-qp "issue_type~neq" $issue_typeneq "multi") (serialize-qp "product~neq" $productneq "multi") (serialize-qp "severity~neq" $severityneq "multi") (serialize-qp "subject~neq" $subjectneq "multi") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/zones/($zone_id)/security-center/insights" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -83678,21 +83713,21 @@ export def "zones-security-center-insights-class get-zone-security-center-insigh
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string
-  --issue-class: string
-  --issue-type: string
-  --product: string
-  --severity: string
-  --subject: string
-  --issue-classneq: string
-  --issue-typeneq: string
-  --productneq: string
-  --severityneq: string
-  --subjectneq: string
+  --dismissed: string@bool-completer # e.g. false
+  --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-type: list # e.g. [compliance_violation, email_security]
+  --product: list # e.g. [access, dns]
+  --severity: list # e.g. [low, moderate]
+  --subject: list
+  --issue-classneq: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-typeneq: list # e.g. [compliance_violation, email_security]
+  --productneq: list # e.g. [access, dns]
+  --severityneq: list # e.g. [low, moderate]
+  --subjectneq: list
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "scalar") (serialize-qp "issue_type" $issue_type "scalar") (serialize-qp "product" $product "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "subject" $subject "scalar") (serialize-qp "issue_class~neq" $issue_classneq "scalar") (serialize-qp "issue_type~neq" $issue_typeneq "scalar") (serialize-qp "product~neq" $productneq "scalar") (serialize-qp "severity~neq" $severityneq "scalar") (serialize-qp "subject~neq" $subjectneq "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "multi") (serialize-qp "issue_type" $issue_type "multi") (serialize-qp "product" $product "multi") (serialize-qp "severity" $severity "multi") (serialize-qp "subject" $subject "multi") (serialize-qp "issue_class~neq" $issue_classneq "multi") (serialize-qp "issue_type~neq" $issue_typeneq "multi") (serialize-qp "product~neq" $productneq "multi") (serialize-qp "severity~neq" $severityneq "multi") (serialize-qp "subject~neq" $subjectneq "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/zones/($zone_id)/security-center/insights/class" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -83761,21 +83796,21 @@ export def "zones-security-center-insights-severity get-zone-security-center-ins
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string
-  --issue-class: string
-  --issue-type: string
-  --product: string
-  --severity: string
-  --subject: string
-  --issue-classneq: string
-  --issue-typeneq: string
-  --productneq: string
-  --severityneq: string
-  --subjectneq: string
+  --dismissed: string@bool-completer # e.g. false
+  --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-type: list # e.g. [compliance_violation, email_security]
+  --product: list # e.g. [access, dns]
+  --severity: list # e.g. [low, moderate]
+  --subject: list
+  --issue-classneq: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-typeneq: list # e.g. [compliance_violation, email_security]
+  --productneq: list # e.g. [access, dns]
+  --severityneq: list # e.g. [low, moderate]
+  --subjectneq: list
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "scalar") (serialize-qp "issue_type" $issue_type "scalar") (serialize-qp "product" $product "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "subject" $subject "scalar") (serialize-qp "issue_class~neq" $issue_classneq "scalar") (serialize-qp "issue_type~neq" $issue_typeneq "scalar") (serialize-qp "product~neq" $productneq "scalar") (serialize-qp "severity~neq" $severityneq "scalar") (serialize-qp "subject~neq" $subjectneq "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "multi") (serialize-qp "issue_type" $issue_type "multi") (serialize-qp "product" $product "multi") (serialize-qp "severity" $severity "multi") (serialize-qp "subject" $subject "multi") (serialize-qp "issue_class~neq" $issue_classneq "multi") (serialize-qp "issue_type~neq" $issue_typeneq "multi") (serialize-qp "product~neq" $productneq "multi") (serialize-qp "severity~neq" $severityneq "multi") (serialize-qp "subject~neq" $subjectneq "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/zones/($zone_id)/security-center/insights/severity" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -83795,21 +83830,21 @@ export def "zones-security-center-insights-type get-zone-security-center-insight
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dismissed: string
-  --issue-class: string
-  --issue-type: string
-  --product: string
-  --severity: string
-  --subject: string
-  --issue-classneq: string
-  --issue-typeneq: string
-  --productneq: string
-  --severityneq: string
-  --subjectneq: string
+  --dismissed: string@bool-completer # e.g. false
+  --issue-class: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-type: list # e.g. [compliance_violation, email_security]
+  --product: list # e.g. [access, dns]
+  --severity: list # e.g. [low, moderate]
+  --subject: list
+  --issue-classneq: list # e.g. [a_record_dangling, always_use_https_not_enabled]
+  --issue-typeneq: list # e.g. [compliance_violation, email_security]
+  --productneq: list # e.g. [access, dns]
+  --severityneq: list # e.g. [low, moderate]
+  --subjectneq: list
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "scalar") (serialize-qp "issue_type" $issue_type "scalar") (serialize-qp "product" $product "scalar") (serialize-qp "severity" $severity "scalar") (serialize-qp "subject" $subject "scalar") (serialize-qp "issue_class~neq" $issue_classneq "scalar") (serialize-qp "issue_type~neq" $issue_typeneq "scalar") (serialize-qp "product~neq" $productneq "scalar") (serialize-qp "severity~neq" $severityneq "scalar") (serialize-qp "subject~neq" $subjectneq "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dismissed" $dismissed "scalar") (serialize-qp "issue_class" $issue_class "multi") (serialize-qp "issue_type" $issue_type "multi") (serialize-qp "product" $product "multi") (serialize-qp "severity" $severity "multi") (serialize-qp "subject" $subject "multi") (serialize-qp "issue_class~neq" $issue_classneq "multi") (serialize-qp "issue_type~neq" $issue_typeneq "multi") (serialize-qp "product~neq" $productneq "multi") (serialize-qp "severity~neq" $severityneq "multi") (serialize-qp "subject~neq" $subjectneq "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/zones/($zone_id)/security-center/insights/type" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -85071,8 +85106,8 @@ export def "zones-snippets listZoneSnippets" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --page: string
-  --per-page: string
+  --page: int # default: 1, e.g. 1
+  --per-page: int # default: 25, e.g. 25
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -85264,7 +85299,7 @@ export def "zones-spectrum-analytics-aggregate-current spectrum-aggregate-analyt
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --appID: string
+  --appID: string # e.g. ea95132c15732412d22c1476fa83f27a,d122c5f4bb71e25cc9e86ab43b142e2f
   --colo-name: string # e.g. PDX
 ]: nothing -> record<result: table<appID: record, bytesEgress: float, bytesIngress: float, connections: float, durationAvg: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -85289,17 +85324,17 @@ export def "zones-spectrum-analytics-events-bytime spectrum-analytics--by-time-g
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dimensions: string
-  --qp-sort: string
+  --dimensions: list # e.g. [event, appID]
+  --qp-sort: list # e.g. [+count, -bytesIngress]
   --until: string
-  --metrics: string
-  --filters: string
+  --metrics: list # e.g. [count, bytesIngress]
+  --filters: string # e.g. event==disconnect%20AND%20coloName!=SFO
   --since: string
-  --time-delta: string@time-delta-completer # e.g. minute
+  --time-delta: string@time-delta-completer-1 # e.g. minute
 ]: nothing -> record<result: record<data: list<record>, data_lag: float, max: record, min: record, query: record<dimensions: list, filters: string, limit: float, metrics: list, since: record, sort: list, until: record>, rows: float, time_intervals: list<list>, totals: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dimensions" $dimensions "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "metrics" $metrics "scalar") (serialize-qp "filters" $filters "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "time_delta" $time_delta "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dimensions" $dimensions "multi") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "until" $until "scalar") (serialize-qp "metrics" $metrics "multi") (serialize-qp "filters" $filters "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "time_delta" $time_delta "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/zones/($zone_id)/spectrum/analytics/events/bytime" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -85319,16 +85354,16 @@ export def "zones-spectrum-analytics-events-summary spectrum-analytics--summary-
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dimensions: string
-  --qp-sort: string
+  --dimensions: list # e.g. [event, appID]
+  --qp-sort: list # e.g. [+count, -bytesIngress]
   --until: string
-  --metrics: string
-  --filters: string
+  --metrics: list # e.g. [count, bytesIngress]
+  --filters: string # e.g. event==disconnect%20AND%20coloName!=SFO
   --since: string
 ]: nothing -> record<result: record<data: list<record>, data_lag: float, max: record, min: record, query: record<dimensions: list, filters: string, limit: float, metrics: list, since: record, sort: list, until: record>, rows: float, time_intervals: list<list>, totals: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "dimensions" $dimensions "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "metrics" $metrics "scalar") (serialize-qp "filters" $filters "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "dimensions" $dimensions "multi") (serialize-qp "sort" $qp_sort "multi") (serialize-qp "until" $until "scalar") (serialize-qp "metrics" $metrics "multi") (serialize-qp "filters" $filters "scalar") (serialize-qp "since" $since "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/zones/($zone_id)/spectrum/analytics/events/summary" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -85351,7 +85386,7 @@ export def "zones-spectrum-apps spectrum-applications-list-spectrum-applications
   --page: float # e.g. 1
   --per-page: float # default: 20
   --direction: string@direction-completer # default: asc, e.g. desc
-  --order: string@order-completer-25 # default: dns, e.g. protocol
+  --order: string@order-completer-27 # default: dns, e.g. protocol
 ]: nothing -> record<result: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -85620,10 +85655,10 @@ export def "zones-speed-api-pages-trend speed-list-page-trend" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --region: string
-  --deviceType: string
-  --start: string
-  --end: string
+  --region: string@region-completer-1 # e.g. us-central1
+  --deviceType: string@deviceType-completer # e.g. DESKTOP
+  --start: string # format: date-time, e.g. 2014-01-01T05:20:00.12345Z
+  --end: string # format: date-time, e.g. 2014-01-01T05:20:00.12345Z
   --tz: string # The timezone of the start and end timestamps. (e.g. America/Chicago)
   --metrics: string # A comma-separated list of metrics to include in the results. (e.g. performanceScore,ttfb,fcp,si,lcp,tti,tbt,cls)
 ]: nothing -> record<result: record<cls: list<float>, fcp: list<float>, lcp: list<float>, performanceScore: list<float>, si: list<float>, tbt: list<float>, ttfb: list<float>, tti: list<float>>> {
@@ -85701,7 +85736,7 @@ export def "zones-speed-api-schedule speed-create-scheduled-test" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --region: string
-  --frequency: string # The frequency of the scheduled test. Defaults to WEEKLY for free plans, DAILY for paid plans.
+  --frequency: string@frequency-completer-2 # The frequency of the scheduled test. Defaults to WEEKLY for free plans, DAILY for paid plans. (e.g. DAILY)
 ]: nothing -> record<result: record<schedule: record<frequency: string, region: string, url: string>, test: record<date: string, desktopReport: record, id: string, mobileReport: record, region: record, scheduleFrequency: string, url: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -85754,7 +85789,7 @@ export def "zones-ssl-certificate-packs certificate-packs-list-certificate-packs
   --allow-errors(-e) # Return full response without error handling
   --page: float # default: 1
   --per-page: float # default: 20
-  --status: string@status-completer-25 # e.g. all
+  --status: string@status-completer-30 # e.g. all
   --deploy: string@deploy-completer
 ]: nothing -> record<result: table<certificate_authority: string, certificates: list, cloudflare_branding: bool, dcv_delegation_records: list, hosts: list, id: string, primary_certificate: string, status: string, type: string, validation_errors: list, validation_method: string, validation_records: list, validity_days: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -85782,7 +85817,7 @@ export def "zones-ssl-certificate-packs-order certificate-packs-order-advanced-c
   certificate_authority: string@certificate-authority-completer # Certificate Authority selected for the order.  For information on any certificate authority specific details or restrictions [see this page for more details](https://developers.cloudflare.com/ssl/reference/certificate-authorities). (e.g. lets_encrypt)
   --cloudflare-branding: string@bool-completer # Whether or not to add Cloudflare Branding for the order.  This will add a subdomain of sni.cloudflaressl.com as the Common Name if set to true. (e.g. false)
   hosts: list # Comma separated list of valid host names for the certificate packs. Must contain the zone apex, may not contain more than 50 hosts, and may not be empty. (e.g. [example.com, *.example.com, www.example.com])
-  type: string@type-completer-30 # Type of certificate pack. (e.g. advanced)
+  type: string@type-completer-33 # Type of certificate pack. (e.g. advanced)
   validation_method: string@validation-method-completer # Validation Method selected for the order. (e.g. txt)
   validity_days: int@validity-days-completer # Validity Days selected for the order.
 ]: any -> record<result: record<certificate_authority: string, certificates: list<record>, cloudflare_branding: bool, dcv_delegation_records: list<record>, hosts: list<string>, id: string, primary_certificate: string, status: string, type: string, validation_errors: list<record>, validation_method: string, validation_records: list<record>, validity_days: int>> {
@@ -86122,7 +86157,7 @@ export def "zones-tags tags-zone-delete" [
   --allow-errors(-e) # Return full response without error handling
   --If-Match: string # ETag value for optimistic concurrency control. When provided, the server will verify the current resource ETag matches before applying the write. Returns 412 Precondition Failed if the resource has been modified since the ETag was obtained. Omit this header for unconditional writes.  (e.g. "v1:RBNvo1WzZ4oRRq0W9-hkng")
   --resource-id: string # Identifies the unique resource. (e.g. 023e105f4ecef8ad9ca31a8372d0c353)
-  resource_type: string@resource-type-completer-2 # Enum for base zone-level resource types (those with no extra required fields). (e.g. zone)
+  resource_type: string@resource-type-completer-3 # Enum for base zone-level resource types (those with no extra required fields). (e.g. zone)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -86150,9 +86185,9 @@ export def "zones-tags tags-zone-get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --resource-id: string # The ID of the resource to retrieve tags for.
-  --resource-type: string # The type of the resource.
-  --access-application-id: string # Access application ID identifier. Required for access_application_policy resources.
+  --resource-id: string # The ID of the resource to retrieve tags for. (e.g. 023e105f4ecef8ad9ca31a8372d0c353)
+  --resource-type: string@resource-type-completer-4 # The type of the resource. (e.g. zone)
+  --access-application-id: string # Access application ID identifier. Required for access_application_policy resources. (format: uuid, e.g. f174e90a-fafe-4643-bbbc-4a0ed4fc8415)
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: table<code: int, documentation_url: string, message: string, source: record>, success: bool, result: any> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
   let base = ($base_url | default $BASE_URL)
@@ -86373,12 +86408,12 @@ export def "zones-token-validation-rules token-validation-rules-list" [
   --per-page: int # Maximum number of results per page. (default: 20)
   --page: int # Page number of paginated results. (default: 1)
   --token-configuration: list # Select rules using any of these token configurations.
-  --action: string
-  --enabled: string
+  --action: string@action-completer-5 # e.g. log
+  --enabled: string@bool-completer # e.g. true
   --id: string # Select rules with these IDs.
   --rule-id: string # Select rules with these IDs.
-  --host: string # Select rules with this host in `include`.
-  --hostname: string # Select rules with this host in `include`.
+  --host: string # Select rules with this host in `include`. (format: hostname, e.g. www.example.com)
+  --hostname: string # Select rules with this host in `include`. (format: hostname, e.g. www.example.com)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -86654,7 +86689,7 @@ export def "zones-url-normalization updateUrlNormalization" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   scope: string@scope-completer # The scope of the URL normalization. (e.g. incoming)
-  type: string@type-completer-31 # The type of URL normalization performed by Cloudflare. (e.g. cloudflare)
+  type: string@type-completer-34 # The type of URL normalization performed by Cloudflare. (e.g. cloudflare)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -87594,7 +87629,7 @@ export def "zones-web3-hostnames-ipfs-universal-path-content-list-entries web3-h
   --allow-errors(-e) # Return full response without error handling
   content: string # Specify the CID or content path of content to block. (e.g. QmPZ9gcCEpqKTo6aq61g2nXGUhM4iCL3ewB6LDXZCtioEB)
   --description: string # Specify an optional description of the content list entry. (e.g. this is my content list entry)
-  type: string@type-completer-32 # Specify the type of content list entry to block. (e.g. cid)
+  type: string@type-completer-35 # Specify the type of content list entry to block. (e.g. cid)
 ]: any -> record<result: record<content: string, created_on: string, description: string, id: string, modified_on: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))
@@ -87675,7 +87710,7 @@ export def "zones-web3-hostnames-ipfs-universal-path-content-list-entries web3-h
   --allow-errors(-e) # Return full response without error handling
   content: string # Specify the CID or content path of content to block. (e.g. QmPZ9gcCEpqKTo6aq61g2nXGUhM4iCL3ewB6LDXZCtioEB)
   --description: string # Specify an optional description of the content list entry. (e.g. this is my content list entry)
-  type: string@type-completer-32 # Specify the type of content list entry to block. (e.g. cid)
+  type: string@type-completer-35 # Specify the type of content list entry to block. (e.g. cid)
 ]: any -> record<result: record<content: string, created_on: string, description: string, id: string, modified_on: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-email"))

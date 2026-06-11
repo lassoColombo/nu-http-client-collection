@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -65,12 +66,16 @@ def base-url-completer [] { ["https://verify.twilio.com"] }
 def auth-scheme-completer [] { ["basic"] }
 
 # Completers for enum parameters
+def Channel-completer [] { ["call" "email" "sms" "whatsapp"] }
+def Status-completer [] { ["converted" "unconverted"] }
 def FactorType-completer [] { ["push"] }
+def Status-completer-1 [] { ["approved" "denied" "expired" "pending"] }
+def Order-completer [] { ["asc" "desc"] }
 def ConfigAlg-completer [] { ["sha1" "sha256" "sha512"] }
 def ConfigNotificationPlatform-completer [] { ["apn" "fcm" "none"] }
 def FactorType-completer-1 [] { ["push" "totp"] }
-def Status-completer [] { ["approved" "canceled"] }
-def Status-completer-1 [] { ["disabled" "enabled"] }
+def Status-completer-2 [] { ["approved" "canceled"] }
+def Status-completer-3 [] { ["disabled" "enabled"] }
 def Version-completer [] { ["v1" "v2"] }
 
 # List all available API commands with their parameters
@@ -112,10 +117,10 @@ export def "attempts ListVerificationAttempt" [
   --DateCreatedBefore: string # Datetime filter used to query Verification Attempts created before this datetime. Given as GMT in RFC 2822 format. (format: date-time)
   --ChannelDataTo: string # Destination of a verification. It is phone number in E.164 format.
   --Country: string # Filter used to query Verification Attempts sent to the specified destination country. (format: iso-country-code)
-  --Channel: string # Filter used to query Verification Attempts by communication channel. Valid values are `SMS` and `CALL`
+  --Channel: string@Channel-completer # Filter used to query Verification Attempts by communication channel. Valid values are `SMS` and `CALL`
   --VerifyServiceSid: string # Filter used to query Verification Attempts by verify service. Only attempts of the provided SID will be returned.
   --VerificationSid: string # Filter used to return all the Verification Attempts of a single verification. Only attempts of the provided verification SID will be returned.
-  --Status: string # Filter used to query Verification Attempts by conversion status. Valid values are `UNCONVERTED`, for attempts that were not converted, and `CONVERTED`, for attempts that were confirmed.
+  --Status: string@Status-completer # Filter used to query Verification Attempts by conversion status. Valid values are `UNCONVERTED`, for attempts that were not converted, and `CONVERTED`, for attempts that were confirmed.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -145,7 +150,7 @@ export def "attempts-summary FetchVerificationAttemptsSummary" [
   --DateCreatedAfter: string # Datetime filter used to consider only Verification Attempts created after this datetime on the summary aggregation. Given as GMT in RFC 2822 format. (format: date-time)
   --DateCreatedBefore: string # Datetime filter used to consider only Verification Attempts created before this datetime on the summary aggregation. Given as GMT in RFC 2822 format. (format: date-time)
   --Country: string # Filter used to consider only Verification Attempts sent to the specified destination country on the summary aggregation. (format: iso-country-code)
-  --Channel: string # Filter Verification Attempts considered on the summary aggregation by communication channel. Valid values are `SMS` and `CALL`
+  --Channel: string@Channel-completer # Filter Verification Attempts considered on the summary aggregation by communication channel. Valid values are `SMS` and `CALL`
   --DestinationPrefix: string # Filter the Verification Attempts considered on the summary aggregation by Destination prefix. It is the prefix of a phone number in E.164 format.
 ]: nothing -> record<conversion_rate_percentage: float, total_attempts: int, total_converted: int, total_unconverted: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -501,8 +506,8 @@ export def "services-entities-challenges ListChallenge" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --FactorSid: string # The unique SID identifier of the Factor.
-  --Status: string # The Status of the Challenges to fetch. One of `pending`, `expired`, `approved` or `denied`.
-  --Order: string # The desired sort order of the Challenges list. One of `asc` or `desc` for ascending and descending respectively. Defaults to `asc`.
+  --Status: string@Status-completer-1 # The Status of the Challenges to fetch. One of `pending`, `expired`, `approved` or `denied`.
+  --Order: string@Order-completer # The desired sort order of the Challenges list. One of `asc` or `desc` for ascending and descending respectively. Defaults to `asc`.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -1271,7 +1276,7 @@ export def "services-verifications UpdateVerification" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  Status: string@Status-completer
+  Status: string@Status-completer-2
 ]: any -> record<account_sid: string, amount: string, channel: string, date_created: string, date_updated: string, lookup: any, payee: string, send_code_attempts: list<any>, service_sid: string, sid: string, sna: any, status: string, to: string, url: string, valid: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -1325,7 +1330,7 @@ export def "services-webhooks CreateWebhook" [
   --allow-errors(-e) # Return full response without error handling
   EventTypes: list # The array of events that this Webhook is subscribed to. Possible event types: `*, factor.deleted, factor.created, factor.verified, challenge.approved, challenge.denied`
   FriendlyName: string # The string that you assigned to describe the webhook. **This value should not contain PII.**
-  --Status: string@Status-completer-1
+  --Status: string@Status-completer-3
   --Version: string@Version-completer
   WebhookUrl: string # The URL associated with this Webhook.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, event_types: list<string>, friendly_name: string, service_sid: string, sid: string, status: string, url: string, version: string, webhook_method: string, webhook_url: string> {
@@ -1401,7 +1406,7 @@ export def "services-webhooks UpdateWebhook" [
   --allow-errors(-e) # Return full response without error handling
   --EventTypes: list # The array of events that this Webhook is subscribed to. Possible event types: `*, factor.deleted, factor.created, factor.verified, challenge.approved, challenge.denied`
   --FriendlyName: string # The string that you assigned to describe the webhook. **This value should not contain PII.**
-  --Status: string@Status-completer-1
+  --Status: string@Status-completer-3
   --Version: string@Version-completer
   --WebhookUrl: string # The URL associated with this Webhook.
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, event_types: list<string>, friendly_name: string, service_sid: string, sid: string, status: string, url: string, version: string, webhook_method: string, webhook_url: string> {

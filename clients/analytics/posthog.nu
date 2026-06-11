@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -83,7 +84,8 @@ def mode-completer [] { ["disabled" "dry_run" "live"] }
 def format-completer-1 [] { ["csv" "json"] }
 def accept-completer-1 [] { ["application/json" "text/csv"] }
 def export-format-completer [] { ["application/json" "application/pdf" "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" "image/gif" "image/png" "text/csv" "video/mp4" "video/webm"] }
-def model-completer [] { ["events" "persons" "sessions"] }
+def model-completer [] { ["events"] }
+def model-completer-1 [] { ["events" "persons" "sessions"] }
 def accept-completer-2 [] { ["application/json" "image/jpeg"] }
 def aggregation-completer [] { ["total_count" "unique_visitors"] }
 def status-completer-3 [] { ["active" "archived" "draft"] }
@@ -8639,7 +8641,7 @@ export def "environments-file-download-batch-exports-cancel create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   file: record # Typed configuration for a FileDownload batch-export destination. — shape: {format?: any, compression?: any, max_size_mb?: int}
-  model: string@model-completer # * `events` - events * `persons` - persons * `sessions` - sessions
+  model: string@model-completer-1 # * `events` - events * `persons` - persons * `sessions` - sessions
   --include: list
   --exclude: list
   data_interval_start: string # format: date-time
@@ -15004,11 +15006,11 @@ export def "environments-logs-alerts-destinations create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  type: any # Destination type — slack or webhook.  * `slack` - slack * `webhook` - webhook
+  type: any # Destination type — slack, webhook, or teams.  * `slack` - slack * `webhook` - webhook * `teams` - teams
   --slack-workspace-id: int # Integration ID for the Slack workspace. Required when type=slack.
   --slack-channel-id: string # Slack channel ID. Required when type=slack.
   --slack-channel-name: string # Human-readable channel name for display.
-  --webhook-url: string # HTTPS endpoint to POST to. Required when type=webhook. (format: uri)
+  --webhook-url: string # HTTPS endpoint to POST to. Required when type=webhook, or the Teams webhook URL when type=teams. (format: uri)
 ]: any -> record<hog_function_ids: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -15154,7 +15156,7 @@ export def "environments-logs-attributes get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --attribute-type: string@attribute-type-completer # Type of attributes: "log" for log attributes, "resource" for resource attributes. Defaults to "log".  * `log` - log * `resource` - resource
-  --dateRange: string # Date range to search within. Defaults to last hour.
+  --dateRange: record # Date range to search within. Defaults to last hour.
   --filterGroup: list # Property filters to narrow which logs are scanned for attributes. (default: [])
   --limit: int # Max results (default: 100)
   --offset: int # Pagination offset (default: 0)
@@ -15164,7 +15166,7 @@ export def "environments-logs-attributes get" [
 ]: nothing -> record<results: table<name: string, propertyFilterType: string, matchedOn: record, matchedValue: string>, count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "attribute_type" $attribute_type "scalar") (serialize-qp "dateRange" $dateRange "scalar") (serialize-qp "filterGroup" $filterGroup "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "search_values" $search_values "scalar") (serialize-qp "serviceNames" $serviceNames "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "attribute_type" $attribute_type "scalar") (serialize-qp "dateRange" $dateRange "multi") (serialize-qp "filterGroup" $filterGroup "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "search_values" $search_values "scalar") (serialize-qp "serviceNames" $serviceNames "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/environments/($environment_id)/logs/attributes/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -15631,7 +15633,7 @@ export def "environments-logs-values get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --attribute-type: string@attribute-type-completer # Type of attribute: "log" or "resource". Defaults to "log".  * `log` - log * `resource` - resource
-  --dateRange: string # Date range to search within. Defaults to last hour.
+  --dateRange: record # Date range to search within. Defaults to last hour.
   --filterGroup: list # Property filters to narrow which logs are scanned for values. (default: [])
   --key: string # The attribute key to get values for
   --serviceNames: list # Filter values to those appearing in logs from these services. (default: [])
@@ -15639,7 +15641,7 @@ export def "environments-logs-values get" [
 ]: nothing -> record<results: table<id: string, name: string>, refreshing: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "attribute_type" $attribute_type "scalar") (serialize-qp "dateRange" $dateRange "scalar") (serialize-qp "filterGroup" $filterGroup "multi") (serialize-qp "key" $key "scalar") (serialize-qp "serviceNames" $serviceNames "multi") (serialize-qp "value" $value "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "attribute_type" $attribute_type "scalar") (serialize-qp "dateRange" $dateRange "multi") (serialize-qp "filterGroup" $filterGroup "multi") (serialize-qp "key" $key "scalar") (serialize-qp "serviceNames" $serviceNames "multi") (serialize-qp "value" $value "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/environments/($environment_id)/logs/values/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -20200,7 +20202,7 @@ export def "environments-vision-quota get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<monthly_quota: int, usage_this_month: int, remaining: int, exhausted: bool, period_start: string, period_end: string> {
+]: nothing -> record<monthly_quota: int, usage_this_month: int, remaining: int, exhausted: bool, period_start: string, period_end: string, projected_monthly_observations: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/environments/($environment_id)/vision/quota/")
@@ -20232,7 +20234,7 @@ export def "environments-vision-scanners list" [
   --order-by: string@order-by-completer-2 # Sort scanners by name, created_at, updated_at, scanner_type, enabled, sampling_rate, or created_by. Prefix with `-` for descending.
   --scanner-type: string # Filter by scanner type (monitor, classifier, scorer, summarizer). Accepts a comma-separated list.
   --search: string # Case-insensitive substring match across name, description, and the prompt in scanner_config.
-]: nothing -> record<count: int, next: string, previous: string, results: table<id: string, name: string, description: string, scanner_type: record, scanner_config: any, query: any, sampling_rate: float, provider: record, model: record, enabled: bool, emits_signals: bool, scanner_version: int, last_swept_at: string, created_at: string, created_by: any, updated_at: string>> {
+]: nothing -> record<count: int, next: string, previous: string, results: table<id: string, name: string, description: string, scanner_type: record, scanner_config: any, query: any, sampling_rate: float, provider: record, model: record, enabled: bool, emits_signals: bool, scanner_version: int, estimated_monthly_observations: int, last_swept_at: string, created_at: string, created_by: any, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "created_by" $created_by "scalar") (serialize-qp "emits_signals" $emits_signals "scalar") (serialize-qp "enabled" $enabled "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "scanner_type" $scanner_type "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -20267,7 +20269,7 @@ export def "environments-vision-scanners create" [
   model: any # Concrete model to use for this scanner.  * `gemini-3-flash-preview` - Gemini 3 Flash * `gemini-3.1-flash-lite-preview` - Gemini 3 Flash Lite
   --enabled: string@bool-completer # When false, the reconciler removes the scanner's Temporal schedule. On-demand triggers still work.
   --emits-signals: string@bool-completer # When true, the prompt is augmented with the Signal side mission and the scanner emits PostHog Signals.
-]: any -> record<id: string, name: string, description: string, scanner_type: record, scanner_config: any, query: any, sampling_rate: float, provider: record, model: record, enabled: bool, emits_signals: bool, scanner_version: int, last_swept_at: string, created_at: string, created_by: any, updated_at: string> {
+]: any -> record<id: string, name: string, description: string, scanner_type: record, scanner_config: any, query: any, sampling_rate: float, provider: record, model: record, enabled: bool, emits_signals: bool, scanner_version: int, estimated_monthly_observations: int, last_swept_at: string, created_at: string, created_by: any, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -20295,7 +20297,7 @@ export def "environments-vision-scanners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<id: string, name: string, description: string, scanner_type: record, scanner_config: any, query: any, sampling_rate: float, provider: record, model: record, enabled: bool, emits_signals: bool, scanner_version: int, last_swept_at: string, created_at: string, created_by: any, updated_at: string> {
+]: nothing -> record<id: string, name: string, description: string, scanner_type: record, scanner_config: any, query: any, sampling_rate: float, provider: record, model: record, enabled: bool, emits_signals: bool, scanner_version: int, estimated_monthly_observations: int, last_swept_at: string, created_at: string, created_by: any, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/environments/($environment_id)/vision/scanners/($id)/")
@@ -20330,7 +20332,7 @@ export def "environments-vision-scanners patch" [
   --model: any # Concrete model to use for this scanner.  * `gemini-3-flash-preview` - Gemini 3 Flash * `gemini-3.1-flash-lite-preview` - Gemini 3 Flash Lite
   --enabled: string@bool-completer # When false, the reconciler removes the scanner's Temporal schedule. On-demand triggers still work.
   --emits-signals: string@bool-completer # When true, the prompt is augmented with the Signal side mission and the scanner emits PostHog Signals.
-]: any -> record<id: string, name: string, description: string, scanner_type: record, scanner_config: any, query: any, sampling_rate: float, provider: record, model: record, enabled: bool, emits_signals: bool, scanner_version: int, last_swept_at: string, created_at: string, created_by: any, updated_at: string> {
+]: any -> record<id: string, name: string, description: string, scanner_type: record, scanner_config: any, query: any, sampling_rate: float, provider: record, model: record, enabled: bool, emits_signals: bool, scanner_version: int, estimated_monthly_observations: int, last_swept_at: string, created_at: string, created_by: any, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -28120,7 +28122,7 @@ export def "projects-batch-exports-test get" [
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
-# Read-only access to parsed knowledge documents. Currently exposes only the `window` drill-down so an agent (PHAI or MCP) can pull a wider context span around a chunk it found via search.
+# Read-only access to parsed knowledge documents. Exposes hybrid search (``search``) and a drill-down window (``window``) so an agent (PHAI or MCP) can find and explore business knowledge chunks.
 #
 # GET /api/projects/{project_id}/business_knowledge/documents/{id}/window/
 # operationId: business_knowledge_documents_window_list
@@ -28141,6 +28143,31 @@ export def "projects-business-knowledge-documents-window list" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "around_ordinal" $around_ordinal "scalar") (serialize-qp "radius" $radius "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/projects/($project_id)/business_knowledge/documents/($id)/window/" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Read-only access to parsed knowledge documents. Exposes hybrid search (``search``) and a drill-down window (``window``) so an agent (PHAI or MCP) can find and explore business knowledge chunks.
+#
+# GET /api/projects/{project_id}/business_knowledge/documents/search/
+# operationId: business_knowledge_documents_search_list
+export def "projects-business-knowledge-documents-search list" [
+  project_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --limit: int # Maximum number of ranked chunks to return. Defaults to 10, capped at 20.
+  --qp-query: string # Natural-language search query. Runs hybrid (semantic + full-text) retrieval over all SAFE, READY knowledge chunks in this project.
+]: nothing -> table<chunk_id: string, document_id: string, ordinal: int, source_id: string, source_name: string, source_type: string, document_title: string, heading_path: string, content: string> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "query" $qp_query "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/projects/($project_id)/business_knowledge/documents/search/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
@@ -40954,7 +40981,7 @@ export def "projects-file-download-batch-exports-cancel create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   file: record # Typed configuration for a FileDownload batch-export destination. — shape: {format?: any, compression?: any, max_size_mb?: int}
-  model: string@model-completer # * `events` - events * `persons` - persons * `sessions` - sessions
+  model: string@model-completer-1 # * `events` - events * `persons` - persons * `sessions` - sessions
   --include: list
   --exclude: list
   data_interval_start: string # format: date-time
@@ -47663,11 +47690,11 @@ export def "projects-logs-alerts-destinations create" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  type: any # Destination type — slack or webhook.  * `slack` - slack * `webhook` - webhook
+  type: any # Destination type — slack, webhook, or teams.  * `slack` - slack * `webhook` - webhook * `teams` - teams
   --slack-workspace-id: int # Integration ID for the Slack workspace. Required when type=slack.
   --slack-channel-id: string # Slack channel ID. Required when type=slack.
   --slack-channel-name: string # Human-readable channel name for display.
-  --webhook-url: string # HTTPS endpoint to POST to. Required when type=webhook. (format: uri)
+  --webhook-url: string # HTTPS endpoint to POST to. Required when type=webhook, or the Teams webhook URL when type=teams. (format: uri)
 ]: any -> record<hog_function_ids: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -47803,7 +47830,7 @@ export def "projects-logs-attributes get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --attribute-type: string@attribute-type-completer # Type of attributes: "log" for log attributes, "resource" for resource attributes. Defaults to "log".  * `log` - log * `resource` - resource
-  --dateRange: string # Date range to search within. Defaults to last hour.
+  --dateRange: record # Date range to search within. Defaults to last hour.
   --filterGroup: list # Property filters to narrow which logs are scanned for attributes. (default: [])
   --limit: int # Max results (default: 100)
   --offset: int # Pagination offset (default: 0)
@@ -47813,7 +47840,7 @@ export def "projects-logs-attributes get" [
 ]: nothing -> record<results: table<name: string, propertyFilterType: string, matchedOn: record, matchedValue: string>, count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "attribute_type" $attribute_type "scalar") (serialize-qp "dateRange" $dateRange "scalar") (serialize-qp "filterGroup" $filterGroup "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "search_values" $search_values "scalar") (serialize-qp "serviceNames" $serviceNames "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "attribute_type" $attribute_type "scalar") (serialize-qp "dateRange" $dateRange "multi") (serialize-qp "filterGroup" $filterGroup "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "search_values" $search_values "scalar") (serialize-qp "serviceNames" $serviceNames "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/projects/($project_id)/logs/attributes/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -48246,7 +48273,7 @@ export def "projects-logs-values get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --attribute-type: string@attribute-type-completer # Type of attribute: "log" or "resource". Defaults to "log".  * `log` - log * `resource` - resource
-  --dateRange: string # Date range to search within. Defaults to last hour.
+  --dateRange: record # Date range to search within. Defaults to last hour.
   --filterGroup: list # Property filters to narrow which logs are scanned for values. (default: [])
   --key: string # The attribute key to get values for
   --serviceNames: list # Filter values to those appearing in logs from these services. (default: [])
@@ -48254,7 +48281,7 @@ export def "projects-logs-values get" [
 ]: nothing -> record<results: table<id: string, name: string>, refreshing: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "attribute_type" $attribute_type "scalar") (serialize-qp "dateRange" $dateRange "scalar") (serialize-qp "filterGroup" $filterGroup "multi") (serialize-qp "key" $key "scalar") (serialize-qp "serviceNames" $serviceNames "multi") (serialize-qp "value" $value "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "attribute_type" $attribute_type "scalar") (serialize-qp "dateRange" $dateRange "multi") (serialize-qp "filterGroup" $filterGroup "multi") (serialize-qp "key" $key "scalar") (serialize-qp "serviceNames" $serviceNames "multi") (serialize-qp "value" $value "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/projects/($project_id)/logs/values/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -56975,7 +57002,7 @@ export def "projects-vision-quota get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<monthly_quota: int, usage_this_month: int, remaining: int, exhausted: bool, period_start: string, period_end: string> {
+]: nothing -> record<monthly_quota: int, usage_this_month: int, remaining: int, exhausted: bool, period_start: string, period_end: string, projected_monthly_observations: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/projects/($project_id)/vision/quota/")
@@ -57005,7 +57032,7 @@ export def "projects-vision-scanners list" [
   --order-by: string@order-by-completer-2 # Sort scanners by name, created_at, updated_at, scanner_type, enabled, sampling_rate, or created_by. Prefix with `-` for descending.
   --scanner-type: string # Filter by scanner type (monitor, classifier, scorer, summarizer). Accepts a comma-separated list.
   --search: string # Case-insensitive substring match across name, description, and the prompt in scanner_config.
-]: nothing -> record<count: int, next: string, previous: string, results: table<id: string, name: string, description: string, scanner_type: record, scanner_config: any, query: any, sampling_rate: float, provider: record, model: record, enabled: bool, emits_signals: bool, scanner_version: int, last_swept_at: string, created_at: string, created_by: any, updated_at: string>> {
+]: nothing -> record<count: int, next: string, previous: string, results: table<id: string, name: string, description: string, scanner_type: record, scanner_config: any, query: any, sampling_rate: float, provider: record, model: record, enabled: bool, emits_signals: bool, scanner_version: int, estimated_monthly_observations: int, last_swept_at: string, created_at: string, created_by: any, updated_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "created_by" $created_by "scalar") (serialize-qp "emits_signals" $emits_signals "scalar") (serialize-qp "enabled" $enabled "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "scanner_type" $scanner_type "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -57038,7 +57065,7 @@ export def "projects-vision-scanners create" [
   model: any # Concrete model to use for this scanner.  * `gemini-3-flash-preview` - Gemini 3 Flash * `gemini-3.1-flash-lite-preview` - Gemini 3 Flash Lite
   --enabled: string@bool-completer # When false, the reconciler removes the scanner's Temporal schedule. On-demand triggers still work.
   --emits-signals: string@bool-completer # When true, the prompt is augmented with the Signal side mission and the scanner emits PostHog Signals.
-]: any -> record<id: string, name: string, description: string, scanner_type: record, scanner_config: any, query: any, sampling_rate: float, provider: record, model: record, enabled: bool, emits_signals: bool, scanner_version: int, last_swept_at: string, created_at: string, created_by: any, updated_at: string> {
+]: any -> record<id: string, name: string, description: string, scanner_type: record, scanner_config: any, query: any, sampling_rate: float, provider: record, model: record, enabled: bool, emits_signals: bool, scanner_version: int, estimated_monthly_observations: int, last_swept_at: string, created_at: string, created_by: any, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -57064,7 +57091,7 @@ export def "projects-vision-scanners get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<id: string, name: string, description: string, scanner_type: record, scanner_config: any, query: any, sampling_rate: float, provider: record, model: record, enabled: bool, emits_signals: bool, scanner_version: int, last_swept_at: string, created_at: string, created_by: any, updated_at: string> {
+]: nothing -> record<id: string, name: string, description: string, scanner_type: record, scanner_config: any, query: any, sampling_rate: float, provider: record, model: record, enabled: bool, emits_signals: bool, scanner_version: int, estimated_monthly_observations: int, last_swept_at: string, created_at: string, created_by: any, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/projects/($project_id)/vision/scanners/($id)/")
@@ -57097,7 +57124,7 @@ export def "projects-vision-scanners patch" [
   --model: any # Concrete model to use for this scanner.  * `gemini-3-flash-preview` - Gemini 3 Flash * `gemini-3.1-flash-lite-preview` - Gemini 3 Flash Lite
   --enabled: string@bool-completer # When false, the reconciler removes the scanner's Temporal schedule. On-demand triggers still work.
   --emits-signals: string@bool-completer # When true, the prompt is augmented with the Signal side mission and the scanner emits PostHog Signals.
-]: any -> record<id: string, name: string, description: string, scanner_type: record, scanner_config: any, query: any, sampling_rate: float, provider: record, model: record, enabled: bool, emits_signals: bool, scanner_version: int, last_swept_at: string, created_at: string, created_by: any, updated_at: string> {
+]: any -> record<id: string, name: string, description: string, scanner_type: record, scanner_config: any, query: any, sampling_rate: float, provider: record, model: record, enabled: bool, emits_signals: bool, scanner_version: int, estimated_monthly_observations: int, last_swept_at: string, created_at: string, created_by: any, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -103,6 +104,7 @@ def temporal-unit-completer [] { ["billing_period" "day" "month" "week" "year"] 
 def coupon-type-completer [] { ["bulk" "single_code"] }
 def redemption-resource-completer [] { ["account" "subscription"] }
 def redeemed-completer [] { ["false" "true"] }
+def related-type-completer [] { ["account" "charge" "item" "plan" "subscription"] }
 def account-type-completer-1 [] { ["liability" "revenue"] }
 def revenue-schedule-type-completer-1 [] { ["at_range_end" "at_range_start" "evenly" "never"] }
 def state-completer-4 [] { ["paid"] }
@@ -119,6 +121,7 @@ def usage-type-completer [] { ["percentage" "price"] }
 def usage-calculation-type-completer [] { ["cumulative" "last_in_period"] }
 def tier-type-completer [] { ["flat" "stairstep" "tiered" "volume"] }
 def usage-timeframe-completer [] { ["billing_period" "subscription_term"] }
+def refund-completer [] { ["full" "none" "partial"] }
 def timeframe-completer [] { ["bill_date" "term_end"] }
 def timeframe-completer-1 [] { ["bill_date" "now" "renewal" "term_end"] }
 def sort-completer-1 [] { ["recorded_timestamp" "usage_timestamp"] }
@@ -2173,7 +2176,7 @@ export def "custom-field-definitions definitions" [
   --qp-sort: string@sort-completer # Sort field. You *really* only want to sort by `updated_at` in ascending order. In descending order updated records will move behind the cursor and could prevent some records from being returned.
   --begin-time: string # Inclusively filter by begin_time when `sort=created_at` or `sort=updated_at`. **Note:** this value is an ISO8601 timestamp. A partial timestamp that does not include a time zone will default to UTC.  (format: date-time)
   --end-time: string # Inclusively filter by end_time when `sort=created_at` or `sort=updated_at`. **Note:** this value is an ISO8601 timestamp. A partial timestamp that does not include a time zone will default to UTC.  (format: date-time)
-  --related-type: string # Filter by related type.
+  --related-type: string@related-type-completer # Filter by related type.
 ]: nothing -> record<object: string, has_more: bool, next: string, data: table<id: string, object: string, related_type: string, name: string, user_access: string, display_name: string, tooltip: string, created_at: string, updated_at: string, deleted_at: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -4377,7 +4380,7 @@ export def "subscriptions subscription-by-subscription_id-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --refund: string # The type of refund to perform:  * `full` - Performs a full refund of the last invoice for the current subscription term. * `partial` - Prorates a refund based on the amount of time remaining in the current bill cycle. * `none` - Terminates the subscription without a refund.  In the event that the most recent invoice is a $0 invoice paid entirely by credit, Recurly will apply the credit back to the customer’s account.  You may also terminate a subscription with no refund and then manually refund specific invoices.  (default: none)
+  --refund: string@refund-completer # The type of refund to perform:  * `full` - Performs a full refund of the last invoice for the current subscription term. * `partial` - Prorates a refund based on the amount of time remaining in the current bill cycle. * `none` - Terminates the subscription without a refund.  In the event that the most recent invoice is a $0 invoice paid entirely by credit, Recurly will apply the credit back to the customer’s account.  You may also terminate a subscription with no refund and then manually refund specific invoices.
   --charge: string@bool-completer # Applicable only if the subscription has usage based add-ons and unbilled usage logged for the current billing cycle. If true, current billing cycle unbilled usage is billed on the final invoice. If false, Recurly will create a negative usage record for current billing cycle usage that will zero out the final invoice line items. (default: true)
 ]: nothing -> record<id: string, object: string, uuid: string, account: record<id: string, object: string, code: string, email: string, first_name: string, last_name: string, company: string, parent_account_id: string, bill_to: string, dunning_campaign_id: string>, plan: record<id: string, object: string, code: string, name: string>, state: string, shipping: record<object: string, address: record<id: string, object: string, account_id: string, nickname: string, first_name: string, last_name: string, company: string, email: string, vat_number: string, phone: string, street1: string, street2: string, city: string, region: string, postal_code: string, country: string, geo_code: string, created_at: string, updated_at: string>, method: record<id: string, object: string, code: string, name: string>, amount: float>, coupon_redemptions: table<id: string, object: string, coupon: record, state: string, remaining_duration: record, discounted: float, created_at: string>, pending_change: record<id: string, object: string, subscription_id: string, plan: record<id: string, object: string, code: string, name: string>, add_ons: list<record>, unit_amount: float, tax_inclusive: bool, quantity: int, shipping: record<object: string, address: record, method: record, amount: float>, activate_at: string, activated: bool, revenue_schedule_type: string, invoice_collection: record<object: string, charge_invoice: record, credit_invoices: list, verification_transactions: list>, business_entity: record<id: string, object: string, code: string, name: string>, custom_fields: list<record>, created_at: string, updated_at: string, deleted_at: string, billing_info: record<three_d_secure_action_result_token_id: string>, ramp_intervals: list<record>, next_bill_date: string>, current_period_started_at: string, current_period_ends_at: string, current_term_started_at: string, current_term_ends_at: string, trial_started_at: string, trial_ends_at: string, remaining_billing_cycles: int, total_billing_cycles: int, renewal_billing_cycles: int, auto_renew: bool, ramp_intervals: table<starting_billing_cycle: int, remaining_billing_cycles: int, starting_on: string, ending_on: string, unit_amount: float>, paused_at: string, remaining_pause_cycles: int, currency: string, revenue_schedule_type: string, unit_amount: float, tax_inclusive: bool, quantity: int, add_ons: table<id: string, object: string, subscription_id: string, add_on: record, add_on_source: string, quantity: int, unit_amount: float, unit_amount_decimal: string, revenue_schedule_type: string, tier_type: string, usage_calculation_type: string, usage_timeframe: string, tiers: list, percentage_tiers: list, usage_percentage: float, created_at: string, updated_at: string, expired_at: string>, add_ons_total: float, subtotal: float, tax: float, tax_info: record<type: string, region: string, rate: float, tax_details: list<record>>, price_segment_id: string, total: float, collection_method: string, po_number: string, net_terms: int, net_terms_type: string, credit_application_policy: record<mode: string, allowed_origins: list<string>>, terms_and_conditions: string, customer_notes: string, expiration_reason: string, custom_fields: table<name: string, value: string, source_record_type: string, source_record_id: string>, created_at: string, updated_at: string, activated_at: string, canceled_at: string, expires_at: string, bank_account_authorized_at: string, gateway_code: string, billing_info_id: string, active_invoice_id: string, business_entity_id: string, started_with_gift: bool, converted_at: string, action_result: record> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))

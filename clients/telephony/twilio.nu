@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -75,10 +76,12 @@ def Method-completer [] { ["GET" "POST"] }
 def FallbackMethod-completer [] { ["GET" "POST"] }
 def RecordingStatusCallbackMethod-completer [] { ["GET" "POST"] }
 def AsyncAmdStatusCallbackMethod-completer [] { ["GET" "POST"] }
-def Status-completer-1 [] { ["canceled" "completed"] }
-def Status-completer-2 [] { ["absent" "completed" "in-progress" "paused" "processing" "stopped"] }
-def Status-completer-3 [] { ["completed"] }
+def Status-completer-1 [] { ["busy" "canceled" "completed" "failed" "in-progress" "no-answer" "queued" "ringing"] }
+def Status-completer-2 [] { ["canceled" "completed"] }
+def Status-completer-3 [] { ["absent" "completed" "in-progress" "paused" "processing" "stopped"] }
+def Status-completer-4 [] { ["completed"] }
 def AnnounceMethod-completer [] { ["GET" "POST"] }
+def Status-completer-5 [] { ["completed" "in-progress" "init"] }
 def DeauthorizeCallbackMethod-completer [] { ["GET" "POST"] }
 def EmergencyStatus-completer [] { ["Active" "Inactive"] }
 def VoiceReceiveMode-completer [] { ["fax" "voice"] }
@@ -87,7 +90,7 @@ def AddressRetention-completer [] { ["obfuscate" "retain"] }
 def TrafficType-completer [] { ["free"] }
 def ScheduleType-completer [] { ["fixed"] }
 def RiskCheck-completer [] { ["disable" "enable"] }
-def Status-completer-4 [] { ["canceled"] }
+def Status-completer-6 [] { ["canceled"] }
 def Outcome-completer [] { ["confirmed" "unconfirmed"] }
 def HoldMethod-completer [] { ["GET" "POST"] }
 def WaitMethod-completer [] { ["GET" "POST"] }
@@ -99,9 +102,9 @@ def PaymentMethod-completer [] { ["ach-debit" "credit-card"] }
 def TokenType-completer [] { ["one-time" "payment-method" "reusable"] }
 def Confirmation-completer [] { ["false" "true"] }
 def Capture-completer [] { ["bank-account-number" "bank-routing-number" "expiration-date" "expiration-date-matcher" "payment-card-number" "payment-card-number-matcher" "postal-code" "postal-code-matcher" "security-code" "security-code-matcher"] }
-def Status-completer-5 [] { ["cancel" "complete"] }
+def Status-completer-7 [] { ["cancel" "complete"] }
 def Track-completer [] { ["both_tracks" "inbound_track" "outbound_track"] }
-def Status-completer-6 [] { ["stopped"] }
+def Status-completer-8 [] { ["stopped"] }
 def VoiceStatusCallbackMethod-completer [] { ["GET" "POST"] }
 def CallbackMethod-completer [] { ["GET" "POST"] }
 def Recurring-completer [] { ["alltime" "daily" "monthly" "yearly"] }
@@ -168,7 +171,7 @@ export def "2010-04-01-accountsjson ListAccount" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --FriendlyName: string # Only return the Account resources with friendly names that exactly match this name.
-  --Status: string # Only return Account resources with the given status. Can be `closed`, `suspended` or `active`.
+  --Status: string@Status-completer # Only return Account resources with the given status. Can be `closed`, `suspended` or `active`.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -1032,7 +1035,7 @@ export def "2010-04-01-accounts-callsjson ListCall" [
   --To: string # Only show calls made to this phone number, SIP address, Client identifier or SIM SID. (format: phone-number)
   --From: string # Only include calls from this phone number, SIP address, Client identifier or SIM SID. (format: phone-number)
   --ParentCallSid: string # Only include calls spawned by calls with this SID.
-  --Status: string # The status of the calls to include. Can be: `queued`, `ringing`, `in-progress`, `canceled`, `completed`, `failed`, `busy`, or `no-answer`.
+  --Status: string@Status-completer-1 # The status of the calls to include. Can be: `queued`, `ringing`, `in-progress`, `canceled`, `completed`, `failed`, `busy`, or `no-answer`.
   --StartTime: string # Only include calls that started on this date. Specify a date as `YYYY-MM-DD` in UTC, for example: `2009-07-06`, to read only calls that started on this date. (format: date-time)
   --StartTime<: string # Only include calls that started before this date. Specify a date as `YYYY-MM-DD` in UTC, for example: `2009-07-06`, to read only calls that started before this date. (format: date-time)
   --StartTime>: string # Only include calls that started on or after this date. Specify a date as `YYYY-MM-DD` in UTC, for example: `2009-07-06`, to read only calls that started on or after this date. (format: date-time)
@@ -1114,7 +1117,7 @@ export def "2010-04-01-accounts-calls UpdateCall" [
   --allow-errors(-e) # Return full response without error handling
   --Url: string # The absolute URL that returns the TwiML instructions for the call. We will call this URL using the `method` when the call connects. For more information, see the [Url Parameter](https://www.twilio.com/docs/voice/make-calls#specify-a-url-parameter) section in [Making Calls](https://www.twilio.com/docs/voice/make-calls). (format: uri)
   --Method: string@Method-completer # The HTTP method we should use when calling the `url`. Can be: `GET` or `POST` and the default is `POST`. If an `application_sid` parameter is present, this parameter is ignored. (format: http-method)
-  --Status: string@Status-completer-1
+  --Status: string@Status-completer-2
   --FallbackUrl: string # The URL that we call using the `fallback_method` if an error occurs when requesting or executing the TwiML at `url`. If an `application_sid` parameter is present, this parameter is ignored. (format: uri)
   --FallbackMethod: string@FallbackMethod-completer # The HTTP method that we should use to request the `fallback_url`. Can be: `GET` or `POST` and the default is `POST`. If an `application_sid` parameter is present, this parameter is ignored. (format: http-method)
   --StatusCallback: string # The URL we should call using the `status_callback_method` to send status information to your application. If no `status_callback_event` is specified, we will send the `completed` status. If an `application_sid` parameter is present, this parameter is ignored. URLs must contain a valid hostname (underscores are not permitted). (format: uri)
@@ -1291,7 +1294,7 @@ export def "2010-04-01-accounts-calls-recordings UpdateCallRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  Status: string@Status-completer-2 # The status of the recording. Can be: `processing`, `completed` and `absent`. For more detailed statuses on in-progress recordings, check out how to [Update a Recording Resource](https://www.twilio.com/docs/voice/api/recording#update-a-recording-resource).
+  Status: string@Status-completer-3 # The status of the recording. Can be: `processing`, `completed` and `absent`. For more detailed statuses on in-progress recordings, check out how to [Update a Recording Resource](https://www.twilio.com/docs/voice/api/recording#update-a-recording-resource).
   --PauseBehavior: string # Whether to record during a pause. Can be: `skip` or `silence` and the default is `silence`. `skip` does not record during the pause period, while `silence` will replace the actual audio of the call with silence during the pause period. This parameter only applies when setting `status` is set to `paused`.
 ]: any -> record<account_sid: string, api_version: string, call_sid: string, conference_sid: string, date_created: string, date_updated: string, start_time: string, duration: string, sid: string, price: float, uri: string, encryption_details: any, price_unit: string, status: string, channels: int, source: string, error_code: int, track: string> {
   let input = $in
@@ -1389,7 +1392,7 @@ export def "2010-04-01-accounts-conferences UpdateConference" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Status: string@Status-completer-3
+  --Status: string@Status-completer-4
   --AnnounceUrl: string # The URL we should call to announce something into the conference. The URL may return an MP3 file, a WAV file, or a TwiML document that contains `<Play>`, `<Say>`, `<Pause>`, or `<Redirect>` verbs. (format: uri)
   --AnnounceMethod: string@AnnounceMethod-completer # The HTTP method used to call `announce_url`. Can be: `GET` or `POST` and the default is `POST` (format: http-method)
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, api_version: string, friendly_name: string, region: string, sid: string, status: string, uri: string, subresource_uris: record, reason_conference_ended: string, call_sid_ending_conference: string> {
@@ -1424,7 +1427,7 @@ export def "2010-04-01-accounts-conferencesjson ListConference" [
   --DateUpdated<: string # Only include conferences that were last updated on this date. Specify a date as `YYYY-MM-DD` in UTC, for example: `2009-07-06`, to read only conferences that were last updated on this date. You can also specify an inequality, such as `DateUpdated<=YYYY-MM-DD`, to read conferences that were last updated on or before midnight of this date, and `DateUpdated>=YYYY-MM-DD` to read conferences that were last updated on or after midnight of this date. (format: date)
   --DateUpdated>: string # Only include conferences that were last updated on this date. Specify a date as `YYYY-MM-DD` in UTC, for example: `2009-07-06`, to read only conferences that were last updated on this date. You can also specify an inequality, such as `DateUpdated<=YYYY-MM-DD`, to read conferences that were last updated on or before midnight of this date, and `DateUpdated>=YYYY-MM-DD` to read conferences that were last updated on or after midnight of this date. (format: date)
   --FriendlyName: string # The string that identifies the Conference resources to read.
-  --Status: string # The status of the resources to read. Can be: `init`, `in-progress`, or `completed`.
+  --Status: string@Status-completer-5 # The status of the resources to read. Can be: `init`, `in-progress`, or `completed`.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -1483,7 +1486,7 @@ export def "2010-04-01-accounts-conferences-recordings UpdateConferenceRecording
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  Status: string@Status-completer-2 # The status of the recording. Can be: `processing`, `completed` and `absent`. For more detailed statuses on in-progress recordings, check out how to [Update a Recording Resource](https://www.twilio.com/docs/voice/api/recording#update-a-recording-resource).
+  Status: string@Status-completer-3 # The status of the recording. Can be: `processing`, `completed` and `absent`. For more detailed statuses on in-progress recordings, check out how to [Update a Recording Resource](https://www.twilio.com/docs/voice/api/recording#update-a-recording-resource).
   --PauseBehavior: string # Whether to record during a pause. Can be: `skip` or `silence` and the default is `silence`. `skip` does not record during the pause period, while `silence` will replace the actual audio of the call with silence during the pause period. This parameter only applies when setting `status` is set to `paused`.
 ]: any -> record<account_sid: string, api_version: string, call_sid: string, conference_sid: string, date_created: string, date_updated: string, start_time: string, duration: string, sid: string, price: string, price_unit: string, status: string, channels: int, source: string, error_code: int, encryption_details: any, uri: string> {
   let input = $in
@@ -2654,7 +2657,7 @@ export def "2010-04-01-accounts-messages UpdateMessage" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Body: string # The new `body` of the Message resource. To redact the text content of a Message, this parameter's value must be an empty string
-  --Status: string@Status-completer-4
+  --Status: string@Status-completer-6
 ]: any -> record<body: string, num_segments: string, direction: string, from: string, to: string, date_updated: string, price: string, error_message: string, uri: string, account_sid: string, num_media: string, status: string, messaging_service_sid: string, sid: string, date_sent: string, date_created: string, error_code: int, price_unit: string, api_version: string, subresource_uris: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3184,7 +3187,7 @@ export def "2010-04-01-accounts-calls-payments UpdatePayments" [
   IdempotencyKey: string # A unique token that will be used to ensure that multiple API calls with the same information do not result in multiple transactions. This should be a unique string value per API call and can be a randomly generated.
   StatusCallback: string # Provide an absolute or relative URL to receive status updates regarding your Pay session. Read more about the [Update](https://www.twilio.com/docs/voice/api/payment-resource#statuscallback-update) and [Complete/Cancel](https://www.twilio.com/docs/voice/api/payment-resource#statuscallback-cancelcomplete) POST requests. (format: uri)
   --Capture: string@Capture-completer # The piece of payment information that you wish the caller to enter. Must be one of `payment-card-number`, `expiration-date`, `security-code`, `postal-code`, `bank-routing-number`, `bank-account-number`, or their `-matcher` variants for input confirmation when `RequireMatchingInputs` is enabled.
-  --Status: string@Status-completer-5 # Indicates whether the current payment session should be cancelled or completed. When `cancel` the payment session is cancelled. When `complete`, Twilio sends the payment information to the selected Pay Connector for processing.
+  --Status: string@Status-completer-7 # Indicates whether the current payment session should be cancelled or completed. When `cancel` the payment session is cancelled. When `complete`, Twilio sends the payment information to the selected Pay Connector for processing.
 ]: any -> record<account_sid: string, call_sid: string, sid: string, date_created: string, date_updated: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -3383,7 +3386,7 @@ export def "2010-04-01-accounts-calls-transcriptions UpdateRealtimeTranscription
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  Status: string@Status-completer-6
+  Status: string@Status-completer-8
 ]: any -> record<sid: string, account_sid: string, call_sid: string, name: string, status: string, date_updated: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5297,7 +5300,7 @@ export def "2010-04-01-accounts-calls-siprec UpdateSiprec" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  Status: string@Status-completer-6
+  Status: string@Status-completer-8
 ]: any -> record<sid: string, account_sid: string, call_sid: string, name: string, status: string, date_updated: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -5554,7 +5557,7 @@ export def "2010-04-01-accounts-calls-streams UpdateStream" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  Status: string@Status-completer-6
+  Status: string@Status-completer-8
 ]: any -> record<sid: string, account_sid: string, call_sid: string, name: string, status: string, date_updated: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -6046,8 +6049,8 @@ export def "2010-04-01-accounts-usage-triggersjson ListUsageTrigger" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Recurring: string # The frequency of recurring UsageTriggers to read. Can be: `daily`, `monthly`, or `yearly` to read recurring UsageTriggers. An empty value or a value of `alltime` reads non-recurring UsageTriggers.
-  --TriggerBy: string # The trigger field of the UsageTriggers to read.  Can be: `count`, `usage`, or `price` as described in the [UsageRecords documentation](https://www.twilio.com/docs/usage/api/usage-record#usage-count-price).
+  --Recurring: string@Recurring-completer # The frequency of recurring UsageTriggers to read. Can be: `daily`, `monthly`, or `yearly` to read recurring UsageTriggers. An empty value or a value of `alltime` reads non-recurring UsageTriggers.
+  --TriggerBy: string@TriggerBy-completer # The trigger field of the UsageTriggers to read.  Can be: `count`, `usage`, or `price` as described in the [UsageRecords documentation](https://www.twilio.com/docs/usage/api/usage-record#usage-count-price).
   --UsageCategory: string # The usage category of the UsageTriggers to read. Must be a supported [usage categories](https://www.twilio.com/docs/usage/api/usage-record#usage-categories).
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
   --Page: int # The page index. This value is simply for client state.

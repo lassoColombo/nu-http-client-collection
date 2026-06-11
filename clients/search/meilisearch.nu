@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -408,7 +409,7 @@ export def "indexes-documents-fetch indexesdocumentsfetch" [
   --offset: float # Number of documents to skip. (default: 0)
   --limit: float # Maximum number of documents returned. (default: 20)
   --body-fields: list # Array of attributes whose fields will be present in the returned documents. By default all attributes will be returned.
-  --filter: any # Attribute(s) to filter on.  Can be made of 3 syntaxes  - Nested Array: `["something > 1", "genres=comedy", ["genres=horror", "title=batman"]]` - String: `"something > 1 AND genres=comedy AND (genres=horror OR title=batman)"` - Mixed: `["something > 1 AND genres=comedy", "genres=horror OR title=batman"]`  > info > _geoRadius({lat}, {lng}, {distance_in_meters}) and _geoBoundingBox([{lat, lng}], [{lat}, {lng}]) built-in filter rules can be used to filter documents within geo shapes.  > warn > Attribute(s) used in `filter` should be declared as filterable attributes. See [Filtering and Faceted Search](https://docs.meilisearch.com/reference/features/filtering_and_faceted_search.html).  (e.g. [director:Mati Diop, genres:Comedy, genres:Romance])
+  --filter: any # Attribute(s) to filter on.  Can be made of 3 syntaxes  - Nested Array: `["something > 1", "genres=comedy", ["genres=horror", "title=batman"]]` - String: `"something > 1 AND genres=comedy AND (genres=horror OR title=batman)"` - Mixed: `["something > 1 AND genres=comedy", "genres=horror OR title=batman"]`  > info > _geoRadius({lat}, {lng}, {distance_in_meters}) and _geoBoundingBox([{lat, lng}], [{lat}, {lng}]) built-in filter rules can be used to filter documents within geo shapes.  > warn > Attribute(s) used in `filter` should be declared as filterable attributes. See [Filtering and Faceted Search](https://docs.meilisearch.com/reference/features/filtering_and_faceted_search.html).  (e.g. [director:Mati Diop, [genres:Comedy, genres:Romance]])
 ]: any -> record<results: list<record>, limit: int, offset: int, total: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -463,7 +464,7 @@ export def "indexes-documents-delete indexesdocumentsremove" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --Content-Type: string@Content-Type-completer # Payload content-type
-  --filter: any # Attribute(s) to filter on.  Can be made of 3 syntaxes  - Nested Array: `["something > 1", "genres=comedy", ["genres=horror", "title=batman"]]` - String: `"something > 1 AND genres=comedy AND (genres=horror OR title=batman)"` - Mixed: `["something > 1 AND genres=comedy", "genres=horror OR title=batman"]`  > info > _geoRadius({lat}, {lng}, {distance_in_meters}) and _geoBoundingBox([{lat, lng}], [{lat}, {lng}]) built-in filter rules can be used to filter documents within geo shapes.  > warn > Attribute(s) used in `filter` should be declared as filterable attributes. See [Filtering and Faceted Search](https://docs.meilisearch.com/reference/features/filtering_and_faceted_search.html).  (e.g. [director:Mati Diop, genres:Comedy, genres:Romance])
+  --filter: any # Attribute(s) to filter on.  Can be made of 3 syntaxes  - Nested Array: `["something > 1", "genres=comedy", ["genres=horror", "title=batman"]]` - String: `"something > 1 AND genres=comedy AND (genres=horror OR title=batman)"` - Mixed: `["something > 1 AND genres=comedy", "genres=horror OR title=batman"]`  > info > _geoRadius({lat}, {lng}, {distance_in_meters}) and _geoBoundingBox([{lat, lng}], [{lat}, {lng}]) built-in filter rules can be used to filter documents within geo shapes.  > warn > Attribute(s) used in `filter` should be declared as filterable attributes. See [Filtering and Faceted Search](https://docs.meilisearch.com/reference/features/filtering_and_faceted_search.html).  (e.g. [director:Mati Diop, [genres:Comedy, genres:Romance]])
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -594,7 +595,7 @@ export def "indexes-search indexesdocumentssearch" [
   --showRankingScoreDetails: string@bool-completer # Defines whether a `_rankingScoreDetails` object containing information about the score of that document for each ranking rule should be returned or not. (default: false)
   --matchingStrategy: string # Defines which strategy to use to match the query terms within the documents as search results. Two different strategies are available, `last` and `all`. By default, the `last` strategy is chosen. (default: last)
   --attributesToSearchOn: list # Defines which `searchableAttributes` the query will search on. (default: ["*"])
-  --filter: any # Attribute(s) to filter on.  Can be made of 3 syntaxes  - Nested Array: `["something > 1", "genres=comedy", ["genres=horror", "title=batman"]]` - String: `"something > 1 AND genres=comedy AND (genres=horror OR title=batman)"` - Mixed: `["something > 1 AND genres=comedy", "genres=horror OR title=batman"]`  > info > _geoRadius({lat}, {lng}, {distance_in_meters}) and _geoBoundingBox([{lat, lng}], [{lat}, {lng}]) built-in filter rules can be used to filter documents within geo shapes.  > warn > Attribute(s) used in `filter` should be declared as filterable attributes. See [Filtering and Faceted Search](https://docs.meilisearch.com/reference/features/filtering_and_faceted_search.html).  (e.g. [director:Mati Diop, genres:Comedy, genres:Romance])
+  --filter: any # Attribute(s) to filter on.  Can be made of 3 syntaxes  - Nested Array: `["something > 1", "genres=comedy", ["genres=horror", "title=batman"]]` - String: `"something > 1 AND genres=comedy AND (genres=horror OR title=batman)"` - Mixed: `["something > 1 AND genres=comedy", "genres=horror OR title=batman"]`  > info > _geoRadius({lat}, {lng}, {distance_in_meters}) and _geoBoundingBox([{lat, lng}], [{lat}, {lng}]) built-in filter rules can be used to filter documents within geo shapes.  > warn > Attribute(s) used in `filter` should be declared as filterable attributes. See [Filtering and Faceted Search](https://docs.meilisearch.com/reference/features/filtering_and_faceted_search.html).  (e.g. [director:Mati Diop, [genres:Comedy, genres:Romance]])
   --facets: list # Array of attributes whose fields will be distributed as a facet. If you have [set up filterableAttributes](https://docs.meilisearch.com/reference/features/settings.html#filterable-attributes), you can retrieve the count of matching terms for each [facets](https://docs.meilisearch.com/reference/features/filtering_and_faceted_search.html#faceted-search).[Learn more about facet distribution in the dedicated guide](https://docs.meilisearch.com/reference/features/search_parameters.html#facet-distribution)
   --offset: float # Number of documents to skip. (default: 0)
   --limit: float # Maximum number of documents returned. (default: 20)
@@ -633,7 +634,7 @@ export def "indexes-facet-search indexesdocumentsfacetsearch" [
   --facetQuery: string # default: "", e.g. "Horror"
   --q: string # Additional search parameter. If additional search parameters are set, the method will return facet values that both: - Match the face query - Are contained in the records matching the additional search parameters (default: "", e.g. "Back to the future")
   --matchingStrategy: string # Additional search parameter. If additional search parameters are set, the method will return facet values that both: - Match the face query - Are contained in the records matching the additional search parameters (default: last)
-  --filter: any # Attribute(s) to filter on.  Can be made of 3 syntaxes  - Nested Array: `["something > 1", "genres=comedy", ["genres=horror", "title=batman"]]` - String: `"something > 1 AND genres=comedy AND (genres=horror OR title=batman)"` - Mixed: `["something > 1 AND genres=comedy", "genres=horror OR title=batman"]`  > info > _geoRadius({lat}, {lng}, {distance_in_meters}) and _geoBoundingBox([{lat, lng}], [{lat}, {lng}]) built-in filter rules can be used to filter documents within geo shapes.  > warn > Attribute(s) used in `filter` should be declared as filterable attributes. See [Filtering and Faceted Search](https://docs.meilisearch.com/reference/features/filtering_and_faceted_search.html).  (e.g. [director:Mati Diop, genres:Comedy, genres:Romance])
+  --filter: any # Attribute(s) to filter on.  Can be made of 3 syntaxes  - Nested Array: `["something > 1", "genres=comedy", ["genres=horror", "title=batman"]]` - String: `"something > 1 AND genres=comedy AND (genres=horror OR title=batman)"` - Mixed: `["something > 1 AND genres=comedy", "genres=horror OR title=batman"]`  > info > _geoRadius({lat}, {lng}, {distance_in_meters}) and _geoBoundingBox([{lat, lng}], [{lat}, {lng}]) built-in filter rules can be used to filter documents within geo shapes.  > warn > Attribute(s) used in `filter` should be declared as filterable attributes. See [Filtering and Faceted Search](https://docs.meilisearch.com/reference/features/filtering_and_faceted_search.html).  (e.g. [director:Mati Diop, [genres:Comedy, genres:Romance]])
 ]: any -> record<facetHits: table<value: string, count: int>, facetQuery: string, processingTimeMs: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

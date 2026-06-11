@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -66,6 +67,7 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def role-completer [] { ["ADMIN" "PROJECT_DEVELOPER" "PROJECT_VIEWER"] }
+def role-completer-1 [] { ["" "ADMIN" "PROJECT_DEVELOPER" "PROJECT_VIEWER"] }
 def sort-by-completer [] { ["destination" "source" "statusCode"] }
 def sort-order-completer [] { ["asc" "desc"] }
 def action-completer [] { ["discard" "promote" "restore"] }
@@ -85,12 +87,13 @@ def status-completer-2 [] { ["failed" "running" "succeeded"] }
 def forceNew-completer [] { ["0" "1"] }
 def skipAutoDetectionConfirmation-completer [] { ["0" "1"] }
 def type-completer [] { ["A" "AAAA" "ALIAS" "CAA" "CNAME" "HTTPS" "MX" "NS" "SRV" "TXT"] }
+def type-completer-1 [] { ["" "A" "AAAA" "ALIAS" "CAA" "CNAME" "HTTPS" "MX" "NS" "SRV" "TXT"] }
 def strict-completer [] { ["false" "true"] }
 def deliveryFormat-completer [] { ["json" "ndjson"] }
 def projects-completer [] { ["all" "some"] }
 def status-completer-3 [] { ["disabled" "enabled"] }
 def target-completer [] { ["preview" "production"] }
-def type-completer-1 [] { ["encrypted" "sensitive"] }
+def type-completer-2 [] { ["encrypted" "sensitive"] }
 def state-completer [] { ["active" "archived"] }
 def kind-completer [] { ["boolean" "json" "number" "string"] }
 def sdkKeyType-completer [] { ["client" "mobile" "server"] }
@@ -108,15 +111,15 @@ def gitForkProtection-completer [] { ["0" "1"] }
 def elasticConcurrencyEnabled-completer [] { ["0" "1"] }
 def staticIpsEnabled-completer [] { ["0" "1"] }
 def buildQueueConfiguration-completer [] { ["SKIP_NAMESPACE_QUEUE" "WAIT_FOR_NAMESPACE_QUEUE"] }
-def framework-completer [] { ["actix-web" "angular" "ash" "astro" "axum" "blitzjs" "brunch" "create-react-app" "django" "docusaurus" "docusaurus-2" "dojo" "eleventy" "elysia" "ember" "eve" "express" "fastapi" "fasthtml" "fastify" "flask" "gatsby" "go" "gridsome" "h3" "hexo" "hono" "hugo" "hydrogen" "ionic-angular" "ionic-react" "jekyll" "koa" "mastra" "middleman" "nestjs" "nextjs" "nitro" "node" "nuxtjs" "parcel" "polymer" "preact" "python" "react-router" "redwoodjs" "remix" "ruby" "rust" "saber" "sanity" "sanity-v2" "sapper" "scully" "services" "solidstart" "solidstart-1" "stencil" "storybook" "svelte" "sveltekit" "sveltekit-1" "tanstack-start" "umijs" "vite" "vitepress" "vue" "vuepress" "xmcp" "zola"] }
+def framework-completer [] { ["" "actix-web" "angular" "ash" "astro" "axum" "blitzjs" "brunch" "create-react-app" "django" "docusaurus" "docusaurus-2" "dojo" "eleventy" "elysia" "ember" "eve" "express" "fastapi" "fasthtml" "fastify" "flask" "gatsby" "go" "gridsome" "h3" "hexo" "hono" "hugo" "hydrogen" "ionic-angular" "ionic-react" "jekyll" "koa" "mastra" "middleman" "nestjs" "nextjs" "nitro" "node" "nuxtjs" "parcel" "polymer" "preact" "python" "react-router" "redwoodjs" "remix" "ruby" "rust" "saber" "sanity" "sanity-v2" "sapper" "scully" "services" "solidstart" "solidstart-1" "stencil" "storybook" "svelte" "sveltekit" "sveltekit-1" "tanstack-start" "umijs" "vite" "vitepress" "vue" "vuepress" "xmcp" "zola"] }
 def nodeVersion-completer [] { ["10.x" "12.x" "14.x" "16.x" "18.x" "20.x" "22.x" "24.x"] }
 def production-completer [] { ["false" "true"] }
 def redirects-completer [] { ["false" "true"] }
 def verified-completer [] { ["false" "true"] }
 def order-completer [] { ["ASC" "DESC"] }
-def redirectStatusCode-completer [] { ["301" "302" "307" "308"] }
+def redirectStatusCode-completer [] { ["" "301" "302" "307" "308"] }
 def decrypt-completer [] { ["false" "true"] }
-def type-completer-2 [] { ["encrypted" "plain" "sensitive" "system"] }
+def type-completer-3 [] { ["encrypted" "plain" "sensitive" "system"] }
 def state-completer-1 [] { ["ABORTED" "ACTIVE" "COMPLETE"] }
 def sortBy-completer [] { ["createdAt" "currentSnapshotId" "name" "statusUpdatedAt"] }
 def sortOrder-completer [] { ["asc" "desc"] }
@@ -126,7 +129,7 @@ def accept-completer-1 [] { ["application/json" "application/x-ndjson"] }
 def wait-completer [] { ["false" "true"] }
 def mode-completer [] { ["allow-all" "custom" "default-allow" "default-deny" "deny-all"] }
 def action-completer-2 [] { ["firewallEnabled"] }
-def role-completer-1 [] { ["BILLING" "CONTRIBUTOR" "DEVELOPER" "MEMBER" "OWNER" "SECURITY" "VIEWER" "VIEWER_FOR_PLUS"] }
+def role-completer-2 [] { ["BILLING" "CONTRIBUTOR" "DEVELOPER" "MEMBER" "OWNER" "SECURITY" "VIEWER" "VIEWER_FOR_PLUS"] }
 def confirmed-completer [] { ["true"] }
 def dpAccessRequestsMode-completer [] { ["all" "email-domain" "none"] }
 
@@ -182,7 +185,7 @@ export def "access-groups readAccessGroup" [
 #
 # POST /v1/access-groups/{idOrName}
 # operationId: updateAccessGroup
-# --projects item shape: {projectId: string, role: "ADMIN"|"PROJECT_VIEWER"|"PROJECT_DEVELOPER"}
+# --projects item shape: {projectId: string, role: "ADMIN"|"PROJECT_VIEWER"|"PROJECT_DEVELOPER"|""}
 export def "access-groups updateAccessGroup" [
   idOrName: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -195,7 +198,7 @@ export def "access-groups updateAccessGroup" [
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --name: string # The name of the access group (e.g. My access group)
-  --projects: list # item shape: {projectId: string, role: "ADMIN"|"PROJECT_VIEWER"|"PROJECT_DEVELOPER"}
+  --projects: list # item shape: {projectId: string, role: "ADMIN"|"PROJECT_VIEWER"|"PROJECT_DEVELOPER"|""}
   --membersToAdd: list # List of members to add to the access group. (e.g. [usr_1a2b3c4d5e6f7g8h9i0j, usr_2b3c4d5e6f7g8h9i0j1k])
   --membersToRemove: list # List of members to remove from the access group. (e.g. [usr_1a2b3c4d5e6f7g8h9i0j, usr_2b3c4d5e6f7g8h9i0j1k])
 ]: any -> record<entitlements: list<string>, name: string, createdAt: string, teamId: string, updatedAt: string, accessGroupId: string, membersCount: float, projectsCount: float, teamRoles: list<string>, teamPermissions: list<string>> {
@@ -298,7 +301,7 @@ export def "access-groups listAccessGroups" [
 #
 # POST /v1/access-groups
 # operationId: createAccessGroup
-# --projects item shape: {projectId: string, role: "ADMIN"|"PROJECT_VIEWER"|"PROJECT_DEVELOPER"}
+# --projects item shape: {projectId: string, role: "ADMIN"|"PROJECT_VIEWER"|"PROJECT_DEVELOPER"|""}
 export def "access-groups createAccessGroup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -310,7 +313,7 @@ export def "access-groups createAccessGroup" [
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   name: string # The name of the access group (e.g. My access group)
-  --projects: list # item shape: {projectId: string, role: "ADMIN"|"PROJECT_VIEWER"|"PROJECT_DEVELOPER"}
+  --projects: list # item shape: {projectId: string, role: "ADMIN"|"PROJECT_VIEWER"|"PROJECT_DEVELOPER"|""}
   --membersToAdd: list # List of members to add to the access group. (e.g. [usr_1a2b3c4d5e6f7g8h9i0j, usr_2b3c4d5e6f7g8h9i0j1k])
 ]: any -> record<entitlements: list<string>, membersCount: float, projectsCount: float, name: string, createdAt: string, teamId: string, updatedAt: string, accessGroupId: string, teamRoles: list<string>, teamPermissions: list<string>> {
   let input = $in
@@ -424,7 +427,7 @@ export def "access-groups-projects updateAccessGroupProject" [
   --allow-errors(-e) # Return full response without error handling
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
-  role: string@role-completer # The project role that will be added to this Access Group. (e.g. ADMIN)
+  role: string@role-completer-1 # The project role that will be added to this Access Group. (e.g. ADMIN)
 ]: any -> record<teamId: string, accessGroupId: string, projectId: string, role: string, createdAt: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1725,7 +1728,7 @@ export def "deployments get" [
 # POST /v13/deployments
 # operationId: createDeployment
 # --gitMetadata shape: {remoteUrl?: string, commitAuthorName?: string, commitAuthorEmail?: string, commitMessage?: string, commitRef?: string, commitSha?: string, dirty?: bool, ci?: bool, ciType?: string, ciGitProviderUsername?: string, ciGitRepoVisibility?: string}
-# --projectSettings shape: {buildCommand?: string, commandForIgnoringBuildStep?: string, devCommand?: string, framework?: "blitzjs"|"nextjs"|"gatsby"|"remix"|"react-router"|"astro"|"hexo"|"eleventy"|"docusaurus-2"|"docusaurus"|"preact"|"solidstart-1"|"solidstart"|"dojo"|"ember"|"vue"|"scully"|"ionic-angular"|"angular"|"polymer"|"svelte"|"sveltekit"|"sveltekit-1"|"ionic-react"|"create-react-app"|"gridsome"|"umijs"|"sapper"|"saber"|"stencil"|"nuxtjs"|"redwoodjs"|"hugo"|"jekyll"|"brunch"|"middleman"|"zola"|"hydrogen"|"vite"|"tanstack-start"|"vitepress"|"vuepress"|"parcel"|"fastapi"|"flask"|"fasthtml"|"django"|"ash"|"eve"|"sanity"|"sanity-v2"|"storybook"|"nitro"|"hono"|"express"|"h3"|"koa"|"nestjs"|"elysia"|"fastify"|"xmcp"|"python"|"ruby"|"rust"|"axum"|"actix-web"|"node"|"go"|"services"|"mastra", installCommand?: string, nodeVersion?: "24.x"|"22.x"|"20.x"|"18.x"|"16.x"|"14.x"|"12.x"|"10.x"|"8.10.x", outputDirectory?: string, rootDirectory?: string, serverlessFunctionRegion?: string, skipGitConnectDuringLink?: bool, sourceFilesOutsideRootDirectory?: bool}
+# --projectSettings shape: {buildCommand?: string, commandForIgnoringBuildStep?: string, devCommand?: string, framework?: ""|"blitzjs"|"nextjs"|"gatsby"|"remix"|"react-router"|"astro"|"hexo"|"eleventy"|"docusaurus-2"|"docusaurus"|"preact"|"solidstart-1"|"solidstart"|"dojo"|"ember"|"vue"|"scully"|"ionic-angular"|"angular"|"polymer"|"svelte"|"sveltekit"|"sveltekit-1"|"ionic-react"|"create-react-app"|"gridsome"|"umijs"|"sapper"|"saber"|"stencil"|"nuxtjs"|"redwoodjs"|"hugo"|"jekyll"|"brunch"|"middleman"|"zola"|"hydrogen"|"vite"|"tanstack-start"|"vitepress"|"vuepress"|"parcel"|"fastapi"|"flask"|"fasthtml"|"django"|"ash"|"eve"|"sanity"|"sanity-v2"|"storybook"|"nitro"|"hono"|"express"|"h3"|"koa"|"nestjs"|"elysia"|"fastify"|"xmcp"|"python"|"ruby"|"rust"|"axum"|"actix-web"|"node"|"go"|"services"|"mastra", installCommand?: string, nodeVersion?: "24.x"|"22.x"|"20.x"|"18.x"|"16.x"|"14.x"|"12.x"|"10.x"|"8.10.x", outputDirectory?: string, rootDirectory?: string, serverlessFunctionRegion?: string, skipGitConnectDuringLink?: bool, sourceFilesOutsideRootDirectory?: bool}
 export def "deployments createDeployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1747,7 +1750,7 @@ export def "deployments createDeployment" [
   --monorepoManager: string # The monorepo manager that is being used for this deployment. When `null` is used no monorepo manager is selected (nullable)
   name: string # A string with the project name used in the deployment URL (e.g. my-instant-deployment)
   --project: string # The target project identifier in which the deployment will be created. When defined, this parameter overrides name (e.g. my-deployment-project)
-  --projectSettings: record # Project settings that will be applied to the deployment. It is required for the first deployment of a project and will be saved for any following deployments — shape: {buildCommand?: string, commandForIgnoringBuildStep?: string, devCommand?: string, framework?: "blitzjs"|"nextjs"|"gatsby"|"remix"|"react-router"|"astro"|"hexo"|"eleventy"|"docusaurus-2"|"docusaurus"|"preact"|"solidstart-1"|"solidstart"|"dojo"|"ember"|"vue"|"scully"|"ionic-angular"|"angular"|"polymer"|"svelte"|"sveltekit"|"sveltekit-1"|"ionic-react"|"create-react-app"|"gridsome"|"umijs"|"sapper"|"saber"|"stencil"|"nuxtjs"|"redwoodjs"|"hugo"|"jekyll"|"brunch"|"middleman"|"zola"|"hydrogen"|"vite"|"tanstack-start"|"vitepress"|"vuepress"|"parcel"|"fastapi"|"flask"|"fasthtml"|"django"|"ash"|"eve"|"sanity"|"sanity-v2"|"storybook"|"nitro"|"hono"|"express"|"h3"|"koa"|"nestjs"|"elysia"|"fastify"|"xmcp"|"python"|"ruby"|"rust"|"axum"|"actix-web"|"node"|"go"|"services"|"mastra", installCommand?: string, nodeVersion?: "24.x"|"22.x"|"20.x"|"18.x"|"16.x"|"14.x"|"12.x"|"10.x"|"8.10.x", outputDirectory?: string, rootDirectory?: string, serverlessFunctionRegion?: string, skipGitConnectDuringLink?: bool, sourceFilesOutsideRootDirectory?: bool}
+  --projectSettings: record # Project settings that will be applied to the deployment. It is required for the first deployment of a project and will be saved for any following deployments — shape: {buildCommand?: string, commandForIgnoringBuildStep?: string, devCommand?: string, framework?: ""|"blitzjs"|"nextjs"|"gatsby"|"remix"|"react-router"|"astro"|"hexo"|"eleventy"|"docusaurus-2"|"docusaurus"|"preact"|"solidstart-1"|"solidstart"|"dojo"|"ember"|"vue"|"scully"|"ionic-angular"|"angular"|"polymer"|"svelte"|"sveltekit"|"sveltekit-1"|"ionic-react"|"create-react-app"|"gridsome"|"umijs"|"sapper"|"saber"|"stencil"|"nuxtjs"|"redwoodjs"|"hugo"|"jekyll"|"brunch"|"middleman"|"zola"|"hydrogen"|"vite"|"tanstack-start"|"vitepress"|"vuepress"|"parcel"|"fastapi"|"flask"|"fasthtml"|"django"|"ash"|"eve"|"sanity"|"sanity-v2"|"storybook"|"nitro"|"hono"|"express"|"h3"|"koa"|"nestjs"|"elysia"|"fastify"|"xmcp"|"python"|"ruby"|"rust"|"axum"|"actix-web"|"node"|"go"|"services"|"mastra", installCommand?: string, nodeVersion?: "24.x"|"22.x"|"20.x"|"18.x"|"16.x"|"14.x"|"12.x"|"10.x"|"8.10.x", outputDirectory?: string, rootDirectory?: string, serverlessFunctionRegion?: string, skipGitConnectDuringLink?: bool, sourceFilesOutsideRootDirectory?: bool}
   --target: string # Either not defined, `staging`, `production`, or a custom environment identifier. If `staging`, a staging alias in the format `<project>-<team>.vercel.app` will be assigned. If `production`, any aliases defined in `alias` will be assigned. If omitted, the target will be `preview`. (e.g. production)
   --withLatestCommit: string@bool-completer # When `true` and `deploymentId` is passed in, the sha from the previous deployment's `gitSource` is removed forcing the latest commit to be used.
 ]: any -> record<aliasAssignedAt: any, alwaysRefuseToBuild: bool, build: record<env: list<string>>, buildArtifactUrls: list<string>, builds: table<use: string, src: string, config: record>, env: list<string>, inspectorUrl: string, isInConcurrentBuildsQueue: bool, isInSystemBuildsQueue: bool, projectSettings: record<nodeVersion: string, buildCommand: string, devCommand: string, framework: string, commandForIgnoringBuildStep: string, installCommand: string, outputDirectory: string, speedInsights: record<id: string, enabledAt: float, disabledAt: float, canceledAt: float, hasData: bool, paidAt: float>, webAnalytics: record<id: string, disabledAt: float, canceledAt: float, enabledAt: float, hasData: bool>>, integrations: record<status: string, startedAt: float, claimedAt: float, completedAt: float, skippedAt: float, skippedBy: string>, images: record<sizes: list<float>, qualities: list<float>, domains: list<string>, remotePatterns: list<record>, localPatterns: list<record>, minimumCacheTTL: float, formats: list<string>, dangerouslyAllowSVG: bool, contentSecurityPolicy: string, contentDispositionType: string>, alias: list<string>, aliasAssigned: bool, bootedAt: float, buildingAt: float, buildContainerFinishedAt: float, buildSkipped: bool, creator: record<uid: string, username: string, avatar: string>, initReadyAt: float, isFirstBranchDeployment: bool, lambdas: table<id: string, createdAt: float, readyState: string, entrypoint: string, readyStateAt: float, output: list>, public: bool, ready: float, status: string, team: record<id: string, name: string, slug: string, avatar: string>, userAliases: list<string>, previewCommentsEnabled: bool, ttyBuildLogs: bool, customEnvironment: any, oomReport: string, readyStateReason: string, aliasWarning: record<code: string, message: string, link: string, action: string>, id: string, createdAt: float, readyState: string, name: string, type: string, errorMessage: string, aliasError: record<code: string, message: string>, aliasFinal: string, autoAssignCustomDomains: bool, automaticAliases: list<string>, buildErrorAt: float, checksState: string, checksConclusion: string, deletedAt: float, defaultRoute: string, canceledAt: float, errorCode: string, errorLink: string, errorStep: string, passiveRegions: list<string>, gitSource: any, manualProvisioning: record<state: string, completedAt: float>, meta: record, originCacheRegion: string, nodeVersion: string, project: record<id: string, name: string, framework: string>, prebuilt: bool, readySubstate: string, regions: list<string>, softDeletedByRetention: bool, source: string, target: string, undeletedAt: float, url: string, userConfiguredDeploymentId: string, version: float, oidcTokenClaims: record<iss: string, sub: string, scope: string, aud: string, owner: string, owner_id: string, project: string, project_id: string, environment: string, custom_environment_id: string, plan: string>, projectId: string, plan: string, platform: record<source: record<name: string>, origin: record<type: string, value: string>, creator: record<name: string, avatar: string>, meta: record>, connectBuildsEnabled: bool, connectConfigurationId: string, createdIn: string, crons: table<schedule: string, path: string>, functions: record, monorepoManager: string, ownerId: string, passiveConnectConfigurationId: string, routes: list<any>, gitRepo: any, flags: any, microfrontends: any, config: record<version: float, functionType: string, functionMemoryType: string, functionTimeout: float, secureComputePrimaryRegion: string, secureComputeFallbackRegion: string, isUsingActiveCPU: bool, resourceConfig: record<buildQueue: record, elasticConcurrency: string, buildMachine: record>>, checks: record<deployment_alias: record<state: string, startedAt: float, completedAt: float>>, seatBlock: record<blockCode: string, userId: string, isVerified: bool, gitUserId: any, gitProvider: string>, attribution: record<commitMeta: record<email: string, name: string, isVerified: bool>, gitUser: record<id: any, login: string, type: string, provider: string>, vercelUser: record<id: string, username: string, teamRoles: list>>> {
@@ -1873,7 +1876,7 @@ export def "domains-records updateRecord" [
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --name: string # The name of the DNS record (nullable, e.g. example-1)
   --value: string # The value of the DNS record (nullable, e.g. google.com)
-  --type: string@type-completer # The type of the DNS record (nullable, e.g. A)
+  --type: string@type-completer-1 # The type of the DNS record (nullable, e.g. A)
   --ttl: int # The Time to live (TTL) value of the DNS record (nullable, e.g. 60)
   --mxPriority: int # The MX priority value of the DNS record (nullable)
   --srv: record # nullable — shape: {target: string, weight: int, port: int, priority: int}
@@ -3461,7 +3464,7 @@ export def "env createSharedEnvVariable" [
   --teamId: string # The Team identifier to perform the request on behalf of. (e.g. team_1a2b3c4d5e6f7g8h9i0j1k2l)
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   evs: list # item shape: {key: string, value: string, comment?: string}
-  --type: string@type-completer-1 # The type of environment variable (e.g. encrypted)
+  --type: string@type-completer-2 # The type of environment variable (e.g. encrypted)
   --target: list # The target environment of the Shared Environment Variable (e.g. [production, preview])
   --projectId: list # Associate a Shared Environment Variable to projects. (DEPRECATED, e.g. [prj_2WjyKQmM8ZnGcJsPWMrHRHrE, prj_2WjyKQmM8ZnGcJsPWMrHRCRV])
 ]: any -> record<created: table<created: string, key: string, ownerId: string, id: string, createdBy: string, deletedBy: string, updatedBy: string, createdAt: float, deletedAt: float, updatedAt: float, value: string, projectId: list, type: string, target: list, applyToAllCustomEnvironments: bool, customEnvironmentIds: list, decrypted: bool, comment: string, lastEditedByDisplayName: string>, failed: table<error: record>> {
@@ -5929,7 +5932,7 @@ export def "projects get" [
 #
 # PATCH /v9/projects/{idOrName}
 # operationId: updateProject
-# --resourceConfig shape: {buildMachineType?: "enhanced"|"turbo"|"standard"|"elastic", buildQueue?: record, fluid?: bool, functionDefaultRegions?: list, functionDefaultTimeout?: float, functionDefaultMemoryType?: "standard_legacy"|"standard"|"performance", functionZeroConfigFailover?: any, elasticConcurrencyEnabled?: bool, buildMachineSelection?: "elastic"|"fixed", buildMachineElasticLastUpdated?: float, isNSNBDisabled?: bool, enableFunctionsBeta?: bool}
+# --resourceConfig shape: {buildMachineType?: ""|"enhanced"|"turbo"|"standard"|"elastic", buildQueue?: record, fluid?: bool, functionDefaultRegions?: list, functionDefaultTimeout?: float, functionDefaultMemoryType?: "standard_legacy"|"standard"|"performance", functionZeroConfigFailover?: any, elasticConcurrencyEnabled?: bool, buildMachineSelection?: "elastic"|"fixed", buildMachineElasticLastUpdated?: float, isNSNBDisabled?: bool, enableFunctionsBeta?: bool}
 # --staticIps shape: {enabled: bool}
 # --tracing shape: {domains?: string, ignorePaths?: list, samplingRules?: list}
 # --oidcTokenConfig shape: {enabled?: bool, issuerMode?: "team"|"global"}
@@ -5972,7 +5975,7 @@ export def "projects updateProject" [
   --previewDeploymentsDisabled: string@bool-completer # Specifies whether preview deployments are disabled for this project. (nullable)
   --previewDeploymentSuffix: string # Custom domain suffix for preview deployments. Takes precedence over team-level suffix. Must be a domain owned by the team. (nullable)
   --publicSource: string@bool-completer # Specifies whether the source code and logs of the deployments for this project should be public or not (nullable)
-  --resourceConfig: record # Specifies resource override configuration for the project — shape: {buildMachineType?: "enhanced"|"turbo"|"standard"|"elastic", buildQueue?: record, fluid?: bool, functionDefaultRegions?: list, functionDefaultTimeout?: float, functionDefaultMemoryType?: "standard_legacy"|"standard"|"performance", functionZeroConfigFailover?: any, elasticConcurrencyEnabled?: bool, buildMachineSelection?: "elastic"|"fixed", buildMachineElasticLastUpdated?: float, isNSNBDisabled?: bool, enableFunctionsBeta?: bool}
+  --resourceConfig: record # Specifies resource override configuration for the project — shape: {buildMachineType?: ""|"enhanced"|"turbo"|"standard"|"elastic", buildQueue?: record, fluid?: bool, functionDefaultRegions?: list, functionDefaultTimeout?: float, functionDefaultMemoryType?: "standard_legacy"|"standard"|"performance", functionZeroConfigFailover?: any, elasticConcurrencyEnabled?: bool, buildMachineSelection?: "elastic"|"fixed", buildMachineElasticLastUpdated?: float, isNSNBDisabled?: bool, enableFunctionsBeta?: bool}
   --rootDirectory: string # The name of a directory or relative path to the source code of your project. When `null` is used it will default to the project root (nullable)
   --serverlessFunctionRegion: string # The region to deploy Serverless Functions in this project (nullable)
   --serverlessFunctionZeroConfigFailover: any # Specifies whether Zero Config Failover is enabled for this project.
@@ -6505,7 +6508,7 @@ export def "projects-env createProjectEnv" [
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
   --key: string # The name of the environment variable (e.g. API_URL)
   --value: string # The value of the environment variable (e.g. https://api.vercel.com)
-  --type: string@type-completer-2 # The type of environment variable (e.g. plain)
+  --type: string@type-completer-3 # The type of environment variable (e.g. plain)
   --target: list # The target environment of the environment variable (e.g. [preview])
   --gitBranch: string # If defined, the git branch of the environment variable (must have target=preview) (nullable, e.g. feature-1)
   --comment: string # A comment to add context on what this environment variable is for (e.g. database connection string for production)
@@ -6595,7 +6598,7 @@ export def "projects-env editProjectEnv" [
   --key: string # The name of the environment variable (e.g. GITHUB_APP_ID)
   --target: list # The target environment of the environment variable (e.g. [preview])
   --gitBranch: string # If defined, the git branch of the environment variable (must have target=preview) (nullable, e.g. feature-1)
-  --type: string@type-completer-2 # The type of environment variable (e.g. plain)
+  --type: string@type-completer-3 # The type of environment variable (e.g. plain)
   --value: string # The value of the environment variable (e.g. bkWIjbnxcvo78)
   --customEnvironmentIds: list # The custom environments that the environment variable should be synced to
   --comment: string # A comment to add context on what this env var is for (e.g. database connection string for production)
@@ -8186,7 +8189,7 @@ export def "teams-members get" [
   --since: float # Timestamp in milliseconds to only include members added since then. (e.g. 1540095775951)
   --until: float # Timestamp in milliseconds to only include members added until then. (e.g. 1540095775951)
   --search: string # Search team members by their name, username, and email.
-  --role: string@role-completer-1 # Only return members with the specified team role. (e.g. OWNER)
+  --role: string@role-completer-2 # Only return members with the specified team role. (e.g. OWNER)
   --excludeProject: string # Exclude members who belong to the specified project.
   --eligibleMembersForProjectId: string # Include team members who are eligible to be members of the specified project.
   --slug: string # The Team slug to perform the request on behalf of. (e.g. my-team-url-slug)
@@ -8307,7 +8310,7 @@ export def "teams-members-teams-join joinTeam" [
 #
 # PATCH /v1/teams/{teamId}/members/{uid}
 # operationId: updateTeamMember
-# --projects item shape: {projectId: string, role: "ADMIN"|"PROJECT_VIEWER"|"PROJECT_DEVELOPER"}
+# --projects item shape: {projectId: string, role: "ADMIN"|"PROJECT_VIEWER"|"PROJECT_DEVELOPER"|""}
 # --joinedFrom shape: {ssoUserId?: any}
 export def "teams-members updateTeamMember" [
   uid: string
@@ -8322,7 +8325,7 @@ export def "teams-members updateTeamMember" [
   --confirmed: string@bool-completer # Accept a user who requested access to the team. (e.g. true)
   --role: string # The role in the team of the member. (default: MEMBER, e.g. VIEWER)
   --teamPermissions: list # The team permissions to set for the member. Permissions must be compatible with the team roles assigned to the member. (e.g. [CreateProject, FullProductionDeployment])
-  --projects: list # item shape: {projectId: string, role: "ADMIN"|"PROJECT_VIEWER"|"PROJECT_DEVELOPER"}
+  --projects: list # item shape: {projectId: string, role: "ADMIN"|"PROJECT_VIEWER"|"PROJECT_DEVELOPER"|""}
   --joinedFrom: record # shape: {ssoUserId?: any}
 ]: any -> record<id: string> {
   let input = $in

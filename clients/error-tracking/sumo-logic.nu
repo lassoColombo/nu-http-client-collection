@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -8445,7 +8446,7 @@ export def "threat-intel-datastore-data-source dataSourcePropertiesUpdate" [
 #
 # POST /v1/otCollectors
 # operationId: getPaginatedOTCollectors
-# --filters shape: {tags?: list, os?: string, collectorVersionRange?: record, alive?: bool, isRemotelyManaged?: bool, isUpgradeAvailable?: bool, hasNoSourceTemplateLinked?: bool, healthStatus?: "Healthy"|"Error"|"Warning"}
+# --filters shape: {tags?: list, os?: string, collectorVersionRange?: record, alive?: bool, isRemotelyManaged?: bool, isUpgradeAvailable?: bool, hasNoSourceTemplateLinked?: bool, healthStatus?: list}
 export def "ot-collectors post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8455,7 +8456,7 @@ export def "ot-collectors post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --search: string # search by collector id or free text search on collector properties. (e.g. testAgent)
-  --filters: record # parameter which is used for filtering. — shape: {tags?: list, os?: string, collectorVersionRange?: record, alive?: bool, isRemotelyManaged?: bool, isUpgradeAvailable?: bool, hasNoSourceTemplateLinked?: bool, healthStatus?: "Healthy"|"Error"|"Warning"}
+  --filters: record # parameter which is used for filtering. — shape: {tags?: list, os?: string, collectorVersionRange?: record, alive?: bool, isRemotelyManaged?: bool, isUpgradeAvailable?: bool, hasNoSourceTemplateLinked?: bool, healthStatus?: list}
   --sortBy: string # parameter which is used for sorting. (e.g. name)
   --next: string # parameter which is used for fetching next set of results. (e.g. token)
   --limit: int # parameter which is used for limiting number of otCollectors on a page. (format: int32, e.g. 30)

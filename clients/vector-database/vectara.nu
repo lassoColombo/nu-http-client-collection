@@ -21,17 +21,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -89,8 +90,12 @@ def mode-completer [] { ["auto" "manual"] }
 def type-completer-9 [] { ["gchat" "slack"] }
 def sync-mode-completer [] { ["full_refresh" "incremental"] }
 def source-type-completer [] { ["google_drive" "s3" "sharepoint" "web"] }
+def status-completer [] { ["active" "error" "initializing" "paused"] }
+def status-completer-1 [] { ["pending" "retrying"] }
 def origin-completer [] { ["manual" "pipeline"] }
-def status-completer [] { ["error" "ok"] }
+def status-completer-2 [] { ["cancelled" "completed" "failed" "running"] }
+def order-completer [] { ["asc" "desc"] }
+def status-completer-3 [] { ["error" "ok"] }
 def error-type-completer [] { ["actions_limit_reached" "context_limit_exceeded" "internal" "llm_generation_error" "step_transition_limit_exceeded" "stream_error"] }
 def operation-completer [] { ["chat" "compaction" "execute_tool" "guardrail" "image_read" "invoke_agent" "output" "step_transition" "thinking"] }
 def tool-error-type-completer [] { ["dependency_failed" "execution_error" "invalid_configuration" "invalid_input" "not_found" "timeout"] }
@@ -1858,7 +1863,7 @@ export def "users listUsers" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # The maximum number of users to return at one time. (format: int32, default: 10)
   --page-key: string # Used to retrieve the next page of users after the limit has been reached.
-  --corpus-key: string # Filter users by access to this corpus.
+  --corpus-key: string # Filter users by access to this corpus. (e.g. my-corpus)
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<users: table<id: string, email: string, username: string, enabled: bool, description: string, created_at: string, updated_at: string, api_roles: list, corpus_roles: list, agent_roles: list, api_policy: record>, metadata: record<page_key: string>> {
@@ -2038,8 +2043,8 @@ export def "api-keys listApiKeys" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Max number of API keys to return at one time. (format: int32, default: 10)
   --page-key: string # Used to retrieve the next page of API keys after the limit has been reached.
-  --corpus-key: string # Filters the API keys to only those with permissions on the specified corpus key.
-  --api-key-role: string # Filter API keys by their role.
+  --corpus-key: string # Filters the API keys to only those with permissions on the specified corpus key. (e.g. my-corpus)
+  --api-key-role: string@api-key-role-completer # Filter API keys by their role.
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
   --Request-Timeout-Millis: int # The API will make a best effort to complete the request in the specified milliseconds or time out.
 ]: nothing -> record<api_keys: table<id: string, name: string, secret_key: string, enabled: bool, api_roles: list, api_key_role: string, corpus_roles: list, agent_roles: list, api_policy: record>, metadata: record<page_key: string>> {
@@ -4813,7 +4818,7 @@ export def "pipelines listPipelines" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --source-type: string@source-type-completer # Filter pipelines by source type.
-  --status: string # Filter pipelines by status.
+  --status: string@status-completer # Filter pipelines by status.
   --enabled: string@bool-completer # Filter pipelines by enabled state.
   --filter: string # A regex filter on pipeline name and description.
   --limit: int # The maximum number of pipelines to return. (format: int32, default: 10)
@@ -5000,9 +5005,9 @@ export def "pipelines-dead-letters listPipelineDeadLetterEntries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string # Filter dead letters by status.
-  --last-run-id: string # Filter dead letters to those from a specific run.
-  --origin: string # Filter dead letters by origin.
+  --status: string@status-completer-1 # Filter dead letters by status.
+  --last-run-id: string # Filter dead letters to those from a specific run. (e.g. run_pip_abc_manual_550e8400)
+  --origin: string@origin-completer # Filter dead letters by origin.
   --filter: string # A regex filter on the source record ID. Supports partial matching.
   --limit: int # The maximum number of dead letters to return. (format: int32, default: 10)
   --page-key: string # Used to retrieve the next page of dead letters after the limit has been reached.
@@ -5150,7 +5155,7 @@ export def "pipelines-runs listPipelineRuns" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string # Filter runs by status.
+  --status: string@status-completer-2 # Filter runs by status.
   --after: string # Only return runs created after this timestamp. (format: date-time)
   --limit: int # The maximum number of runs to return. (format: int32, default: 10)
   --page-key: string # Used to retrieve the next page of runs after the limit has been reached.
@@ -5238,7 +5243,7 @@ export def "pipelines-runs-events listPipelineRunEvents" [
   --allow-errors(-e) # Return full response without error handling
   --type: list # Filter to one or more event types. Repeat the parameter to pass multiple values.
   --source-record-id: string # Filter to events for a specific source record.
-  --order: string # Order events by timestamp. Defaults to newest-first.
+  --order: string@order-completer # Order events by timestamp. Defaults to newest-first.
   --limit: int # The maximum number of events to return. (format: int32, default: 50)
   --page-key: string # Used to retrieve the next page of events after the limit has been reached.
   --Request-Timeout: int # The API will make a best effort to complete the request in the specified seconds or time out.
@@ -5328,7 +5333,7 @@ export def "agent-analytics-traces listTraces" [
   --allow-errors(-e) # Return full response without error handling
   --agent-key: string # Filter traces by agent key.
   --session-key: string # Filter traces by session key.
-  --status: string@status-completer # Filter traces by status.
+  --status: string@status-completer-3 # Filter traces by status.
   --error-type: string@error-type-completer # Filter to traces containing a span with this exact error type.
   --operation: string@operation-completer # Filter to traces containing at least one span with this operation.
   --tool-name: string # Filter to traces containing a tool execution span with this exact tool name.

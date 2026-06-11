@@ -19,17 +19,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -64,23 +65,28 @@ def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
+def permission-completer [] { ["add:account_member" "administrate:sso" "administrate:workspace" "bypass:sso" "create:account_role" "create:audit_event" "create:bot" "create:invitation" "create:team" "create:workspace" "create:workspace_invitation" "create:workspace_role" "delete:account" "delete:account_membership" "delete:account_role" "delete:bot" "delete:mex-storage" "delete:team" "delete:workspace" "delete:workspace_role" "read:account" "read:account_membership" "read:account_role" "read:audit_event" "read:billing" "read:bot" "read:integrations" "read:invitation" "read:ip_allowlist" "read:mex-storage" "read:sso" "read:team" "read:workspace" "read:workspace_invitation" "read:workspace_role" "update:account" "update:account_membership" "update:account_role" "update:billing" "update:bot" "update:integrations" "update:invitation" "update:ip_allowlist" "update:mex-storage" "update:team" "update:workspace_invitation" "update:workspace_role"] }
+def scope-completer [] { ["manage_acls" "manage_artifacts" "manage_assets" "manage_automations" "manage_blocks" "manage_concurrency_limits" "manage_deployments" "manage_event_publications" "manage_event_subscriptions" "manage_events" "manage_flows" "manage_incidents" "manage_mex_deploy" "manage_mex_storage" "manage_notifications" "manage_saved_search" "manage_tags" "manage_variables" "manage_webhooks" "manage_work_pools" "manage_work_queues" "manage_workers" "manage_workspace_service_accounts" "manage_workspace_settings" "manage_workspace_teams" "manage_workspace_users" "run_deployments" "run_flows" "run_tasks" "see_artifacts" "see_assets" "see_automations" "see_blocks" "see_concurrency_limits" "see_deployments" "see_event_publications" "see_event_subscriptions" "see_events" "see_flows" "see_incidents" "see_notifications" "see_secret_blocks" "see_tags" "see_variables" "see_webhooks" "see_work_pools" "see_work_queues" "see_workers" "see_workspace_service_accounts" "see_workspace_settings" "see_workspace_users" "write_artifacts" "write_assets" "write_deployments" "write_incidents" "write_notifications" "write_variables" "write_work_pools" "write_work_queues" "write_workers" "write_workspace_settings"] }
 def tier-completer [] { ["ENTERPRISE" "FREE_2025_04" "PRO" "PRO_2024_04" "STARTER" "TEAM"] }
 def time-unit-completer [] { ["day" "hour" "minute" "second" "week"] }
+def order-completer [] { ["ASC" "DESC"] }
 def sort-completer [] { ["CREATED_DESC" "NAME_ASC" "NAME_DESC" "UPDATED_DESC"] }
 def severity-completer [] { ["critical" "high" "low" "minor" "moderate"] }
 def sort-completer-1 [] { ["CREATED_ASC" "CREATED_DESC" "KEY_EXPIRATION_ASC" "KEY_EXPIRATION_DESC" "NAME_ASC" "NAME_DESC" "UPDATED_ASC" "UPDATED_DESC"] }
 def resolution-completer [] { ["1" "1440" "15" "360" "5" "60"] }
 def group-by-completer [] { ["deployment" "flow" "tag" "work-pool"] }
-def sort-completer-2 [] { ["asc" "desc"] }
-def sort-completer-3 [] { ["TIMESTAMP_ASC" "TIMESTAMP_DESC"] }
-def sort-completer-4 [] { ["CREATED_DESC" "ID_DESC" "KEY_ASC" "KEY_DESC" "UPDATED_DESC"] }
-def sort-completer-5 [] { ["CREATED_ASC" "CREATED_DESC" "NAME_ASC" "NAME_DESC" "UPDATED_ASC" "UPDATED_DESC"] }
-def sort-completer-6 [] { ["DURATION_DESC" "END_TIME_DESC" "EXPECTED_START_TIME_ASC" "EXPECTED_START_TIME_DESC" "ID_DESC" "LATENESS_DESC" "NAME_ASC" "NAME_DESC" "NEXT_SCHEDULED_START_TIME_ASC" "START_TIME_ASC" "START_TIME_DESC"] }
-def sort-completer-7 [] { ["END_TIME_DESC" "EXPECTED_START_TIME_ASC" "EXPECTED_START_TIME_DESC" "ID_DESC" "NAME_ASC" "NAME_DESC" "NEXT_SCHEDULED_START_TIME_ASC"] }
+def sort-completer-2 [] { ["LAST_SEEN_ASC" "LAST_SEEN_DESC" "NAME_ASC" "NAME_DESC"] }
+def sort-completer-3 [] { ["asc" "desc"] }
+def sort-completer-4 [] { ["TIMESTAMP_ASC" "TIMESTAMP_DESC"] }
+def order-by-completer [] { ["LAST_SEEN_DESC" "NAME_ASC"] }
+def sort-completer-5 [] { ["CREATED_DESC" "ID_DESC" "KEY_ASC" "KEY_DESC" "UPDATED_DESC"] }
+def sort-completer-6 [] { ["CREATED_ASC" "CREATED_DESC" "NAME_ASC" "NAME_DESC" "UPDATED_ASC" "UPDATED_DESC"] }
+def sort-completer-7 [] { ["DURATION_DESC" "END_TIME_DESC" "EXPECTED_START_TIME_ASC" "EXPECTED_START_TIME_DESC" "ID_DESC" "LATENESS_DESC" "NAME_ASC" "NAME_DESC" "NEXT_SCHEDULED_START_TIME_ASC" "START_TIME_ASC" "START_TIME_DESC"] }
+def sort-completer-8 [] { ["END_TIME_DESC" "EXPECTED_START_TIME_ASC" "EXPECTED_START_TIME_DESC" "ID_DESC" "NAME_ASC" "NAME_DESC" "NEXT_SCHEDULED_START_TIME_ASC"] }
 def resource-type-completer [] { ["deployment" "flow" "work_pool"] }
 def mode-completer [] { ["concurrency" "rate_limit"] }
-def sort-completer-8 [] { ["NAME_ASC" "NAME_DESC"] }
-def sort-completer-9 [] { ["CLIENT_VERSION_ASC" "CLIENT_VERSION_DESC" "LAST_HEARTBEAT_ASC" "LAST_HEARTBEAT_DESC" "NAME_ASC" "NAME_DESC" "STATUS_ASC" "STATUS_DESC"] }
+def sort-completer-9 [] { ["NAME_ASC" "NAME_DESC"] }
+def sort-completer-10 [] { ["CLIENT_VERSION_ASC" "CLIENT_VERSION_DESC" "LAST_HEARTBEAT_ASC" "LAST_HEARTBEAT_DESC" "NAME_ASC" "NAME_DESC" "STATUS_ASC" "STATUS_DESC"] }
 def direction-completer [] { ["asc" "desc"] }
 
 # List all available API commands with their parameters
@@ -2750,7 +2756,7 @@ export def "me-accounts-has-permission list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --permission: string
+  --permission: string@permission-completer
 ]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2774,7 +2780,7 @@ export def "me-accounts-has-permission get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --permission: string
+  --permission: string@permission-completer
 ]: nothing -> bool {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2863,7 +2869,7 @@ export def "me-workspaces-has-scope get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --scope: string
+  --scope: string@scope-completer
 ]: nothing -> bool {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3635,7 +3641,7 @@ export def "accounts-workspaces-flow-runs-events get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --offset: int # default: 0
-  --order: string # default: DESC
+  --order: string@order-completer
   --with-task-runs: string@bool-completer # default: true
   --limit: int # Defaults to PREFECT_ORION_API_DEFAULT_LIMIT if not provided.
   --if-none-match: string
@@ -4410,7 +4416,7 @@ export def "accounts-workspaces-slas-filter post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-sort: string # default: NAME_ASC
+  --qp-sort: string@sort-completer
   --offset: int # default: 0
   --filter: any
   --limit: int # Defaults to PREFECT_ORION_API_DEFAULT_LIMIT if not provided.
@@ -4442,7 +4448,7 @@ export def "accounts-workspaces-slas-by-owner post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-sort: string # default: NAME_ASC
+  --qp-sort: string@sort-completer
   --offset: int # default: 0
   --filter: any
   --limit: int # Defaults to PREFECT_ORION_API_DEFAULT_LIMIT if not provided.
@@ -5026,7 +5032,7 @@ export def "accounts-workspaces-tags get" [
   --allow-errors(-e) # Return full response without error handling
   --search: string # A string to search for in the tag names
   --page: int # The page number of tags to return. (default: 1)
-  --qp-sort: string # Sort tags by name (A→Z or Z→A) or recency (most/least recently seen first) (default: LAST_SEEN_DESC)
+  --qp-sort: string@sort-completer-2 # Sort tags by name (A→Z or Z→A) or recency (most/least recently seen first)
   --limit: int # Defaults to PREFECT_ORION_API_DEFAULT_LIMIT if not provided.
 ]: nothing -> record<results: table<name: string, first_seen: string, last_seen: string>, count: int, limit: int, pages: int, page: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5257,7 +5263,7 @@ export def "accounts-workspaces-assets-materializations list" [
   --key: string # The asset key to get materializations for
   --since: string # Only return materializations on or after this timestamp
   --until: string # Only return materializations on or before this timestamp
-  --qp-sort: string@sort-completer-2 # Sort order: 'asc' or 'desc' (default: desc)
+  --qp-sort: string@sort-completer-3 # Sort order: 'asc' or 'desc' (default: desc)
 ]: nothing -> table<asset_key: string, occurred: string, status: string, task_run_id: string, flow_run_id: any, event_id: string, metadata: record, name: string, url: string, description: string, owners: list<string>, upstream_assets: list<string>, by_tools: list<string>, originating_workspace_id: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5285,7 +5291,7 @@ export def "accounts-workspaces-assets-references list" [
   --key: string # The asset key to get references for
   --since: string # Only return references on or after this timestamp
   --until: string # Only return references on or before this timestamp
-  --qp-sort: string@sort-completer-2 # Sort order: 'asc' or 'desc' (default: desc)
+  --qp-sort: string@sort-completer-3 # Sort order: 'asc' or 'desc' (default: desc)
 ]: nothing -> table<asset_key: string, occurred: string, status: string, task_run_id: string, flow_run_id: any, event_id: string, metadata: record, name: string, url: string, description: string, owners: list<string>, upstream_assets: list<string>, by_tools: list<string>, originating_workspace_id: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5798,7 +5804,7 @@ export def "accounts-workspaces-logs-filter post" [
   --x-prefect-api-version: string
   --offset: int # default: 0
   --logs: any
-  --body-sort: string@sort-completer-3 # Defines log sorting options.
+  --body-sort: string@sort-completer-4 # Defines log sorting options.
   --limit: int # Defaults to PREFECT_ORION_API_DEFAULT_LIMIT if not provided.
 ]: any -> table<id: string, created: any, updated: any, name: string, level: int, message: string, timestamp: string, flow_run_id: any, task_run_id: any, worker_id: any> {
   let input = $in
@@ -5856,7 +5862,7 @@ export def "accounts-workspaces-flow-runs-logs get" [
   --level-ge: string
   --level-le: string
   --offset: int # default: 0
-  --qp-sort: string # default: TIMESTAMP_ASC
+  --qp-sort: string@sort-completer-4
   --since: string # Only include logs with a timestamp at or after this time
   --until: string # Only include logs with a timestamp at or before this time
   --task-runs: string # Comma-separated list of task run IDs to filter by
@@ -5943,7 +5949,7 @@ export def "accounts-workspaces-traces-observed-loggers get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # Prefix search query for logger names
-  --order-by: string # Order results by name (alphabetically) or recency (most recently seen first) (default: LAST_SEEN_DESC)
+  --order-by: string@order-by-completer # Order results by name (alphabetically) or recency (most recently seen first)
   --limit: int # Maximum number of results to return (default: 100)
 ]: nothing -> table<logger_name: string, count: int, first_seen: string, last_seen: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -5970,7 +5976,7 @@ export def "accounts-workspaces-observed-loggers get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # Prefix search query for logger names
-  --order-by: string # Order results by name (alphabetically) or recency (most recently seen first) (default: LAST_SEEN_DESC)
+  --order-by: string@order-by-completer # Order results by name (alphabetically) or recency (most recently seen first)
   --limit: int # Maximum number of results to return (default: 200)
 ]: nothing -> table<logger_name: string, count: int, first_seen: string, last_seen: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6147,7 +6153,7 @@ export def "accounts-workspaces-artifacts-filter post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --x-prefect-api-version: string
-  --body-sort: string@sort-completer-4 # Defines artifact sorting options.
+  --body-sort: string@sort-completer-5 # Defines artifact sorting options.
   --offset: int # default: 0
   --artifacts: any
   --flow-runs: any
@@ -6184,7 +6190,7 @@ export def "accounts-workspaces-artifacts-latest-filter post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --x-prefect-api-version: string
-  --body-sort: string@sort-completer-4 # Defines artifact collection sorting options.
+  --body-sort: string@sort-completer-5 # Defines artifact collection sorting options.
   --offset: int # default: 0
   --artifacts: any
   --flow-runs: any
@@ -6500,7 +6506,7 @@ export def "accounts-workspaces-flows-filter post" [
   --task-runs: any
   --deployments: any
   --work-pools: any
-  --body-sort: string@sort-completer-5 # Defines flow sorting options.
+  --body-sort: string@sort-completer-6 # Defines flow sorting options.
   --limit: int # Defaults to PREFECT_ORION_API_DEFAULT_LIMIT if not provided.
 ]: any -> table<id: string, created: any, updated: any, name: string, tags: list<string>, labels: any, created_by: any, updated_by: any> {
   let input = $in
@@ -6569,7 +6575,7 @@ export def "accounts-workspaces-flows-paginate post" [
   --task-runs: any
   --deployments: any
   --work-pools: any
-  --body-sort: string@sort-completer-5 # Defines flow sorting options.
+  --body-sort: string@sort-completer-6 # Defines flow sorting options.
   --limit: int # Defaults to PREFECT_ORION_API_DEFAULT_LIMIT if not provided.
 ]: any -> record<results: table<id: string, created: any, updated: any, name: string, tags: list, labels: any, created_by: any, updated_by: any>, count: int, limit: int, pages: int, page: int> {
   let input = $in
@@ -6647,7 +6653,7 @@ export def "accounts-workspaces-flow-runs-filter post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --x-prefect-api-version: string
-  --body-sort: string@sort-completer-6 # Defines flow run sorting options.
+  --body-sort: string@sort-completer-7 # Defines flow run sorting options.
   --offset: int # default: 0
   --flows: any
   --flow-runs: any
@@ -6685,7 +6691,7 @@ export def "accounts-workspaces-flow-runs-filter-minimal post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --x-prefect-api-version: string
-  --body-sort: string@sort-completer-6 # Defines flow run sorting options.
+  --body-sort: string@sort-completer-7 # Defines flow run sorting options.
   --offset: int # default: 0
   --flows: any
   --flow-runs: any
@@ -6982,7 +6988,7 @@ export def "accounts-workspaces-flow-runs-artifacts get" [
   --depth: string # Optional depth limit for recursion (0 = flow run only)
   --since: string # Only return artifacts created on or after this timestamp
   --until: string # Only return artifacts created on or before this timestamp
-  --qp-sort: string@sort-completer-2 # Sort order by creation time (asc or desc) (default: desc)
+  --qp-sort: string@sort-completer-3 # Sort order by creation time (asc or desc) (default: desc)
   --x-prefect-api-version: string
 ]: nothing -> table<id: string, created: any, updated: any, key: any, type: any, description: any, data: any, metadata_: any, flow_run_id: any, task_run_id: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7266,7 +7272,7 @@ export def "accounts-workspaces-flow-runs-paginate post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --x-prefect-api-version: string
-  --body-sort: string@sort-completer-6 # Defines flow run sorting options.
+  --body-sort: string@sort-completer-7 # Defines flow run sorting options.
   --page: int # default: 1
   --flows: any
   --flow-runs: any
@@ -7337,7 +7343,7 @@ export def "accounts-workspaces-flow-runs-assets-materializations get" [
   --depth: string # Optional depth limit based on execution hierarchy. depth=0: only the root flow run. depth=1: root + direct children (tasks and subflows). None: unlimited depth (default).
   --since: string # Only return materializations on or after this timestamp
   --until: string # Only return materializations on or before this timestamp
-  --qp-sort: string@sort-completer-2 # Sort order by occurred time (asc or desc) (default: desc)
+  --qp-sort: string@sort-completer-3 # Sort order by occurred time (asc or desc) (default: desc)
   --x-prefect-api-version: string
 ]: nothing -> table<asset_key: string, occurred: string, status: string, task_run_id: string, flow_run_id: any, event_id: string, metadata: record, name: string, url: string, description: string, owners: list<string>, upstream_assets: list<string>, by_tools: list<string>, originating_workspace_id: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7369,7 +7375,7 @@ export def "accounts-workspaces-flow-runs-assets-references get" [
   --depth: string # Optional depth limit based on execution hierarchy. depth=0: only the root flow run. depth=1: root + direct children (tasks and subflows). None: unlimited depth (default).
   --since: string # Only return references on or after this timestamp
   --until: string # Only return references on or before this timestamp
-  --qp-sort: string@sort-completer-2 # Sort order by occurred time (asc or desc) (default: desc)
+  --qp-sort: string@sort-completer-3 # Sort order by occurred time (asc or desc) (default: desc)
   --x-prefect-api-version: string
 ]: nothing -> table<asset_key: string, occurred: string, task_run_id: string, flow_run_id: any, event_id: string, metadata: record, name: string, url: string, description: string, owners: list<string>, originating_workspace_id: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7398,7 +7404,7 @@ export def "accounts-workspaces-task-runs-filter post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --x-prefect-api-version: string
-  --body-sort: string@sort-completer-7 # Defines task run sorting options.
+  --body-sort: string@sort-completer-8 # Defines task run sorting options.
   --offset: int # default: 0
   --flows: any
   --flow-runs: any
@@ -7634,7 +7640,7 @@ export def "accounts-workspaces-task-runs-artifacts get" [
   --depth: string # Optional depth limit for recursion (0 = task run only)
   --since: string # Only return artifacts created on or after this timestamp
   --until: string # Only return artifacts created on or before this timestamp
-  --qp-sort: string@sort-completer-2 # Sort order by creation time (asc or desc) (default: desc)
+  --qp-sort: string@sort-completer-3 # Sort order by creation time (asc or desc) (default: desc)
   --x-prefect-api-version: string
 ]: nothing -> table<id: string, created: any, updated: any, key: any, type: any, description: any, data: any, metadata_: any, flow_run_id: any, task_run_id: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7666,7 +7672,7 @@ export def "accounts-workspaces-task-runs-assets-materializations get" [
   --depth: string # Optional depth limit based on execution hierarchy. depth=0: only the task run. depth=1: task run + its descendants. None: unlimited depth (default).
   --since: string # Only return materializations on or after this timestamp
   --until: string # Only return materializations on or before this timestamp
-  --qp-sort: string@sort-completer-2 # Sort order by occurred time (asc or desc) (default: desc)
+  --qp-sort: string@sort-completer-3 # Sort order by occurred time (asc or desc) (default: desc)
   --x-prefect-api-version: string
 ]: nothing -> table<asset_key: string, occurred: string, status: string, task_run_id: string, flow_run_id: any, event_id: string, metadata: record, name: string, url: string, description: string, owners: list<string>, upstream_assets: list<string>, by_tools: list<string>, originating_workspace_id: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7698,7 +7704,7 @@ export def "accounts-workspaces-task-runs-assets-references get" [
   --depth: string # Optional depth limit based on execution hierarchy. depth=0: only the task run. depth=1: task run + its descendants. None: unlimited depth (default).
   --since: string # Only return references on or after this timestamp
   --until: string # Only return references on or before this timestamp
-  --qp-sort: string@sort-completer-2 # Sort order by occurred time (asc or desc) (default: desc)
+  --qp-sort: string@sort-completer-3 # Sort order by occurred time (asc or desc) (default: desc)
   --x-prefect-api-version: string
 ]: nothing -> table<asset_key: string, occurred: string, task_run_id: string, flow_run_id: any, event_id: string, metadata: record, name: string, url: string, description: string, owners: list<string>, originating_workspace_id: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7760,7 +7766,7 @@ export def "accounts-workspaces-task-runs-paginate post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --x-prefect-api-version: string
-  --body-sort: string@sort-completer-7 # Defines task run sorting options.
+  --body-sort: string@sort-completer-8 # Defines task run sorting options.
   --page: int # default: 1
   --flows: any
   --flow-runs: any
@@ -8176,7 +8182,7 @@ export def "accounts-workspaces-deployments-filter post" [
   --deployments: any
   --work-pools: any
   --work-pool-queues: any
-  --body-sort: string@sort-completer-5 # Defines deployment sorting options.
+  --body-sort: string@sort-completer-6 # Defines deployment sorting options.
   --limit: int # Defaults to PREFECT_ORION_API_DEFAULT_LIMIT if not provided.
 ]: any -> table<id: string, created: any, updated: any, infra_overrides: any, name: string, version_id: any, version: any, version_info: any, branch: any, root: any, base: any, description: any, flow_id: string, schedule: any, is_schedule_active: bool, paused: bool, disabled: bool, schedules: list<record>, concurrency_limit: any, global_concurrency_limit: any, concurrency_options: any, job_variables: record, parameters: record, tags: list<string>, labels: any, work_queue_name: any, work_queue_id: any, last_polled: any, parameter_openapi_schema: any, path: any, pull_steps: any, entrypoint: any, manifest_path: any, storage_document_id: any, infrastructure_document_id: any, created_by: any, updated_by: any, work_pool_name: any, status: any, enforce_parameter_schema: bool> {
   let input = $in
@@ -8214,7 +8220,7 @@ export def "accounts-workspaces-deployments-paginate post" [
   --deployments: any
   --work-pools: any
   --work-pool-queues: any
-  --body-sort: string@sort-completer-5 # Defines deployment sorting options.
+  --body-sort: string@sort-completer-6 # Defines deployment sorting options.
   --limit: int # Defaults to PREFECT_ORION_API_DEFAULT_LIMIT if not provided.
 ]: any -> record<results: table<id: string, created: any, updated: any, infra_overrides: any, name: string, version_id: any, version: any, version_info: any, branch: any, root: any, base: any, description: any, flow_id: string, schedule: any, is_schedule_active: bool, paused: bool, disabled: bool, schedules: list, concurrency_limit: any, global_concurrency_limit: any, concurrency_options: any, job_variables: record, parameters: record, tags: list, labels: any, work_queue_name: any, work_queue_id: any, last_polled: any, parameter_openapi_schema: any, path: any, pull_steps: any, entrypoint: any, manifest_path: any, storage_document_id: any, infrastructure_document_id: any, created_by: any, updated_by: any, work_pool_name: any, status: any, enforce_parameter_schema: bool>, count: int, limit: int, pages: int, page: int> {
   let input = $in
@@ -10808,7 +10814,7 @@ export def "accounts-workspaces-work-pools-filter post" [
   --x-prefect-api-version: string
   --work-pools: any
   --offset: int # default: 0
-  --body-sort: string@sort-completer-8 # Defines work pool sorting options.
+  --body-sort: string@sort-completer-9 # Defines work pool sorting options.
   --exclude-base-job-template: string@bool-completer # If True, exclude base_job_template from responses to reduce payload size. Use when listing work pools and the full template is not needed. (default: false)
   --limit: int # Defaults to PREFECT_ORION_API_DEFAULT_LIMIT if not provided.
 ]: any -> table<id: string, created: any, updated: any, name: string, description: any, type: string, base_job_template: record, is_paused: bool, concurrency_limit: any, is_push_pool: bool, is_mex_pool: bool, status: any, default_queue_id: string, storage_configuration: record<bundle_upload_step: any, bundle_execution_step: any, default_result_storage_block_id: any>, last_polled: any, created_by: any, updated_by: any, active_slots: any> {
@@ -10842,7 +10848,7 @@ export def "accounts-workspaces-work-pools-paginate post" [
   --x-prefect-api-version: string
   --work-pools: any
   --page: int # default: 1
-  --body-sort: string@sort-completer-8 # Defines work pool sorting options.
+  --body-sort: string@sort-completer-9 # Defines work pool sorting options.
   --include-base-job-template: string@bool-completer # If True, include base_job_template in responses. Defaults to False to reduce payload size when the full template is not needed. (default: false)
   --limit: int # Defaults to PREFECT_ORION_API_DEFAULT_LIMIT if not provided.
 ]: any -> record<results: table<id: string, created: any, updated: any, name: string, description: any, type: string, base_job_template: record, is_paused: bool, concurrency_limit: any, is_push_pool: bool, is_mex_pool: bool, status: any, default_queue_id: string, storage_configuration: record, last_polled: any, created_by: any, updated_by: any, active_slots: any>, count: int, limit: int, pages: int, page: int> {
@@ -11263,7 +11269,7 @@ export def "accounts-workspaces-work-pools-workers-filter post" [
   --allow-errors(-e) # Return full response without error handling
   --x-prefect-api-version: string
   --workers: any
-  --body-sort: string@sort-completer-9 # Defines flow sorting options.
+  --body-sort: string@sort-completer-10 # Defines flow sorting options.
   --offset: int # default: 0
   --limit: int # Defaults to PREFECT_ORION_API_DEFAULT_LIMIT if not provided.
 ]: any -> table<id: string, created: any, updated: any, name: string, work_pool_id: string, last_heartbeat_time: any, status: string, heartbeat_interval_seconds: any, client_version: any, metadata_: any, created_by: any> {
@@ -11297,7 +11303,7 @@ export def "accounts-workspaces-work-pools-workers-paginate post" [
   --allow-errors(-e) # Return full response without error handling
   --x-prefect-api-version: string
   --workers: any
-  --body-sort: string@sort-completer-9 # Defines flow sorting options.
+  --body-sort: string@sort-completer-10 # Defines flow sorting options.
   --page: int # default: 1
   --limit: int # Defaults to PREFECT_ORION_API_DEFAULT_LIMIT if not provided.
 ]: any -> record<results: table<id: string, created: any, updated: any, name: string, work_pool_id: string, last_heartbeat_time: any, status: string, heartbeat_interval_seconds: any, client_version: any, metadata_: any, created_by: any>, count: int, limit: int, pages: int, page: int> {
@@ -12060,7 +12066,7 @@ export def "accounts-workspaces-traces-observed-states get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # Prefix search query for state type or name
-  --order-by: string # Order results by name (alphabetically) or recency (most recently seen first) (default: LAST_SEEN_DESC)
+  --order-by: string@order-by-completer # Order results by name (alphabetically) or recency (most recently seen first)
   --limit: int # Maximum number of results to return (default: 100)
   --x-prefect-api-version: string
 ]: nothing -> table<state_type: string, state_name: string, first_seen: string, last_seen: string> {
@@ -12232,7 +12238,7 @@ export def "accounts-workspaces-observed-states get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # Prefix search query for state type or name
-  --order-by: string # Order results by name (alphabetically) or recency (most recently seen first) (default: LAST_SEEN_DESC)
+  --order-by: string@order-by-completer # Order results by name (alphabetically) or recency (most recently seen first)
   --limit: int # Maximum number of results to return (default: 200)
   --x-prefect-api-version: string
 ]: nothing -> table<state_type: string, state_name: string, first_seen: string, last_seen: string> {
@@ -12322,7 +12328,7 @@ export def "accounts-workspaces-ui-flow-runs-history post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --x-prefect-api-version: string
-  --body-sort: string@sort-completer-6 # Defines flow run sorting options.
+  --body-sort: string@sort-completer-7 # Defines flow run sorting options.
   --limit: int # default: 1000
   --offset: int # default: 0
   --flows: any
@@ -12359,7 +12365,7 @@ export def "accounts-workspaces-ui-flow-runs-history-v2 post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --x-prefect-api-version: string
-  --body-sort: string@sort-completer-6 # Defines flow run sorting options.
+  --body-sort: string@sort-completer-7 # Defines flow run sorting options.
   --limit: int # default: 5000
   --page: int # default: 1
   --flows: any

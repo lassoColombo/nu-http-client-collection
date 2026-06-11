@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -79,6 +80,7 @@ def event-types-completer [] { ["accepted" "clicked" "complained" "delivered" "o
 def sort-by-completer [] { ["bounce_rate" "complaint_rate" "name"] }
 def sort-order-completer [] { ["ascending" "descending"] }
 def ascending-completer [] { ["no" "yes"] }
+def severity-completer [] { ["permanent" "temporary"] }
 def page-completer [] { ["first" "last" "next" "previous"] }
 def sort-completer [] { ["asc" "desc"] }
 def kind-completer [] { ["domain" "user" "web"] }
@@ -2468,7 +2470,7 @@ export def "events name-events" [
   --recipient: string # Filter by email address of a recipient. While messages are addressable to one or more recipients, each event (with one exception) tracks one recipient. See stored events for use of recipients
   --recipients: string # Specific to stored events, this field tracks all of the potential message recipients.
   --tags: string # Filter by user defined tags
-  --severity: string # Filter by event severity, if exists. Currently for failed events only. See [Tracking Failures](https://documentation.mailgun.com/docs/mailgun/user-manual/tracking-messages/#tracking-failures)
+  --severity: string@severity-completer # Filter by event severity, if exists. Currently for failed events only. See [Tracking Failures](https://documentation.mailgun.com/docs/mailgun/user-manual/tracking-messages/#tracking-failures)
 ]: nothing -> record<items: table<method: string, id: string, event: string, timestamp: float, log_level: string, flags: record, reject: record, message: record, tags: list, user_variables: record, storage: record, geolocation: record, client_info: record, ip: string, delivery_status: record, batch: record, severity: string, recipient_domain: string, recipient_provider: string, template: record, envelope: record>, paging: record<next: string, previous: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)

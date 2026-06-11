@@ -24,17 +24,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -69,20 +70,24 @@ def base-url-completer [] { ["https://api.datadoghq.com" "https://api.us3.datado
 def auth-scheme-completer [] { ["bearer" "dd-api-key" "query-api_key" "dd-application-key" "query-application_key"] }
 
 # Completers for enum parameters
+def sort-dir-completer [] { ["asc" "desc"] }
+def sort-completer [] { ["computed_on" "end_date" "size" "start_date"] }
 def layout-type-completer [] { ["free" "ordered"] }
 def reflow-type-completer [] { ["auto" "fixed"] }
 def dashboard-type-completer [] { ["custom_screenboard" "custom_timeboard"] }
 def share-type-completer [] { ["embed" "invite" "open"] }
 def status-completer [] { ["active" "paused"] }
-def alert-type-completer [] { ["error" "info" "recommendation" "snapshot" "success" "user_update" "warning"] }
+def Content-Encoding-completer [] { ["deflate"] }
 def priority-completer [] { ["low" "normal"] }
+def alert-type-completer [] { ["error" "info" "recommendation" "snapshot" "success" "user_update" "warning"] }
 def namespace-completer [] { ["application_elb" "custom" "elb" "lambda" "network_elb" "rds" "sqs" "step_functions"] }
 def encode-as-completer [] { ["form" "json"] }
-def sort-completer [] { ["asc" "desc"] }
+def sort-completer-1 [] { ["asc" "desc"] }
 def draft-status-completer [] { ["draft" "published"] }
 def type-completer [] { ["audit alert" "ci-pipelines alert" "ci-tests alert" "composite" "cost alert" "data-jobs alert" "data-quality alert" "database-monitoring alert" "error-tracking alert" "event alert" "event-v2 alert" "log alert" "metric alert" "network-path alert" "network-performance alert" "process alert" "query alert" "rum alert" "service check" "slo alert" "synthetics alert" "trace-analytics alert"] }
 def archiveReason-completer [] { ["false_positive" "investigated_case_opened" "none" "other" "testing_or_maintenance" "true_positive_benign" "true_positive_malicious"] }
 def state-completer [] { ["archived" "open" "under_review"] }
+def Content-Encoding-completer-1 [] { ["deflate" "gzip"] }
 def timeframe-completer [] { ["30d" "7d" "90d" "custom"] }
 def type-completer-1 [] { ["metric" "monitor" "time_slice"] }
 def status-completer-1 [] { ["live" "paused"] }
@@ -91,6 +96,10 @@ def type-completer-2 [] { ["api"] }
 def type-completer-3 [] { ["browser"] }
 def type-completer-4 [] { ["mobile"] }
 def new-status-completer [] { ["live" "paused"] }
+def usage-type-completer [] { ["api_usage" "apm_fargate_usage" "apm_host_usage" "apm_usm_usage" "appsec_fargate_usage" "appsec_usage" "asm_serverless_traced_invocations_percentage" "asm_serverless_traced_invocations_usage" "bits_ai_investigations_usage" "browser_usage" "ci_code_coverage_committers_percentage" "ci_code_coverage_committers_usage" "ci_pipeline_indexed_spans_usage" "ci_test_indexed_spans_usage" "ci_visibility_itr_usage" "cloud_siem_usage" "code_security_host_usage" "container_excl_agent_usage" "container_usage" "cspm_containers_usage" "cspm_hosts_usage" "custom_event_usage" "custom_ingested_timeseries_usage" "custom_timeseries_usage" "cws_containers_usage" "cws_fargate_task_usage" "cws_hosts_usage" "data_jobs_monitoring_usage" "data_stream_monitoring_usage" "dbm_hosts_usage" "dbm_queries_usage" "error_tracking_percentage" "error_tracking_usage" "estimated_indexed_spans_usage" "estimated_ingested_spans_usage" "fargate_usage" "flex_logs_starter" "flex_stored_logs" "functions_usage" "incident_management_monthly_active_users_usage" "indexed_spans_usage" "infra_host_basic_usage" "infra_host_usage" "ingested_logs_bytes_usage" "ingested_spans_bytes_usage" "invocations_usage" "lambda_traced_invocations_usage" "llm_observability_usage" "llm_spans_usage" "logs_indexed_15day_usage" "logs_indexed_180day_usage" "logs_indexed_1day_usage" "logs_indexed_30day_usage" "logs_indexed_360day_usage" "logs_indexed_3day_usage" "logs_indexed_45day_usage" "logs_indexed_60day_usage" "logs_indexed_7day_usage" "logs_indexed_90day_usage" "logs_indexed_custom_retention_usage" "mobile_app_testing_usage" "ndm_netflow_usage" "network_device_wireless_usage" "npm_host_usage" "obs_pipeline_bytes_usage" "obs_pipelines_vcpu_usage" "online_archive_usage" "product_analytics_session_usage" "profiled_container_usage" "profiled_fargate_usage" "profiled_host_usage" "published_app" "rum_browser_mobile_sessions_usage" "rum_ingested_usage" "rum_investigate_usage" "rum_replay_sessions_usage" "rum_session_replay_add_on_usage" "sca_fargate_usage" "sds_scanned_bytes_usage" "serverless_apps_apm_usage" "serverless_apps_usage" "siem_12mo_retention_usage" "siem_6mo_retention_usage" "siem_analyzed_logs_add_on_usage" "siem_ingested_bytes_usage" "snmp_usage" "universal_service_monitoring_usage" "vuln_management_hosts_usage" "workflow_executions_usage"] }
+def fields-completer [] { ["*" "api_percentage" "api_usage" "apm_fargate_percentage" "apm_fargate_usage" "apm_host_percentage" "apm_host_usage" "apm_usm_percentage" "apm_usm_usage" "appsec_fargate_percentage" "appsec_fargate_usage" "appsec_percentage" "appsec_usage" "asm_serverless_traced_invocations_percentage" "asm_serverless_traced_invocations_usage" "bits_ai_investigations_percentage" "bits_ai_investigations_usage" "browser_percentage" "browser_usage" "ci_pipeline_indexed_spans_percentage" "ci_pipeline_indexed_spans_usage" "ci_test_indexed_spans_percentage" "ci_test_indexed_spans_usage" "ci_visibility_itr_percentage" "ci_visibility_itr_usage" "cloud_siem_percentage" "cloud_siem_usage" "code_security_host_percentage" "code_security_host_usage" "container_excl_agent_percentage" "container_excl_agent_usage" "container_percentage" "container_usage" "cspm_containers_percentage" "cspm_containers_usage" "cspm_hosts_percentage" "cspm_hosts_usage" "custom_event_percentage" "custom_event_usage" "custom_ingested_timeseries_percentage" "custom_ingested_timeseries_usage" "custom_timeseries_percentage" "custom_timeseries_usage" "cws_containers_percentage" "cws_containers_usage" "cws_fargate_task_percentage" "cws_fargate_task_usage" "cws_hosts_percentage" "cws_hosts_usage" "data_jobs_monitoring_percentage" "data_jobs_monitoring_usage" "data_stream_monitoring_percentage" "data_stream_monitoring_usage" "dbm_hosts_percentage" "dbm_hosts_usage" "dbm_queries_percentage" "dbm_queries_usage" "error_tracking_percentage" "error_tracking_usage" "estimated_indexed_spans_percentage" "estimated_indexed_spans_usage" "estimated_ingested_spans_percentage" "estimated_ingested_spans_usage" "fargate_percentage" "fargate_usage" "flex_logs_starter_percentage" "flex_logs_starter_usage" "flex_stored_logs_percentage" "flex_stored_logs_usage" "functions_percentage" "functions_usage" "incident_management_monthly_active_users_percentage" "incident_management_monthly_active_users_usage" "indexed_spans_percentage" "indexed_spans_usage" "infra_host_basic_percentage" "infra_host_basic_usage" "infra_host_percentage" "infra_host_usage" "ingested_logs_bytes_percentage" "ingested_logs_bytes_usage" "ingested_spans_bytes_percentage" "ingested_spans_bytes_usage" "invocations_percentage" "invocations_usage" "lambda_traced_invocations_percentage" "lambda_traced_invocations_usage" "llm_observability_percentage" "llm_observability_usage" "llm_spans_percentage" "llm_spans_usage" "logs_indexed_15day_percentage" "logs_indexed_15day_usage" "logs_indexed_180day_percentage" "logs_indexed_180day_usage" "logs_indexed_1day_percentage" "logs_indexed_1day_usage" "logs_indexed_30day_percentage" "logs_indexed_30day_usage" "logs_indexed_360day_percentage" "logs_indexed_360day_usage" "logs_indexed_3day_percentage" "logs_indexed_3day_usage" "logs_indexed_45day_percentage" "logs_indexed_45day_usage" "logs_indexed_60day_percentage" "logs_indexed_60day_usage" "logs_indexed_7day_percentage" "logs_indexed_7day_usage" "logs_indexed_90day_percentage" "logs_indexed_90day_usage" "logs_indexed_custom_retention_percentage" "logs_indexed_custom_retention_usage" "mobile_app_testing_percentage" "mobile_app_testing_usage" "ndm_netflow_percentage" "ndm_netflow_usage" "network_device_wireless_percentage" "network_device_wireless_usage" "npm_host_percentage" "npm_host_usage" "obs_pipeline_bytes_percentage" "obs_pipeline_bytes_usage" "obs_pipelines_vcpu_percentage" "obs_pipelines_vcpu_usage" "online_archive_percentage" "online_archive_usage" "product_analytics_session_percentage" "product_analytics_session_usage" "profiled_container_percentage" "profiled_container_usage" "profiled_fargate_percentage" "profiled_fargate_usage" "profiled_host_percentage" "profiled_host_usage" "published_app_percentage" "published_app_usage" "rum_browser_mobile_sessions_percentage" "rum_browser_mobile_sessions_usage" "rum_ingested_percentage" "rum_ingested_usage" "rum_investigate_percentage" "rum_investigate_usage" "rum_replay_sessions_percentage" "rum_replay_sessions_usage" "rum_session_replay_add_on_percentage" "rum_session_replay_add_on_usage" "sca_fargate_percentage" "sca_fargate_usage" "sds_scanned_bytes_percentage" "sds_scanned_bytes_usage" "serverless_apps_apm_percentage" "serverless_apps_apm_usage" "serverless_apps_percentage" "serverless_apps_usage" "siem_12mo_retention_percentage" "siem_12mo_retention_usage" "siem_6mo_retention_percentage" "siem_6mo_retention_usage" "siem_analyzed_logs_add_on_percentage" "siem_analyzed_logs_add_on_usage" "siem_ingested_bytes_percentage" "siem_ingested_bytes_usage" "snmp_percentage" "snmp_usage" "universal_service_monitoring_percentage" "universal_service_monitoring_usage" "vuln_management_hosts_percentage" "vuln_management_hosts_usage" "workflow_executions_percentage" "workflow_executions_usage"] }
+def sort-direction-completer [] { ["asc" "desc"] }
+def sort-name-completer [] { ["*" "api_percentage" "api_usage" "apm_fargate_percentage" "apm_fargate_usage" "apm_host_percentage" "apm_host_usage" "apm_usm_percentage" "apm_usm_usage" "appsec_fargate_percentage" "appsec_fargate_usage" "appsec_percentage" "appsec_usage" "asm_serverless_traced_invocations_percentage" "asm_serverless_traced_invocations_usage" "bits_ai_investigations_percentage" "bits_ai_investigations_usage" "browser_percentage" "browser_usage" "ci_pipeline_indexed_spans_percentage" "ci_pipeline_indexed_spans_usage" "ci_test_indexed_spans_percentage" "ci_test_indexed_spans_usage" "ci_visibility_itr_percentage" "ci_visibility_itr_usage" "cloud_siem_percentage" "cloud_siem_usage" "code_security_host_percentage" "code_security_host_usage" "container_excl_agent_percentage" "container_excl_agent_usage" "container_percentage" "container_usage" "cspm_containers_percentage" "cspm_containers_usage" "cspm_hosts_percentage" "cspm_hosts_usage" "custom_event_percentage" "custom_event_usage" "custom_ingested_timeseries_percentage" "custom_ingested_timeseries_usage" "custom_timeseries_percentage" "custom_timeseries_usage" "cws_containers_percentage" "cws_containers_usage" "cws_fargate_task_percentage" "cws_fargate_task_usage" "cws_hosts_percentage" "cws_hosts_usage" "data_jobs_monitoring_percentage" "data_jobs_monitoring_usage" "data_stream_monitoring_percentage" "data_stream_monitoring_usage" "dbm_hosts_percentage" "dbm_hosts_usage" "dbm_queries_percentage" "dbm_queries_usage" "error_tracking_percentage" "error_tracking_usage" "estimated_indexed_spans_percentage" "estimated_indexed_spans_usage" "estimated_ingested_spans_percentage" "estimated_ingested_spans_usage" "fargate_percentage" "fargate_usage" "flex_logs_starter_percentage" "flex_logs_starter_usage" "flex_stored_logs_percentage" "flex_stored_logs_usage" "functions_percentage" "functions_usage" "incident_management_monthly_active_users_percentage" "incident_management_monthly_active_users_usage" "indexed_spans_percentage" "indexed_spans_usage" "infra_host_basic_percentage" "infra_host_basic_usage" "infra_host_percentage" "infra_host_usage" "ingested_logs_bytes_percentage" "ingested_logs_bytes_usage" "ingested_spans_bytes_percentage" "ingested_spans_bytes_usage" "invocations_percentage" "invocations_usage" "lambda_traced_invocations_percentage" "lambda_traced_invocations_usage" "llm_observability_percentage" "llm_observability_usage" "llm_spans_percentage" "llm_spans_usage" "logs_indexed_15day_percentage" "logs_indexed_15day_usage" "logs_indexed_180day_percentage" "logs_indexed_180day_usage" "logs_indexed_1day_percentage" "logs_indexed_1day_usage" "logs_indexed_30day_percentage" "logs_indexed_30day_usage" "logs_indexed_360day_percentage" "logs_indexed_360day_usage" "logs_indexed_3day_percentage" "logs_indexed_3day_usage" "logs_indexed_45day_percentage" "logs_indexed_45day_usage" "logs_indexed_60day_percentage" "logs_indexed_60day_usage" "logs_indexed_7day_percentage" "logs_indexed_7day_usage" "logs_indexed_90day_percentage" "logs_indexed_90day_usage" "logs_indexed_custom_retention_percentage" "logs_indexed_custom_retention_usage" "mobile_app_testing_percentage" "mobile_app_testing_usage" "ndm_netflow_percentage" "ndm_netflow_usage" "network_device_wireless_percentage" "network_device_wireless_usage" "npm_host_percentage" "npm_host_usage" "obs_pipeline_bytes_percentage" "obs_pipeline_bytes_usage" "obs_pipelines_vcpu_percentage" "obs_pipelines_vcpu_usage" "online_archive_percentage" "online_archive_usage" "product_analytics_session_percentage" "product_analytics_session_usage" "profiled_container_percentage" "profiled_container_usage" "profiled_fargate_percentage" "profiled_fargate_usage" "profiled_host_percentage" "profiled_host_usage" "published_app_percentage" "published_app_usage" "rum_browser_mobile_sessions_percentage" "rum_browser_mobile_sessions_usage" "rum_ingested_percentage" "rum_ingested_usage" "rum_investigate_percentage" "rum_investigate_usage" "rum_replay_sessions_percentage" "rum_replay_sessions_usage" "rum_session_replay_add_on_percentage" "rum_session_replay_add_on_usage" "sca_fargate_percentage" "sca_fargate_usage" "sds_scanned_bytes_percentage" "sds_scanned_bytes_usage" "serverless_apps_apm_percentage" "serverless_apps_apm_usage" "serverless_apps_percentage" "serverless_apps_usage" "siem_12mo_retention_percentage" "siem_12mo_retention_usage" "siem_6mo_retention_percentage" "siem_6mo_retention_usage" "siem_analyzed_logs_add_on_percentage" "siem_analyzed_logs_add_on_usage" "siem_ingested_bytes_percentage" "siem_ingested_bytes_usage" "snmp_percentage" "snmp_usage" "universal_service_monitoring_percentage" "universal_service_monitoring_usage" "vuln_management_hosts_percentage" "vuln_management_hosts_usage" "workflow_executions_percentage" "workflow_executions_usage"] }
 def access-role-completer [] { ["ERROR" "adm" "ro" "st"] }
 
 # List all available API commands with their parameters
@@ -409,8 +418,8 @@ export def "daily-custom-reports GetDailyCustomReports" [
   --allow-errors(-e) # Return full response without error handling
   --pagesize: int # The number of files to return in the response. `[default=60]`. (format: int64)
   --pagenumber: int # The identifier of the first page to return. This parameter is used for the pagination feature `[default=0]`. (format: int64)
-  --sort-dir: string # The direction to sort by: `[desc, asc]`.
-  --qp-sort: string # The field to sort by: `[computed_on, size, start_date, end_date]`.
+  --sort-dir: string@sort-dir-completer # The direction to sort by: `[desc, asc]`. (default: desc)
+  --qp-sort: string@sort-completer # The field to sort by: `[computed_on, size, start_date, end_date]`. (default: start_date)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -986,7 +995,7 @@ export def "distribution-points SubmitDistributionPoints" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Content-Encoding: string # HTTP header used to compress the media-type.
+  --Content-Encoding: string@Content-Encoding-completer # HTTP header used to compress the media-type.
   --body: record
 ]: any -> any {
   let input = $in
@@ -1199,7 +1208,7 @@ export def "events ListEvents" [
   --allow-errors(-e) # Return full response without error handling
   --start: int # POSIX timestamp. (format: int64)
   --end: int # POSIX timestamp. (format: int64)
-  --priority: string # Priority of your events, either `low` or `normal`.
+  --priority: string@priority-completer # Priority of your events, either `low` or `normal`. (nullable, e.g. normal)
   --sources: string # A comma separated string of sources.
   --tags: string # A comma separated list indicating what tags, if any, should be used to filter the list of events. (e.g. host:host0)
   --unaggregated: string@bool-completer # Set unaggregated to `true` to return all events within the specified [`start`,`end`] timeframe. Otherwise if an event is aggregated to a parent event with a timestamp outside of the timeframe, it won't be available in the output. Aggregated events with `is_aggregate=true` in the response will still be returned unless exclude_aggregate is set to `true.`
@@ -2746,7 +2755,7 @@ export def "logs-queries-list ListLogs" [
   --index: string # The log index on which the request is performed. For multi-index organizations, the default is all live indexes. Historical indexes of rehydrated logs must be specified. (e.g. retention-3,retention-15)
   --limit: int # Number of logs return in the response. (format: int32)
   --body-query: string # The search query - following the log search syntax. (e.g. service:web* AND @http.status_code:[200 TO 299])
-  --body-sort: string@sort-completer # Time-ascending `asc` or time-descending `desc` results.
+  --body-sort: string@sort-completer-1 # Time-ascending `asc` or time-descending `desc` results.
   --startAt: string # Hash identifier of the first log to return in the list, available in a log `id` attribute. This parameter is used for the pagination feature.  **Note**: This parameter is ignored if the corresponding log is out of the scope of the specified time window.
   time: record # Timeframe to retrieve the log from. — shape: {from: string, timezone?: string, to: string}
 ]: any -> record<logs: table<content: record, id: string>, nextLogId: string, status: string> {
@@ -3552,8 +3561,8 @@ export def "monthly-custom-reports GetMonthlyCustomReports" [
   --allow-errors(-e) # Return full response without error handling
   --pagesize: int # The number of files to return in the response `[default=60].` (format: int64)
   --pagenumber: int # The identifier of the first page to return. This parameter is used for the pagination feature `[default=0]`. (format: int64)
-  --sort-dir: string # The direction to sort by: `[desc, asc]`.
-  --qp-sort: string # The field to sort by: `[computed_on, size, start_date, end_date]`.
+  --sort-dir: string@sort-dir-completer # The direction to sort by: `[desc, asc]`. (default: desc)
+  --qp-sort: string@sort-completer # The field to sort by: `[computed_on, size, start_date, end_date]`. (default: start_date)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -4026,7 +4035,7 @@ export def "series SubmitMetrics" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Content-Encoding: string # HTTP header used to compress the media-type.
+  --Content-Encoding: string@Content-Encoding-completer-1 # HTTP header used to compress the media-type. (e.g. deflate)
   --body: record
 ]: any -> any {
   let input = $in
@@ -5760,7 +5769,7 @@ export def "usage-hourly-attribution GetHourlyUsageAttribution" [
   --allow-errors(-e) # Return full response without error handling
   --start-hr: string # Datetime in ISO-8601 format, UTC, precise to hour: `[YYYY-MM-DDThh]` for usage beginning at this hour. (format: date-time)
   --end-hr: string # Datetime in ISO-8601 format, UTC, precise to hour: `[YYYY-MM-DDThh]` for usage ending **before** this hour. (format: date-time)
-  --usage-type: string # Usage type to retrieve. Usage types are in the format `<usage_type>_usage`. Example: `infra_host_usage` To obtain the complete list of active usage types that can be used to replace `<usage_type>` in the field names, make a request to the [Get usage attribution types API](https://docs.datadoghq.com/api/latest/usage-metering/#get-usage-attribution-types).
+  --usage-type: string@usage-type-completer # Usage type to retrieve. Usage types are in the format `<usage_type>_usage`. Example: `infra_host_usage` To obtain the complete list of active usage types that can be used to replace `<usage_type>` in the field names, make a request to the [Get usage attribution types API](https://docs.datadoghq.com/api/latest/usage-metering/#get-usage-attribution-types).
   --next-record-id: string # List following results with a next_record_id provided in the previous query.
   --tag-breakdown-keys: string # Comma separated list of tags used to group usage. If no value is provided the usage will not be broken down by tags.  To see which tags are available, look for the value of `tag_config_source` in the API response.
   --include-descendants: string@bool-completer # Include child org usage in the response. Defaults to `true`. (default: true)
@@ -5969,9 +5978,9 @@ export def "usage-monthly-attribution GetMonthlyUsageAttribution" [
   --allow-errors(-e) # Return full response without error handling
   --start-month: string # Datetime in ISO-8601 format, UTC, precise to month: `[YYYY-MM]` for usage beginning in this month. Maximum of 15 months ago. (format: date-time)
   --end-month: string # Datetime in ISO-8601 format, UTC, precise to month: `[YYYY-MM]` for usage ending this month. (format: date-time)
-  --qp-fields: string # Comma-separated list of usage types to return, or `*` for all usage types. Usage types are in the format `<usage_type>_usage` and `<usage_type>_percentage`. Example: `infra_host_usage,infra_host_percentage` To obtain the complete list of usage attribution types that can be used to replace `<usage_type>` in the field names, make a request to the [Get usage attribution types API](https://docs.datadoghq.com/api/latest/usage-metering/#get-usage-attribution-types).
-  --sort-direction: string # The direction to sort by: `[desc, asc]`.
-  --sort-name: string # The field to sort by. Sort fields are in the format `<usage_type>_usage`. Example: `infra_host_usage` To obtain the complete list of usage attribution types that can be used to replace `<usage_type>` in the field names, make a request to the [Get usage attribution types API](https://docs.datadoghq.com/api/latest/usage-metering/#get-usage-attribution-types).
+  --qp-fields: string@fields-completer # Comma-separated list of usage types to return, or `*` for all usage types. Usage types are in the format `<usage_type>_usage` and `<usage_type>_percentage`. Example: `infra_host_usage,infra_host_percentage` To obtain the complete list of usage attribution types that can be used to replace `<usage_type>` in the field names, make a request to the [Get usage attribution types API](https://docs.datadoghq.com/api/latest/usage-metering/#get-usage-attribution-types).
+  --sort-direction: string@sort-direction-completer # The direction to sort by: `[desc, asc]`. (default: desc)
+  --sort-name: string@sort-name-completer # The field to sort by. Sort fields are in the format `<usage_type>_usage`. Example: `infra_host_usage` To obtain the complete list of usage attribution types that can be used to replace `<usage_type>` in the field names, make a request to the [Get usage attribution types API](https://docs.datadoghq.com/api/latest/usage-metering/#get-usage-attribution-types).
   --tag-breakdown-keys: string # Comma separated list of tag keys used to group usage. If no value is provided the usage will not be broken down by tags.  To see which tags are available, look for the value of `tag_config_source` in the API response.
   --next-record-id: string # List following results with a next_record_id provided in the previous query.
   --include-descendants: string@bool-completer # Include child org usage in the response. Defaults to `true`. (default: true)
@@ -6511,7 +6520,7 @@ export def "input SubmitLog" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --ddtags: string # Log tags can be passed as query parameters with `text/plain` content type. (e.g. env:prod,user:my-user)
-  --Content-Encoding: string # HTTP header used to compress the media-type.
+  --Content-Encoding: string@Content-Encoding-completer-1 # HTTP header used to compress the media-type.
   --body: record
 ]: any -> record {
   let input = $in

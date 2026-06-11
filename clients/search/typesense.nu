@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -65,6 +66,8 @@ def base-url-completer [] { ["http://localhost:8108"] }
 def auth-scheme-completer [] { ["x-typesense-api-key"] }
 
 # Completers for enum parameters
+def action-completer [] { ["create" "emplace" "update" "upsert"] }
+def dirty-values-completer [] { ["coerce_or_drop" "coerce_or_reject" "drop" "reject"] }
 def type-completer [] { ["counter" "log" "nohits_queries" "popular_queries"] }
 
 # List all available API commands with their parameters
@@ -234,8 +237,8 @@ export def "collections-documents indexDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --action: string # Additional action to perform (e.g. upsert)
-  --dirty-values: string # Dealing with Dirty Data
+  --action: string@action-completer # Additional action to perform
+  --dirty-values: string@dirty-values-completer # Dealing with Dirty Data
   --body: record
 ]: any -> record {
   let input = $in
@@ -313,11 +316,11 @@ export def "collections-documents-search searchCollection" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --searchParameters: string
+  --searchParameters: record
 ]: nothing -> record<facet_counts: table<counts: list, field_name: string, sampled: bool, stats: record>, found: int, found_docs: int, search_time_ms: int, out_of: int, search_cutoff: bool, page: int, grouped_hits: table<found: int, group_key: list, hits: list>, hits: table<highlights: list, highlight: record, document: record, text_match: int, text_match_info: record, geo_distance_meters: record, vector_distance: float, hybrid_search_info: record, search_index: int>, request_params: record<collection_name: string, first_q: string, q: string, per_page: int, voice_query: record<transcribed_query: string>>, conversation: record<answer: string, conversation_history: list<record>, conversation_id: string, query: string>, union_request_params: table<collection_name: string, first_q: string, q: string, per_page: int, voice_query: record>, metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "searchParameters" $searchParameters "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "searchParameters" $searchParameters "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/collections/($collectionName)/documents/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -805,7 +808,7 @@ export def "collections-documents updateDocument" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --dirty-values: string # Dealing with Dirty Data
+  --dirty-values: string@dirty-values-completer # Dealing with Dirty Data
   --body: record
 ]: any -> record {
   let input = $in
@@ -1346,14 +1349,14 @@ export def "multi-search multiSearch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --multiSearchParameters: string
+  --multiSearchParameters: record
   --union: string@bool-completer # When true, merges the search results from each search query into a single ordered set of hits. (default: false)
   searches: list # item shape: {q?: string, query_by?: string, query_by_weights?: string, text_match_type?: string, prefix?: string, infix?: string, max_extra_prefix?: int, max_extra_suffix?: int, filter_by?: string, sort_by?: string, facet_by?: string, max_facet_values?: int, facet_query?: string, num_typos?: string, page?: int, per_page?: int, limit?: int, offset?: int, group_by?: string, group_limit?: int, group_missing_values?: bool, include_fields?: string, exclude_fields?: string, highlight_full_fields?: string, highlight_affix_num_tokens?: int, highlight_start_tag?: string, highlight_end_tag?: string, snippet_threshold?: int, drop_tokens_threshold?: int, drop_tokens_mode?: "right_to_left"|"left_to_right"|"both_sides:3", typo_tokens_threshold?: int, enable_typos_for_alpha_numerical_tokens?: bool, filter_curated_hits?: bool, enable_synonyms?: bool, enable_analytics?: bool, synonym_prefix?: bool, synonym_num_typos?: int, pinned_hits?: string, hidden_hits?: string, curation_tags?: string, highlight_fields?: string, pre_segmented_query?: bool, preset?: string, enable_curations?: bool, prioritize_exact_match?: bool, prioritize_token_position?: bool, prioritize_num_matching_fields?: bool, enable_typos_for_numerical_tokens?: bool, exhaustive_search?: bool, search_cutoff_ms?: int, use_cache?: bool, cache_ttl?: int, min_len_1typo?: int, min_len_2typo?: int, vector_query?: string, remote_embedding_timeout_ms?: int, remote_embedding_num_tries?: int, facet_strategy?: string, stopwords?: string, facet_return_parent?: string, voice_query?: string, conversation?: bool, conversation_model_id?: string, conversation_id?: string, validate_field_names?: bool, collection?: string, x-typesense-api-key?: string, rerank_hybrid_matches?: bool}
 ]: any -> record<results: table<facet_counts: list, found: int, found_docs: int, search_time_ms: int, out_of: int, search_cutoff: bool, page: int, grouped_hits: list, hits: list, request_params: record, conversation: record, union_request_params: list, metadata: record, code: int, error: string>, conversation: record<answer: string, conversation_history: list<record>, conversation_id: string, query: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-typesense-api-key"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "multiSearchParameters" $multiSearchParameters "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "multiSearchParameters" $multiSearchParameters "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/multi_search" $qp)
   let body = {union: $union, searches: $searches} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }

@@ -21,17 +21,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -70,12 +71,14 @@ def accept-completer [] { ["application/json" "text/json" "text/plain"] }
 def monitorNewItems-completer [] { ["all" "new" "none"] }
 def status-completer [] { ["continuing" "deleted" "ended"] }
 def applyTags-completer [] { ["add" "remove" "replace"] }
+def sortDirection-completer [] { ["ascending" "default" "descending"] }
 def priority-completer [] { ["high" "low" "normal"] }
 def status-completer-1 [] { ["aborted" "cancelled" "completed" "failed" "orphaned" "queued" "started"] }
 def result-completer [] { ["successful" "unknown" "unsuccessful"] }
 def trigger-completer [] { ["manual" "scheduled" "unspecified"] }
 def preferredProtocol-completer [] { ["torrent" "unknown" "usenet"] }
 def protocol-completer [] { ["torrent" "unknown" "usenet"] }
+def eventType-completer [] { ["albumImportIncomplete" "artistFolderImported" "downloadFailed" "downloadIgnored" "downloadImported" "grabbed" "trackFileDeleted" "trackFileImported" "trackFileRenamed" "trackFileRetagged" "unknown"] }
 def authenticationMethod-completer [] { ["basic" "external" "forms" "none"] }
 def authenticationRequired-completer [] { ["disabledForLocalAddresses" "enabled"] }
 def updateMechanism-completer [] { ["apt" "builtIn" "docker" "external" "script"] }
@@ -935,7 +938,7 @@ export def "blocklist get" [
   --page: int # format: int32, default: 1
   --pageSize: int # format: int32, default: 10
   --sortKey: string
-  --sortDirection: string
+  --sortDirection: string@sortDirection-completer
 ]: nothing -> record<page: int, pageSize: int, sortKey: string, sortDirection: string, totalRecords: int, records: table<id: int, artistId: int, albumIds: list, sourceTitle: string, quality: record, customFormats: list, date: string, protocol: string, indexer: string, message: string, artist: record>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1453,7 +1456,7 @@ export def "wanted-cutoff list" [
   --page: int # format: int32, default: 1
   --pageSize: int # format: int32, default: 10
   --sortKey: string
-  --sortDirection: string
+  --sortDirection: string@sortDirection-completer
   --includeArtist: string@bool-completer # default: false
   --monitored: string@bool-completer # default: true
 ]: nothing -> record<page: int, pageSize: int, sortKey: string, sortDirection: string, totalRecords: int, records: table<id: int, title: string, disambiguation: string, overview: string, artistId: int, foreignAlbumId: string, monitored: bool, anyReleaseOk: bool, profileId: int, duration: int, albumType: string, secondaryTypes: list, mediumCount: int, ratings: record, releaseDate: string, releases: list, genres: list, media: list, artist: record, images: list, links: list, lastSearchTime: string, statistics: record, addOptions: record, remoteCover: string>> {
@@ -2125,7 +2128,7 @@ export def "history get" [
   --page: int # format: int32, default: 1
   --pageSize: int # format: int32, default: 10
   --sortKey: string
-  --sortDirection: string
+  --sortDirection: string@sortDirection-completer
   --includeArtist: string@bool-completer
   --includeAlbum: string@bool-completer
   --includeTrack: string@bool-completer
@@ -2154,7 +2157,7 @@ export def "history-since get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --date: string # format: date-time
-  --eventType: string
+  --eventType: string@eventType-completer
   --includeArtist: string@bool-completer # default: false
   --includeAlbum: string@bool-completer # default: false
   --includeTrack: string@bool-completer # default: false
@@ -2179,7 +2182,7 @@ export def "history-artist get" [
   --allow-errors(-e) # Return full response without error handling
   --artistId: int # format: int32
   --albumId: int # format: int32
-  --eventType: string
+  --eventType: string@eventType-completer
   --includeArtist: string@bool-completer # default: false
   --includeAlbum: string@bool-completer # default: false
   --includeTrack: string@bool-completer # default: false
@@ -3243,7 +3246,7 @@ export def "log get" [
   --page: int # format: int32, default: 1
   --pageSize: int # format: int32, default: 10
   --sortKey: string
-  --sortDirection: string
+  --sortDirection: string@sortDirection-completer
   --level: string
 ]: nothing -> record<page: int, pageSize: int, sortKey: string, sortDirection: string, totalRecords: int, records: table<id: int, time: string, exception: string, exceptionType: string, level: string, logger: string, message: string, method: string>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
@@ -3924,7 +3927,7 @@ export def "wanted-missing list" [
   --page: int # format: int32, default: 1
   --pageSize: int # format: int32, default: 10
   --sortKey: string
-  --sortDirection: string
+  --sortDirection: string@sortDirection-completer
   --includeArtist: string@bool-completer # default: false
   --monitored: string@bool-completer # default: true
 ]: nothing -> record<page: int, pageSize: int, sortKey: string, sortDirection: string, totalRecords: int, records: table<id: int, title: string, disambiguation: string, overview: string, artistId: int, foreignAlbumId: string, monitored: bool, anyReleaseOk: bool, profileId: int, duration: int, albumType: string, secondaryTypes: list, mediumCount: int, ratings: record, releaseDate: string, releases: list, genres: list, media: list, artist: record, images: list, links: list, lastSearchTime: string, statistics: record, addOptions: record, remoteCover: string>> {
@@ -4777,12 +4780,12 @@ export def "queue get" [
   --page: int # format: int32, default: 1
   --pageSize: int # format: int32, default: 10
   --sortKey: string
-  --sortDirection: string
+  --sortDirection: string@sortDirection-completer
   --includeUnknownArtistItems: string@bool-completer # default: false
   --includeArtist: string@bool-completer # default: false
   --includeAlbum: string@bool-completer # default: false
   --artistIds: list
-  --protocol: string
+  --protocol: string@protocol-completer
   --quality: list
 ]: nothing -> record<page: int, pageSize: int, sortKey: string, sortDirection: string, totalRecords: int, records: table<id: int, artistId: int, albumId: int, artist: record, album: record, quality: record, customFormats: list, customFormatScore: int, size: float, title: string, sizeleft: float, timeleft: string, estimatedCompletionTime: string, added: string, status: string, trackedDownloadStatus: string, trackedDownloadState: string, statusMessages: list, errorMessage: string, downloadId: string, protocol: string, downloadClient: string, downloadClientHasPostImportCategory: bool, indexer: string, outputPath: string, trackFileCount: int, trackHasFileCount: int, downloadForced: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))

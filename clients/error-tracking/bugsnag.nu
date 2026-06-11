@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -70,6 +71,7 @@ def sort-completer-1 [] { ["created_at" "favorite" "name"] }
 def direction-completer [] { ["asc" "desc"] }
 def type-completer [] { ["android" "angular" "asgi" "aspnet" "aspnet_core" "backbone" "bottle" "cocos2dx" "connect" "django" "dotnet" "dotnet_desktop" "dotnet_mvc" "electron" "ember" "eventmachine" "expo" "express" "flask" "flutter" "gin" "go" "go_net_http" "heroku" "ios" "java" "java_desktop" "js" "koa" "laravel" "lumen" "magento" "martini" "minidump" "ndk" "negroni" "nintendo_switch" "node" "osx" "other" "other_desktop" "other_mobile" "other_tv" "php" "python" "rack" "rails" "react" "reactnative" "restify" "revel" "ruby" "silex" "sinatra" "spring" "symfony" "tornado" "tvos" "unity" "unrealengine" "vega" "vue" "watchos" "webapi" "wordpress" "wpf" "wsgi"] }
 def sort-completer-2 [] { ["events" "first_seen" "last_seen" "unsorted" "users"] }
+def filter-groups-join-completer [] { ["and" "or"] }
 def histogram-completer [] { ["dynamic" "two_week"] }
 def severity-completer [] { ["error" "info" "warning"] }
 def operation-completer [] { ["assign" "create_issue" "delete" "discard" "fix" "ignore" "link_issue" "open" "override_severity" "snooze" "undiscard" "unlink_issue"] }
@@ -80,7 +82,6 @@ def type-completer-1 [] { ["jira"] }
 def sort-completer-5 [] { ["created_at"] }
 def project-role-completer [] { ["project_member" "project_owner"] }
 def report-type-completer [] { ["gdpr"] }
-def filter-groups-join-completer [] { ["and" "or"] }
 def op-completer [] { ["add" "remove" "replace"] }
 def sort-completer-6 [] { ["percent_of_sessions" "timestamp"] }
 def first-seen-completer [] { ["all" "this_week" "today"] }
@@ -360,14 +361,14 @@ export def "projects-errors listProjectErrors" [
   --qp-sort: string@sort-completer-2 # default: last_seen
   --direction: string@direction-completer # default: desc
   --per-page: int # default: 30
-  --filters: string
-  --filter-groups: string
-  --filter-groups-join: string
+  --filters: record
+  --filter-groups: record
+  --filter-groups-join: string@filter-groups-join-completer
   --histogram: string@histogram-completer # The type of histogram to include in the response. Only specific values are accepted. When provided, adds trend data to each error in the response. (e.g. two_week)
 ]: nothing -> table<severity: string, assigned_collaborator_id: string, assigned_team_id: string, id: string, project_id: string, url: string, project_url: string, error_class: string, message: string, context: string, original_severity: string, overridden_severity: string, events: float, events_url: string, unthrottled_occurrence_count: float, users: float, first_seen: string, last_seen: string, first_seen_unfiltered: string, last_seen_unfiltered: string, trend: list<list>, reopen_rules: record<reopen_if: string, additional_users: float, reopen_after: string, seconds: float, occurrences: float, hours: float, occurrence_threshold: float, additional_occurrences: float>, status: string, linked_issues: list<record>, created_issue: record<id: string, key: string, number: float, type: string, url: string>, comment_count: float, missing_dsyms: list<string>, release_stages: list<string>, grouping_reason: string, grouping_fields: record, discarded: bool, introduced_in_releases: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "base" $qp_base "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "filters" $filters "scalar") (serialize-qp "filter_groups" $filter_groups "scalar") (serialize-qp "filter_groups_join" $filter_groups_join "scalar") (serialize-qp "histogram" $histogram "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "base" $qp_base "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "filter_groups" $filter_groups "multi") (serialize-qp "filter_groups_join" $filter_groups_join "scalar") (serialize-qp "histogram" $histogram "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($project_id)/errors" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -447,13 +448,13 @@ export def "projects-errors viewErrorOnProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --filters: string
-  --filter-groups: string
-  --filter-groups-join: string
+  --filters: record
+  --filter-groups: record
+  --filter-groups-join: string@filter-groups-join-completer
 ]: nothing -> record<severity: string, assigned_collaborator_id: string, assigned_team_id: string, id: string, project_id: string, url: string, project_url: string, error_class: string, message: string, context: string, original_severity: string, overridden_severity: string, events: float, events_url: string, unthrottled_occurrence_count: float, users: float, first_seen: string, last_seen: string, first_seen_unfiltered: string, last_seen_unfiltered: string, trend: list<list<any>>, reopen_rules: record<reopen_if: string, additional_users: float, reopen_after: string, seconds: float, occurrences: float, hours: float, occurrence_threshold: float, additional_occurrences: float>, status: string, linked_issues: table<id: string, key: string, number: float, type: string, url: string>, created_issue: record<id: string, key: string, number: float, type: string, url: string>, comment_count: float, missing_dsyms: list<string>, release_stages: list<string>, grouping_reason: string, grouping_fields: record, discarded: bool, introduced_in_releases: table<release_stage: string, release_id: string, build_label: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filters" $filters "scalar") (serialize-qp "filter_groups" $filter_groups "scalar") (serialize-qp "filter_groups_join" $filter_groups_join "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filters" $filters "multi") (serialize-qp "filter_groups" $filter_groups "multi") (serialize-qp "filter_groups_join" $filter_groups_join "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($project_id)/errors/($error_id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -583,14 +584,14 @@ export def "projects-errors-events listEventsOnError" [
   --qp-sort: string@sort-completer-3 # default: timestamp
   --direction: string@direction-completer # default: desc
   --per-page: float # default: 30
-  --filters: string
-  --filter-groups: string
-  --filter-groups-join: string
+  --filters: record
+  --filter-groups: record
+  --filter-groups-join: string@filter-groups-join-completer
   --full-reports: string@bool-completer # default: false
 ]: nothing -> table<id: string, is_full_report: bool, url: string, project_url: string, error_id: string, received_at: string, exceptions: list<record>, error_class: string, message: string, severity: string, unhandled: bool, context: string, app: record<releaseStage: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "base" $qp_base "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "filters" $filters "scalar") (serialize-qp "filter_groups" $filter_groups "scalar") (serialize-qp "filter_groups_join" $filter_groups_join "scalar") (serialize-qp "full_reports" $full_reports "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "base" $qp_base "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "filter_groups" $filter_groups "multi") (serialize-qp "filter_groups_join" $filter_groups_join "scalar") (serialize-qp "full_reports" $full_reports "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($project_id)/errors/($error_id)/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -636,14 +637,14 @@ export def "projects-events listEventsOnProject" [
   --qp-sort: string@sort-completer-3 # default: timestamp
   --direction: string@direction-completer # default: desc
   --per-page: float # default: 30
-  --filters: string
-  --filter-groups: string
-  --filter-groups-join: string
+  --filters: record
+  --filter-groups: record
+  --filter-groups-join: string@filter-groups-join-completer
   --full-reports: string@bool-completer # default: false
 ]: nothing -> table<id: string, is_full_report: bool, url: string, project_url: string, error_id: string, received_at: string, exceptions: list<record>, error_class: string, message: string, severity: string, unhandled: bool, context: string, app: record<releaseStage: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "base" $qp_base "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "filters" $filters "scalar") (serialize-qp "filter_groups" $filter_groups "scalar") (serialize-qp "filter_groups_join" $filter_groups_join "scalar") (serialize-qp "full_reports" $full_reports "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "base" $qp_base "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "filter_groups" $filter_groups "multi") (serialize-qp "filter_groups_join" $filter_groups_join "scalar") (serialize-qp "full_reports" $full_reports "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($project_id)/events" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -664,15 +665,15 @@ export def "projects-errors-trends get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --filters: string
-  --filter-groups: string
-  --filter-groups-join: string # Search filters to restrict the events reported in the trend
+  --filters: record
+  --filter-groups: record
+  --filter-groups-join: string@filter-groups-join-completer # Search filters to restrict the events reported in the trend
   --buckets-count: float # Number of buckets to group trend data into (max 50)
   --resolution: string@resolution-completer # The trend data will be grouped so that each bucket spans the given time period
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filters" $filters "scalar") (serialize-qp "filter_groups" $filter_groups "scalar") (serialize-qp "filter_groups_join" $filter_groups_join "scalar") (serialize-qp "buckets_count" $buckets_count "scalar") (serialize-qp "resolution" $resolution "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filters" $filters "multi") (serialize-qp "filter_groups" $filter_groups "multi") (serialize-qp "filter_groups_join" $filter_groups_join "scalar") (serialize-qp "buckets_count" $buckets_count "scalar") (serialize-qp "resolution" $resolution "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($project_id)/errors/($error_id)/trends" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -692,15 +693,15 @@ export def "projects-trends get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --filters: string # Search filters to restrict the events reported in the trend
-  --filter-groups: string
-  --filter-groups-join: string
+  --filters: record # Search filters to restrict the events reported in the trend
+  --filter-groups: record
+  --filter-groups-join: string@filter-groups-join-completer
   --buckets-count: float # Number of buckets to group trend data into (max 50)
   --resolution: string@resolution-completer # The trend data will be grouped so that each bucket spans the given time period
 ]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filters" $filters "scalar") (serialize-qp "filter_groups" $filter_groups "scalar") (serialize-qp "filter_groups_join" $filter_groups_join "scalar") (serialize-qp "buckets_count" $buckets_count "scalar") (serialize-qp "resolution" $resolution "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filters" $filters "multi") (serialize-qp "filter_groups" $filter_groups "multi") (serialize-qp "filter_groups_join" $filter_groups_join "scalar") (serialize-qp "buckets_count" $buckets_count "scalar") (serialize-qp "resolution" $resolution "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($project_id)/trends" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -721,16 +722,16 @@ export def "projects-errors-pivots listPivotsOnAnError" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --filters: string
-  --filter-groups: string
-  --filter-groups-join: string
+  --filters: record
+  --filter-groups: record
+  --filter-groups-join: string@filter-groups-join-completer
   --summary-size: float # e.g. 10
   --pivots: list
   --per-page: float # default: 30, e.g. 30
 ]: nothing -> table<event_field_display_id: string, name: string, cardinality: float, summary: any, list: list<record>, no_value: float, other: float, average: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filters" $filters "scalar") (serialize-qp "filter_groups" $filter_groups "scalar") (serialize-qp "filter_groups_join" $filter_groups_join "scalar") (serialize-qp "summary_size" $summary_size "scalar") (serialize-qp "pivots" $pivots "multi") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filters" $filters "multi") (serialize-qp "filter_groups" $filter_groups "multi") (serialize-qp "filter_groups_join" $filter_groups_join "scalar") (serialize-qp "summary_size" $summary_size "scalar") (serialize-qp "pivots" $pivots "multi") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($project_id)/errors/($error_id)/pivots" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -752,16 +753,16 @@ export def "projects-errors-pivots-values get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --filters: string
-  --filter-groups: string
-  --filter-groups-join: string
+  --filters: record
+  --filter-groups: record
+  --filter-groups-join: string@filter-groups-join-completer
   --qp-sort: string@sort-completer-4 # e.g. unsorted
   --qp-base: string # format: date-time, e.g. 2017-04-12T22:50:04Z
   --per-page: float # default: 30, e.g. 30
 ]: nothing -> table<event_field_value: string, events: float, proportion: float, first_seen: string, last_seen: string, fields: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filters" $filters "scalar") (serialize-qp "filter_groups" $filter_groups "scalar") (serialize-qp "filter_groups_join" $filter_groups_join "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "base" $qp_base "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filters" $filters "multi") (serialize-qp "filter_groups" $filter_groups "multi") (serialize-qp "filter_groups_join" $filter_groups_join "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "base" $qp_base "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($project_id)/errors/($error_id)/pivots/($event_field_display_id)/values" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -781,15 +782,15 @@ export def "projects-pivots get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --filters: string
-  --filter-groups: string
-  --filter-groups-join: string
+  --filters: record
+  --filter-groups: record
+  --filter-groups-join: string@filter-groups-join-completer
   --summary-size: float # e.g. 10
   --pivots: list
 ]: nothing -> table<event_field_display_id: string, name: string, cardinality: float, summary: any, list: list<record>, no_value: float, other: float, average: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filters" $filters "scalar") (serialize-qp "filter_groups" $filter_groups "scalar") (serialize-qp "filter_groups_join" $filter_groups_join "scalar") (serialize-qp "summary_size" $summary_size "scalar") (serialize-qp "pivots" $pivots "multi")] | flatten | str join "&"
+  let qp = [(serialize-qp "filters" $filters "multi") (serialize-qp "filter_groups" $filter_groups "multi") (serialize-qp "filter_groups_join" $filter_groups_join "scalar") (serialize-qp "summary_size" $summary_size "scalar") (serialize-qp "pivots" $pivots "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($project_id)/pivots" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -810,16 +811,16 @@ export def "projects-pivots-values get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --filters: string
-  --filter-groups: string
-  --filter-groups-join: string
+  --filters: record
+  --filter-groups: record
+  --filter-groups-join: string@filter-groups-join-completer
   --qp-sort: string@sort-completer-4 # e.g. unsorted
   --qp-base: string # format: date-time, e.g. 2017-04-12T22:50:04Z
   --per-page: float # default: 30, e.g. 30
 ]: nothing -> table<event_field_value: string, events: float, proportion: float, first_seen: string, last_seen: string, fields: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "filters" $filters "scalar") (serialize-qp "filter_groups" $filter_groups "scalar") (serialize-qp "filter_groups_join" $filter_groups_join "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "base" $qp_base "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "filters" $filters "multi") (serialize-qp "filter_groups" $filter_groups "multi") (serialize-qp "filter_groups_join" $filter_groups_join "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "base" $qp_base "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/projects/($project_id)/pivots/($event_field_display_id)/values" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

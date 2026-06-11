@@ -21,17 +21,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -66,6 +67,7 @@ def base-url-completer [] { ["http://localhost"] }
 def auth-scheme-completer [] { ["bearer" "basic"] }
 
 # Completers for enum parameters
+def status-completer [] { ["Expired" "Invalid" "New" "Processing" "Settled"] }
 def refundVariant-completer [] { ["CurrentRate" "Custom" "Fiat" "OverpaidAmount" "RateThen"] }
 def onExisting-completer [] { ["KeepVersion" "UpdateVersion"] }
 def state-completer [] { ["AwaitingApproval" "AwaitingPayment" "Cancelled" "Completed" "InProgress"] }
@@ -727,12 +729,12 @@ export def "stores-invoices GetInvoices" [
   --allow-errors(-e) # Return full response without error handling
   --orderId: list # Array of OrderIds to fetch the invoices for (e.g. 1000&orderId=1001&orderId=1002)
   --textSearch: string # A term that can help locating specific invoices.
-  --status: string # Array of statuses of invoices to be fetched
-  --endDate: string # End date of the period to retrieve invoices
+  --status: string@status-completer # Array of statuses of invoices to be fetched
+  --endDate: float # End date of the period to retrieve invoices (format: int32, e.g. 1592312018)
   --includePaymentMethods: string@bool-completer # Includes payment methods available to the response (default: false)
   --take: float # Number of records returned in response (nullable)
   --skip: float # Number of records to skip (nullable)
-  --startDate: string # Start date of the period to retrieve invoices
+  --startDate: float # Start date of the period to retrieve invoices (format: int32, e.g. 1592312018)
 ]: nothing -> table<paymentMethods: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

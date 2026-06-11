@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -102,11 +103,13 @@ def status-completer-2 [] { ["active" "draft"] }
 def defaultRole-completer [] { ["organization_admin" "organization_editor" "organization_member"] }
 def grant-type-completer [] { ["client_credentials"] }
 def jobType-completer-1 [] { ["clear" "refresh" "reset" "sync"] }
+def status-completer-3 [] { ["cancelled" "failed" "incomplete" "pending" "queued" "running" "succeeded"] }
+def type-completer [] { ["destination" "source"] }
 def clientType-completer [] { ["api" "webapp"] }
 def namespaceDefinition-completer-1 [] { ["custom_format" "destination" "source"] }
 def nonBreakingSchemaUpdatesBehavior-completer [] { ["disable_connection" "ignore" "propagate_columns" "propagate_fully"] }
 def permissionType-completer-1 [] { ["organization_admin" "organization_editor" "organization_member" "organization_reader" "organization_runner" "workspace_admin" "workspace_editor" "workspace_reader" "workspace_runner"] }
-def status-completer-3 [] { ["available" "configuring" "create_failed" "creating" "delete_failed" "deleted" "deleting" "pending_acceptance"] }
+def status-completer-4 [] { ["available" "configuring" "create_failed" "creating" "delete_failed" "deleted" "deleting" "pending_acceptance"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -9519,9 +9522,9 @@ export def "public-jobs listJobs" [
   --connectionId: string # Filter the Jobs by connectionId. (format: UUID)
   --limit: int # Set the limit on the number of Jobs returned. The default is 20 Jobs. (format: int32, default: 20)
   --offset: int # Set the offset to start at when returning Jobs. The default is 0. (format: int32, default: 0)
-  --jobType: string # Filter the Jobs by jobType.
+  --jobType: string@jobType-completer-1 # Filter the Jobs by jobType.
   --workspaceIds: list # The UUIDs of the workspaces you wish to list jobs for. Empty list will retrieve all allowed workspaces.
-  --status: string # The Job status you want to filter by
+  --status: string@status-completer-3 # The Job status you want to filter by
   --createdAtStart: string # The start date to filter by (format: date-time, e.g. 2023-06-22T16:15:00Z)
   --createdAtEnd: string # The end date to filter by (format: date-time, e.g. 2023-06-22T16:15:00Z)
   --updatedAtStart: string # The start date to filter by (format: date-time, e.g. 2023-06-22T16:15:00Z)
@@ -9861,7 +9864,7 @@ export def "public-connector-definitions listConnectorDefinitions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --type: string # The type of connector definition to list
+  --type: string@type-completer # The type of connector definition to list
   --workspaceId: string # The UUID of the workspace you wish to list connector definitions for. One of this or organizationId must be populated. (format: uuid, e.g. df08f6b0-b364-4cc1-9b3f-96f5d2fccfb2)
 ]: nothing -> record<data: table<id: string, name: string, connectorDefinitionType: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -12043,7 +12046,7 @@ export def "private-link-update updatePrivateLink" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   privateLinkId: string # format: uuid
-  --status: string@status-completer-3
+  --status: string@status-completer-4
   --endpointId: string
   --dnsName: string
   --scopedConfigurationId: string # format: uuid

@@ -19,17 +19,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -295,11 +296,11 @@ export def "engines-document-types-documentsjson createDocument" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --documentexternal-id: string # Document external id.
-  --documentfields: string # Document fields.
+  --documentfields: list # Document fields.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "document.external_id" $documentexternal_id "scalar") (serialize-qp "document.fields" $documentfields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "document.external_id" $documentexternal_id "scalar") (serialize-qp "document.fields" $documentfields "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/documents.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -346,11 +347,11 @@ export def "engines-document-types-documents-create-or-updatejson createOrUpdate
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --documentexternal-id: string # Document external id.
-  --documentfields: string # Document fields.
+  --documentfields: list # Document fields.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "document.external_id" $documentexternal_id "scalar") (serialize-qp "document.fields" $documentfields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "document.external_id" $documentexternal_id "scalar") (serialize-qp "document.fields" $documentfields "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/documents/create_or_update.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -423,11 +424,11 @@ export def "engines-document-types-documents-update-fieldsjson updateDocumentFie
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --qp-fields: string # Updated fields.
+  --qp-fields: record # Updated fields.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "fields" $qp_fields "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "fields" $qp_fields "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/documents/($external_id)/update_fields.json" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -449,11 +450,11 @@ export def "engines-document-types-documents-bulk-create-or-update-verbose creat
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --documents: string # List of documents to index.
+  --documents: list # List of documents to index.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "documents" $documents "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "documents" $documents "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/documents/bulk_create_or_update_verbose" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -475,11 +476,11 @@ export def "engines-document-types-documents-bulk-create createDocuments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --documents: string # List of documents to create.
+  --documents: list # List of documents to create.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "documents" $documents "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "documents" $documents "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/documents/bulk_create" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -501,11 +502,11 @@ export def "engines-document-types-documents-bulk-update updateDocuments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --documents: string # List of documents to update.
+  --documents: list # List of documents to update.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "documents" $documents "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "documents" $documents "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/documents/bulk_update" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -527,11 +528,11 @@ export def "engines-document-types-documents-bulk-destroy post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --documents: string # List of deleted documents external ids.
+  --documents: list # List of deleted documents external ids.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "documents" $documents "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "documents" $documents "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/documents/bulk_destroy" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -553,11 +554,11 @@ export def "engines-document-types-documents-async-bulk-create-or-update asyncCr
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --documents: string # List of documents to index.
+  --documents: list # List of documents to index.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "documents" $documents "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "documents" $documents "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/engines/($engine_name)/document_types/($document_type_id)/documents/async_bulk_create_or_update" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -80,7 +81,7 @@ def sort-completer-1 [] { ["+createdAt" "+usedAt" "-createdAt" "-usedAt"] }
 def type-completer-1 [] { ["db" "deliver" "endedPollNotification" "inbox" "objectStorage" "relationship" "system" "systemWebhookDeliver" "userWebhookDeliver"] }
 def state-completer [] { ["*" "delayed" "wait"] }
 def type-completer-2 [] { ["deliver" "inbox"] }
-def resolvedAs-completer [] { ["accept" "reject"] }
+def resolvedAs-completer [] { ["" "accept" "reject"] }
 def target-completer [] { ["conditional" "manual"] }
 def from-completer [] { ["all" "local" "remote"] }
 def to-completer [] { ["all" "local" "remote"] }
@@ -95,8 +96,8 @@ def federation-completer [] { ["all" "none" "specified"] }
 def src-completer [] { ["all" "home" "list" "users" "users_blacklist"] }
 def type-completer-5 [] { ["nameAndDescription" "nameOnly"] }
 def span-completer [] { ["day" "hour"] }
-def sort-completer-3 [] { ["+createdAt" "+name" "+size" "-createdAt" "-name" "-size"] }
-def sort-completer-4 [] { ["+firstRetrievedAt" "+followers" "+following" "+latestRequestReceivedAt" "+notes" "+pubSub" "+users" "-firstRetrievedAt" "-followers" "-following" "-latestRequestReceivedAt" "-notes" "-pubSub" "-users"] }
+def sort-completer-3 [] { ["" "+createdAt" "+name" "+size" "-createdAt" "-name" "-size"] }
+def sort-completer-4 [] { ["" "+firstRetrievedAt" "+followers" "+following" "+latestRequestReceivedAt" "+notes" "+pubSub" "+users" "-firstRetrievedAt" "-followers" "-following" "-latestRequestReceivedAt" "-notes" "-pubSub" "-users"] }
 def visibility-completer [] { ["private" "public"] }
 def notify-completer [] { ["none" "normal"] }
 def sort-completer-5 [] { ["+attachedLocalUsers" "+attachedRemoteUsers" "+attachedUsers" "+mentionedLocalUsers" "+mentionedRemoteUsers" "+mentionedUsers" "-attachedLocalUsers" "-attachedRemoteUsers" "-attachedUsers" "-mentionedLocalUsers" "-mentionedRemoteUsers" "-mentionedUsers"] }
@@ -106,15 +107,15 @@ def sort-completer-7 [] { ["+createdAt" "+lastUsedAt" "-createdAt" "-lastUsedAt"
 def sort-completer-8 [] { ["asc" "desc"] }
 def name-completer [] { ["brainDiver" "bubbleGameDoubleExplodingHead" "bubbleGameExplodingHead" "clickedClickHere" "client30min" "client60min" "collectAchievements30" "cookieClicked" "dimensionConfigured" "driveFolderCircularReference" "followers1" "followers10" "followers100" "followers1000" "followers300" "followers50" "followers500" "following1" "following10" "following100" "following300" "following50" "foundTreasure" "htl20npm" "iLoveMisskey" "justPlainLucky" "loggedInOnBirthday" "loggedInOnNewYearsDay" "login100" "login1000" "login15" "login200" "login3" "login30" "login300" "login400" "login500" "login60" "login600" "login7" "login700" "login800" "login900" "markedAsCat" "myNoteFavorited1" "noteClipped1" "noteDeletedWithin1min" "noteFavorited1" "notes1" "notes10" "notes100" "notes1000" "notes10000" "notes100000" "notes20000" "notes30000" "notes40000" "notes500" "notes5000" "notes50000" "notes60000" "notes70000" "notes80000" "notes90000" "open3windows" "outputHelloWorldOnScratchpad" "passedSinceAccountCreated1" "passedSinceAccountCreated2" "passedSinceAccountCreated3" "postedAt0min0sec" "postedAtLateNight" "postingLanguageConfigured" "profileFilled" "reactWithoutRead" "selfQuote" "sensitiveContentConsentResponded" "setNameToSyuilo" "smashTestNotificationButton" "tutorialCompleted" "viewAchievements3min" "viewInstanceChart" "viewingLanguagesConfigured"] }
 def type-completer-6 [] { ["antenna" "home" "list" "user"] }
-def lang-completer [] { ["ach" "ady" "af" "af-NA" "af-ZA" "ak" "ar" "ar-AR" "ar-MA" "ar-SA" "ay-BO" "az" "az-AZ" "be-BY" "bg" "bg-BG" "bn" "bn-BD" "bn-IN" "br" "bs-BA" "ca" "ca-ES" "cak" "ck-US" "cs" "cs-CZ" "cy" "cy-GB" "da" "da-DK" "de" "de-AT" "de-CH" "de-DE" "dsb" "el" "el-GR" "en" "en-AU" "en-CA" "en-GB" "en-IE" "en-IN" "en-PI" "en-SG" "en-UD" "en-US" "en-ZA" "en@pirate" "eo" "eo-EO" "es" "es-419" "es-AR" "es-CL" "es-CO" "es-EC" "es-ES" "es-LA" "es-MX" "es-NI" "es-US" "es-VE" "et" "et-EE" "eu" "eu-ES" "fa" "fa-IR" "fb-LT" "ff" "fi" "fi-FI" "fil" "fo" "fo-FO" "fr" "fr-BE" "fr-CA" "fr-CH" "fr-FR" "fy-NL" "ga" "ga-IE" "gd" "gl" "gl-ES" "gn-PY" "gu-IN" "gv" "gx-GR" "he" "he-IL" "hi" "hi-IN" "hr" "hr-HR" "hsb" "ht" "hu" "hu-HU" "hy" "hy-AM" "id" "id-ID" "is" "is-IS" "it" "it-IT" "ja" "ja-JP" "jv-ID" "ka-GE" "kab" "kk-KZ" "kl" "km" "km-KH" "kn" "kn-IN" "ko" "ko-KR" "ku-TR" "kw" "la" "la-VA" "lb" "li-NL" "lt" "lt-LT" "lv" "lv-LV" "mai" "mg-MG" "mk" "mk-MK" "ml" "ml-IN" "mn-MN" "mr" "mr-IN" "ms" "ms-MY" "mt" "mt-MT" "my" "nb" "nb-NO" "ne" "ne-NP" "nl" "nl-BE" "nl-NL" "nn-NO" "no" "oc" "or-IN" "pa" "pa-IN" "pl" "pl-PL" "ps-AF" "pt" "pt-BR" "pt-PT" "qu-PE" "rm-CH" "ro" "ro-RO" "ru" "ru-RU" "sa-IN" "se-NO" "sh" "si-LK" "sk" "sk-SK" "sl" "sl-SI" "so-SO" "sq" "sq-AL" "sr" "sr-RS" "su" "sv" "sv-SE" "sw" "sw-KE" "ta" "ta-IN" "te" "te-IN" "tg" "tg-TJ" "th" "th-TH" "tlh" "tr" "tr-TR" "tt-RU" "uk" "uk-UA" "ur" "ur-PK" "uz" "uz-UZ" "vi" "vi-VN" "xh-ZA" "yi" "yi-DE" "zh" "zh-CN" "zh-HK" "zh-Hans" "zh-Hant" "zh-SG" "zh-TW" "zu-ZA"] }
-def postingLang-completer [] { ["ja" "ja-JP" "ko" "ko-KR" "other"] }
+def lang-completer [] { ["" "ach" "ady" "af" "af-NA" "af-ZA" "ak" "ar" "ar-AR" "ar-MA" "ar-SA" "ay-BO" "az" "az-AZ" "be-BY" "bg" "bg-BG" "bn" "bn-BD" "bn-IN" "br" "bs-BA" "ca" "ca-ES" "cak" "ck-US" "cs" "cs-CZ" "cy" "cy-GB" "da" "da-DK" "de" "de-AT" "de-CH" "de-DE" "dsb" "el" "el-GR" "en" "en-AU" "en-CA" "en-GB" "en-IE" "en-IN" "en-PI" "en-SG" "en-UD" "en-US" "en-ZA" "en@pirate" "eo" "eo-EO" "es" "es-419" "es-AR" "es-CL" "es-CO" "es-EC" "es-ES" "es-LA" "es-MX" "es-NI" "es-US" "es-VE" "et" "et-EE" "eu" "eu-ES" "fa" "fa-IR" "fb-LT" "ff" "fi" "fi-FI" "fil" "fo" "fo-FO" "fr" "fr-BE" "fr-CA" "fr-CH" "fr-FR" "fy-NL" "ga" "ga-IE" "gd" "gl" "gl-ES" "gn-PY" "gu-IN" "gv" "gx-GR" "he" "he-IL" "hi" "hi-IN" "hr" "hr-HR" "hsb" "ht" "hu" "hu-HU" "hy" "hy-AM" "id" "id-ID" "is" "is-IS" "it" "it-IT" "ja" "ja-JP" "jv-ID" "ka-GE" "kab" "kk-KZ" "kl" "km" "km-KH" "kn" "kn-IN" "ko" "ko-KR" "ku-TR" "kw" "la" "la-VA" "lb" "li-NL" "lt" "lt-LT" "lv" "lv-LV" "mai" "mg-MG" "mk" "mk-MK" "ml" "ml-IN" "mn-MN" "mr" "mr-IN" "ms" "ms-MY" "mt" "mt-MT" "my" "nb" "nb-NO" "ne" "ne-NP" "nl" "nl-BE" "nl-NL" "nn-NO" "no" "oc" "or-IN" "pa" "pa-IN" "pl" "pl-PL" "ps-AF" "pt" "pt-BR" "pt-PT" "qu-PE" "rm-CH" "ro" "ro-RO" "ru" "ru-RU" "sa-IN" "se-NO" "sh" "si-LK" "sk" "sk-SK" "sl" "sl-SI" "so-SO" "sq" "sq-AL" "sr" "sr-RS" "su" "sv" "sv-SE" "sw" "sw-KE" "ta" "ta-IN" "te" "te-IN" "tg" "tg-TJ" "th" "th-TH" "tlh" "tr" "tr-TR" "tt-RU" "uk" "uk-UA" "ur" "ur-PK" "uz" "uz-UZ" "vi" "vi-VN" "xh-ZA" "yi" "yi-DE" "zh" "zh-CN" "zh-HK" "zh-Hans" "zh-Hant" "zh-SG" "zh-TW" "zu-ZA"] }
+def postingLang-completer [] { ["" "ja" "ja-JP" "ko" "ko-KR" "other"] }
 def followingVisibility-completer [] { ["followers" "private" "public"] }
 def followersVisibility-completer [] { ["followers" "private" "public"] }
 def chatScope-completer [] { ["everyone" "followers" "following" "mutual" "none"] }
 def type-completer-7 [] { ["follow" "followed" "mention" "note" "reaction" "renote" "reply" "reportAutoResolved" "reportCreated" "reportResolved" "unfollow"] }
 def visibility-completer-1 [] { ["followers" "home" "public" "specified"] }
-def reactionAcceptance-completer [] { ["likeOnly" "likeOnlyForRemote" "nonSensitiveOnly" "nonSensitiveOnlyForLocalLikeOnlyForRemote"] }
-def lang-completer-1 [] { ["ja" "ja-JP" "ko" "ko-KR" "other"] }
+def reactionAcceptance-completer [] { ["" "likeOnly" "likeOnlyForRemote" "nonSensitiveOnly" "nonSensitiveOnlyForLocalLikeOnlyForRemote"] }
+def lang-completer-1 [] { ["" "ja" "ja-JP" "ko" "ko-KR" "other"] }
 def font-completer [] { ["sans-serif" "serif"] }
 def sort-completer-9 [] { ["+createdAt" "+follower" "+pv" "+updatedAt" "-createdAt" "-follower" "-pv" "-updatedAt"] }
 def category-completer [] { ["criticalBreach" "explicit" "nsfw" "other" "otherBreach" "personalInfoLeak" "phishing" "selfHarm" "spam" "violationRights" "violationRightsOther"] }

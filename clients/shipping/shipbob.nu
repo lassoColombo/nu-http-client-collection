@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -71,6 +72,7 @@ def type-id-completer [] { ["1" "2"] }
 def status-completer [] { ["1" "2" "3"] }
 def box-packaging-type-completer [] { ["EverythingInOneBox" "MultipleSkuPerBox" "OneSkuPerBox"] }
 def package-type-completer [] { ["FloorLoadedContainer" "Package" "Pallet"] }
+def SortOrder-completer [] { ["Asc" "Desc"] }
 def sort-order-completer [] { ["Ascending" "Descending"] }
 
 # List all available API commands with their parameters
@@ -1845,7 +1847,7 @@ export def "2026-01-return get-return-orders" [
   --CompletedEndDate: string # Filter returns completed on or before this date (ISO 8601 format).  (format: date-time)
   --Cursor: int # Page number to retrieve. Used for pagination through result sets.
   --Limit: int # Maximum number of records to return per page.
-  --SortOrder: string # Sort order for results. Desc = newest to oldest, Asc = oldest to newest, Desc is default
+  --SortOrder: string@SortOrder-completer # Sort order for results. Desc = newest to oldest, Asc = oldest to newest, Desc is default
   --Authorization: string # Authentication using Personal Access Token (PAT) token or OAuth2
   --shipbob-channel-id: string # Retrieve your channel ID from the [GET /channel](/api/channels/get-channels) endpoint. Use the channel ID that has write scopes.
 ]: nothing -> record<first: string, items: table<arrived_date: string, awaiting_arrival_date: string, cancelled_date: string, channel: record, completed_date: string, customer_name: string, fulfillment_center: record, id: int, insert_date: string, inventory: list, invoice: record, original_shipment_id: int, processing_date: string, reference_id: string, return_type: string, shipment_tracking_number: string, status: string, status_history: list, store_order_id: string, tracking_number: string, transactions: list>, last: string, next: string, prev: string> {

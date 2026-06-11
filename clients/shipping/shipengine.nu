@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -66,9 +67,16 @@ def auth-scheme-completer [] { ["api-key"] }
 
 # Completers for enum parameters
 def accept-completer [] { ["application/json" "text/plain"] }
+def status-completer [] { ["archived" "completed" "completed_with_errors" "invalid" "notifying" "open" "processing" "queued"] }
+def sort-by-completer [] { ["created_at" "processed_at" "ship_date"] }
 def label-format-completer [] { ["pdf"] }
 def accept-completer-1 [] { ["application/pdf" "application/zpl" "image/png"] }
-def sort-by-completer [] { ["created_at" "modified_at" "voided_at"] }
+def label-status-completer [] { ["completed" "error" "processing" "voided"] }
+def sort-by-completer-1 [] { ["created_at" "modified_at" "voided_at"] }
+def label-download-type-completer [] { ["inline" "url"] }
+def shipment-status-completer [] { ["cancelled" "label_purchased" "pending" "processing"] }
+def sort-by-completer-2 [] { ["created_at" "modified_at"] }
+def redirect-completer [] { ["shipengine-dashboard"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -149,7 +157,7 @@ export def "account-settings-images image" [
   --allow-errors(-e) # Return full response without error handling
   name: string # A human readable name for the image.  (e.g. My logo)
   --is-default: string@bool-completer # Indicates whether this image is set as default.  (e.g. false)
-  image_content_type: any # The file type of the image. 
+  image_content_type: any # The file type of the image.
   image_data: string # A base64 encoded string representation of the image.  (e.g. iVBORw0KGgoAAAANSUhEUgAAABkAAAAZCAYAAADE6YVjAAAAAXNSR0IArs4c6QAAAiVJREFUSEu91j3IeVEcB/CvSTIoBrFSikEZMdjsjExeUspgUEp5SUpeshrIgEFJJmWwMZHJQGHDhJSXTPfpnH/8ebzd56HnN93u7ZzP/f1+55x7Ob1ejxEKheByufh0HI9HrFYrcKbTKUMu5HI5BALBx5zNZoPxeAySAGc2mzF8Pp/e+BR0Ash8u93uHyKVSnH54J2Mvs8zn8//I6RO70L3xt8g70CPXvAu8hvoWQUeIj+BXpX4KcIGegWQOV4izyA2AGvkHsQW+BFyCUkkEiwWC9Ybl1W5Ls8ZMoAABCIbmE3cINFoFMFgEEajEeVyGSKRCJ1OB3q9ns5nMpmQTCaxXq9/l8loNEKj0YDX66UACYvFQq9brRYcDgdUKhU9RD/SEwLm83lEIhGUSiX0+33E4/GrU5otRMs1mUyYbDYLu90OhUJBMzhlZbPZ4Pf7odFo4HQ6b1rABqJIvV5nttstLc0pSIn2+z0tTy6XQ6FQoI/a7TZ0Ot0V9gqiiMFgYKrVKm0yieVyCZ/PB6vVSpF0Ok2zJHEqIY/HYw1RxOfzMYlE4jwoEAhAJpPBbDZf9eBwOCCVSsHtdp9f6FJ6egorlUqmVqvRfjSbTXS7XXg8nptP8Svk0RF01ROtVguSUTgchlgsPpeOZBaLxTAcDlEsFpHJZPC9XM8yoshgMGBCoRBdQWTCU7hcLjohWb5kM6rValQqlfMKfLbbb77xf/K38hf/XV9ilOpnLqvnogAAAABJRU5ErkJggg==)
 ]: any -> record {
   let input = $in
@@ -201,7 +209,7 @@ export def "account-settings-images id-by-label_image_id-1" [
   --accept: string@accept-completer # Response content type
   --name: string # A human readable name for the image.  (e.g. My logo)
   --is-default: string@bool-completer # Indicates whether this image is set as default.  (e.g. false)
-  --image-content-type: any # The file type of the image. 
+  --image-content-type: any # The file type of the image.
   --image-data: string # A base64 encoded string representation of the image.  (e.g. iVBORw0KGgoAAAANSUhEUgAAABkAAAAZCAYAAADE6YVjAAAAAXNSR0IArs4c6QAAAiVJREFUSEu91j3IeVEcB/CvSTIoBrFSikEZMdjsjExeUspgUEp5SUpeshrIgEFJJmWwMZHJQGHDhJSXTPfpnH/8ebzd56HnN93u7ZzP/f1+55x7Ob1ejxEKheByufh0HI9HrFYrcKbTKUMu5HI5BALBx5zNZoPxeAySAGc2mzF8Pp/e+BR0Ash8u93uHyKVSnH54J2Mvs8zn8//I6RO70L3xt8g70CPXvAu8hvoWQUeIj+BXpX4KcIGegWQOV4izyA2AGvkHsQW+BFyCUkkEiwWC9Ybl1W5Ls8ZMoAABCIbmE3cINFoFMFgEEajEeVyGSKRCJ1OB3q9ns5nMpmQTCaxXq9/l8loNEKj0YDX66UACYvFQq9brRYcDgdUKhU9RD/SEwLm83lEIhGUSiX0+33E4/GrU5otRMs1mUyYbDYLu90OhUJBMzhlZbPZ4Pf7odFo4HQ6b1rABqJIvV5nttstLc0pSIn2+z0tTy6XQ6FQoI/a7TZ0Ot0V9gqiiMFgYKrVKm0yieVyCZ/PB6vVSpF0Ok2zJHEqIY/HYw1RxOfzMYlE4jwoEAhAJpPBbDZf9eBwOCCVSsHtdp9f6FJ6egorlUqmVqvRfjSbTXS7XXg8nptP8Svk0RF01ROtVguSUTgchlgsPpeOZBaLxTAcDlEsFpHJZPC9XM8yoshgMGBCoRBdQWTCU7hcLjohWb5kM6rValQqlfMKfLbbb77xf/K38hf/XV9ilOpnLqvnogAAAABJRU5ErkJggg==)
 ]: any -> any {
   let input = $in
@@ -300,7 +308,7 @@ export def "batches batches" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string
+  --status: string@status-completer
   --page: int # Return a specific page of results. Defaults to the first page. If set to a number that's greater than the number of pages of results, an empty page is returned.  (format: int32, default: 1, e.g. 2)
   --page-size: int # The number of results to return per response. (format: int32, default: 25, e.g. 50)
   --sort-dir: string # Controls the sort order of the query. (default: desc)
@@ -309,7 +317,7 @@ export def "batches batches" [
   --created-at-end: string # Only return batches that were created on or before a specific date/time (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
   --processed-at-start: string # Only return batches that were processed on or after a specific date/time (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
   --processed-at-end: string # Only return batches that were processed on or before a specific date/time (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
-  --sort-by: string
+  --sort-by: string@sort-by-completer
 ]: nothing -> record<batches: table<label_layout: record, label_format: record, batch_id: record, batch_number: string, external_batch_id: string, batch_notes: string, created_at: record, processed_at: record, errors: int, process_errors: list, warnings: int, completed: int, forms: int, count: int, batch_shipments_url: record, batch_labels_url: record, batch_errors_url: record, label_download: record, form_download: record, paperless_download: record, status: record>, total: int, page: int, pages: int, links: record<first: record, last: record, prev: record<href: record, type: string>, next: record<href: record, type: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1179,21 +1187,21 @@ export def "labels labels" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --label-status: string # Only return labels that are currently in the specified status
+  --label-status: string@label-status-completer # Only return labels that are currently in the specified status
   --service-code: string # Only return labels for a specific [carrier service](https://www.shipengine.com/docs/shipping/use-a-carrier-service/) (e.g. usps_first_class_mail)
-  --carrier-id: string # Only return labels for a specific [carrier account](https://www.shipengine.com/docs/carriers/setup/)
+  --carrier-id: string # Only return labels for a specific [carrier account](https://www.shipengine.com/docs/carriers/setup/) (e.g. se-28529731)
   --tracking-number: string # Only return labels with a specific tracking number (e.g. 9405511899223197428490)
-  --batch-id: string # Only return labels that were created in a specific [batch](https://www.shipengine.com/docs/labels/bulk/)
-  --rate-id: string # Rate ID
-  --shipment-id: string # Shipment ID
-  --warehouse-id: string # Only return labels that originate from a specific [warehouse](https://www.shipengine.com/docs/shipping/ship-from-a-warehouse/)
+  --batch-id: string # Only return labels that were created in a specific [batch](https://www.shipengine.com/docs/labels/bulk/) (e.g. se-28529731)
+  --rate-id: string # Rate ID (e.g. se-28529731)
+  --shipment-id: string # Shipment ID (e.g. se-28529731)
+  --warehouse-id: string # Only return labels that originate from a specific [warehouse](https://www.shipengine.com/docs/shipping/ship-from-a-warehouse/) (e.g. se-28529731)
   --created-at-start: string # Only return labels that were created on or after a specific date/time (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
   --created-at-end: string # Only return labels that were created on or before a specific date/time (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
   --refund-status: list # Only return labels with specific refund status/es. (e.g. pending,approved)
   --page: int # Return a specific page of results. Defaults to the first page. If set to a number that's greater than the number of pages of results, an empty page is returned.  (format: int32, default: 1, e.g. 2)
   --page-size: int # The number of results to return per response. (format: int32, default: 25, e.g. 50)
   --sort-dir: string # Controls the sort order of the query. (default: desc)
-  --sort-by: string@sort-by-completer # Controls which field the query is sorted by. (default: created_at)
+  --sort-by: string@sort-by-completer-1 # Controls which field the query is sorted by. (default: created_at)
 ]: nothing -> record<labels: table<label_id: record, status: record, shipment_id: record, external_shipment_id: string, external_order_id: string, shipment: record, ship_date: record, created_at: record, shipment_cost: record, insurance_cost: record, requested_comparison_amount: record, rate_details: list, tracking_number: string, is_return_label: bool, rma_number: string, is_international: bool, batch_id: record, carrier_id: record, charge_event: record, outbound_label_id: record, service_code: record, test_label: bool, package_code: record, validate_address: record, voided: bool, voided_at: record, label_download_type: record, label_format: record, display_scheme: record, label_layout: record, trackable: bool, label_image_id: record, carrier_code: record, tracking_status: record, confirmation: record, label_download: record, form_download: record, qr_code_download: record, paperless_download: record, insurance_claim: record, packages: list, alternative_identifiers: list, tracking_url: string, ship_to: record, void_type: record, refund_details: record>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1256,7 +1264,7 @@ export def "labels-external-shipment-id id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --label-download-type: string # e.g. url
+  --label-download-type: string@label-download-type-completer # e.g. url
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1381,7 +1389,7 @@ export def "labels id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --label-download-type: string # e.g. url
+  --label-download-type: string@label-download-type-completer # e.g. url
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1502,12 +1510,12 @@ export def "manifests manifests" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --warehouse-id: string # Warehouse ID
+  --warehouse-id: string # Warehouse ID (e.g. se-28529731)
   --ship-date-start: string # ship date start range (format: date-time, e.g. 2018-09-23T15:00:00.000Z)
   --ship-date-end: string # ship date end range (format: date-time, e.g. 2018-09-23T15:00:00.000Z)
   --created-at-start: string # Used to create a filter for when a resource was created (ex. A shipment that was created after a certain time) (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
   --created-at-end: string # Used to create a filter for when a resource was created, (ex. A shipment that was created before a certain time) (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
-  --carrier-id: string # Carrier ID
+  --carrier-id: string # Carrier ID (e.g. se-28529731)
   --page: int # Return a specific page of results. Defaults to the first page. If set to a number that's greater than the number of pages of results, an empty page is returned.  (format: int32, default: 1, e.g. 2)
   --page-size: int # The number of results to return per response. (format: int32, default: 25, e.g. 50)
   --label-ids: list
@@ -1732,8 +1740,8 @@ export def "pickups pickups" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --carrier-id: string # Carrier ID
-  --warehouse-id: string # Warehouse ID
+  --carrier-id: string # Carrier ID (e.g. se-28529731)
+  --warehouse-id: string # Warehouse ID (e.g. se-28529731)
   --created-at-start: string # Only return scheduled pickups that were created on or after a specific date/time (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
   --created-at-end: string # Only return scheduled pickups that were created on or before a specific date/time (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
   --page: int # Return a specific page of results. Defaults to the first page. If set to a number that's greater than the number of pages of results, an empty page is returned.  (format: int32, default: 1, e.g. 2)
@@ -2014,8 +2022,8 @@ export def "shipments shipments" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --shipment-status: string
-  --batch-id: string # Batch ID
+  --shipment-status: string@shipment-status-completer
+  --batch-id: string # Batch ID (e.g. se-28529731)
   --tag: string # Search for shipments based on the custom tag added to the shipment object (e.g. Letters_to_santa)
   --created-at-start: string # Used to create a filter for when a resource was created (ex. A shipment that was created after a certain time) (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
   --created-at-end: string # Used to create a filter for when a resource was created, (ex. A shipment that was created before a certain time) (format: date-time, e.g. 2019-03-12T19:24:13.657Z)
@@ -2025,7 +2033,7 @@ export def "shipments shipments" [
   --page-size: int # The number of results to return per response. (format: int32, default: 25, e.g. 50)
   --sales-order-id: string # Sales Order ID
   --sort-dir: string # Controls the sort order of the query. (default: desc)
-  --sort-by: string # e.g. modified_at
+  --sort-by: string@sort-by-completer-2 # e.g. modified_at
 ]: nothing -> record<shipments: list<record>, total: int, page: int, pages: int, links: record<first: record, last: record, prev: record<href: record, type: string>, next: record<href: record, type: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2158,7 +2166,7 @@ export def "shipments shipment" [
   --shipment-number: string # A non-unique user-defined number used to identify a shipment.  If undefined, this will match the external_shipment_id of the shipment.  > **Warning:** The `shipment_number` is limited to 50 characters. Any additional characters will be truncated.  (nullable)
   --ship-date: any # The date that the shipment was (or will be) shipped.  ShipEngine will take the day of week into consideration. For example, if the carrier does not operate on Sundays, then a package that would have shipped on Sunday will ship on Monday instead.
   ship_to: any # The recipient's mailing address
-  ship_from: any # The shipment's origin address. If you frequently ship from the same location, consider [creating a warehouse](https://www.shipengine.com/docs/reference/create-warehouse/).  Then you can simply specify the `warehouse_id` rather than the complete address each time.
+  ship_from: any # The shipment's origin address. If you frequently ship from the same location, consider [creating a warehouse](https://www.shipengine.com/docs/reference/create-warehouse/). Then you can simply specify the `warehouse_id` rather than the complete address each time.
   --warehouse-id: any # The [warehouse](https://www.shipengine.com/docs/shipping/ship-from-a-warehouse/) that the shipment is being shipped from.  Either `warehouse_id` or `ship_from` must be specified.  (nullable)
   --return-to: any # The return address for this shipment.  Defaults to the `ship_from` address.
   --is-return: string@bool-completer # An optional indicator if the shipment is intended to be a return. Defaults to false if not provided.  (nullable, default: false)
@@ -2452,7 +2460,7 @@ export def "tokens-ephemeral token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --redirect: string # Include a redirect url to the application formatted with the ephemeral token.
+  --redirect: string@redirect-completer # Include a redirect url to the application formatted with the ephemeral token.
 ]: nothing -> record<token: string, redirect_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2477,7 +2485,7 @@ export def "tracking log" [
   --allow-errors(-e) # Return full response without error handling
   --carrier-code: string # A [shipping carrier](https://www.shipengine.com/docs/carriers/setup/), such as `fedex`, `dhl_express`, `stamps_com`, etc.  (e.g. stamps_com)
   --tracking-number: string # The tracking number associated with a shipment (e.g. 9405511899223197428490)
-  --carrier-id: string # Carrier ID
+  --carrier-id: string # Carrier ID (e.g. se-28529731)
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2503,7 +2511,7 @@ export def "tracking-start tracking" [
   --accept: string@accept-completer # Response content type
   --carrier-code: string # A [shipping carrier](https://www.shipengine.com/docs/carriers/setup/), such as `fedex`, `dhl_express`, `stamps_com`, etc.  (e.g. stamps_com)
   --tracking-number: string # The tracking number associated with a shipment (e.g. 9405511899223197428490)
-  --carrier-id: string # Carrier ID
+  --carrier-id: string # Carrier ID (e.g. se-28529731)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2529,7 +2537,7 @@ export def "tracking-stop tracking" [
   --accept: string@accept-completer # Response content type
   --carrier-code: string # A [shipping carrier](https://www.shipengine.com/docs/carriers/setup/), such as `fedex`, `dhl_express`, `stamps_com`, etc.  (e.g. stamps_com)
   --tracking-number: string # The tracking number associated with a shipment (e.g. 9405511899223197428490)
-  --carrier-id: string # Carrier ID
+  --carrier-id: string # Carrier ID (e.g. se-28529731)
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)

@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -89,6 +90,7 @@ def sort-completer-3 [] { ["-channelUpdatedAt" "-createdAt" "-id"] }
 def feature-completer [] { ["1"] }
 def sort-completer-4 [] { ["-createdAt" "-state" "createdAt" "state"] }
 def sort-completer-5 [] { ["-createdAt" "createdAt"] }
+def state-completer-1 [] { ["1" "2" "3"] }
 def scope-completer [] { ["subtitle"] }
 def privacy-completer [] { ["1" "2" "3" "4" "5"] }
 def nsfwFlags-completer [] { ["0" "1" "2" "4"] }
@@ -97,7 +99,6 @@ def viewEvent-completer [] { ["seek"] }
 def sort-completer-6 [] { ["-createdAt" "-id" "-state"] }
 def videoIs-completer [] { ["blacklisted" "deleted"] }
 def filter-completer [] { ["account" "comment" "video"] }
-def state-completer-1 [] { ["1" "2" "3"] }
 def type-completer [] { ["1" "2"] }
 def sort-completer-7 [] { ["-createdAt" "-dislikes" "-duration" "-id" "-likes" "-uuid" "-views" "name"] }
 def policy-completer [] { ["1" "2" "3"] }
@@ -2619,7 +2620,7 @@ export def "videos-ownership get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --state: string # Filter by ownership change state
+  --state: int@state-completer-1 # Filter by ownership change state
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --qp-sort: string@sort-completer-5
@@ -2757,7 +2758,7 @@ export def "video-channels-ownership get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --state: string # Filter by ownership change state
+  --state: int@state-completer-1 # Filter by ownership change state
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
   --qp-sort: string@sort-completer-5
@@ -3756,7 +3757,7 @@ export def "users-me-abuses get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: int # only list the report with this id
-  --state: string
+  --state: int@state-completer-1
   --qp-sort: string@sort-completer-6 # Sort abuses by criteria
   --start: int # Offset used to paginate results
   --count: int # Number of items to return (default: 15)
@@ -3783,9 +3784,9 @@ export def "abuses get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --id: int # only list the report with this id
-  --predefinedReason: string # predefined reason the listed reports should contain
+  --predefinedReason: list # predefined reason the listed reports should contain
   --search: string # plain search that will match with video titles, reporter names and more
-  --state: string
+  --state: int@state-completer-1
   --searchReporter: string # only list reports of a specific reporter
   --searchReportee: string # only list reports of a specific reportee
   --searchVideo: string # only list reports of a specific video
@@ -3798,7 +3799,7 @@ export def "abuses get" [
 ]: nothing -> record<total: int, data: table<id: int, reason: string, predefinedReasons: list, reporterAccount: record, state: record, moderationComment: string, video: record, createdAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "predefinedReason" $predefinedReason "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "searchReporter" $searchReporter "scalar") (serialize-qp "searchReportee" $searchReportee "scalar") (serialize-qp "searchVideo" $searchVideo "scalar") (serialize-qp "searchVideoChannel" $searchVideoChannel "scalar") (serialize-qp "videoIs" $videoIs "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "predefinedReason" $predefinedReason "multi") (serialize-qp "search" $search "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "searchReporter" $searchReporter "scalar") (serialize-qp "searchReportee" $searchReportee "scalar") (serialize-qp "searchVideo" $searchVideo "scalar") (serialize-qp "searchVideoChannel" $searchVideoChannel "scalar") (serialize-qp "videoIs" $videoIs "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v1/abuses" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

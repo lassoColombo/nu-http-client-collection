@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -2225,8 +2226,8 @@ export def "checks-heartbeats-availability get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --startTime: string # format: date, default: 2026-06-10T18:39:52.428Z
-  --endTime: string # format: date, default: 2026-06-11T18:39:52.429Z
+  --startTime: string # format: date, default: 2026-06-10T20:27:20.531Z
+  --endTime: string # format: date, default: 2026-06-11T20:27:20.531Z
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<successRatio: record<previousPeriod: float, currentPeriod: float>, totalEntitiesCurrentPeriod: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2253,8 +2254,8 @@ export def "checks-heartbeats-events list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --startTime: string # format: date, default: 2026-06-10T18:39:52.431Z
-  --endTime: string # format: date, default: 2026-06-11T18:39:52.431Z
+  --startTime: string # format: date, default: 2026-06-10T20:27:20.534Z
+  --endTime: string # format: date, default: 2026-06-11T20:27:20.534Z
   --limit: float # default: 10
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> table<events: list<record>, stats: record<last24Hours: record, last7Days: record>> {
@@ -4818,7 +4819,7 @@ export def "status-pages-incidents-incident-updates post" [
   --id: string
   description: string
   --status: string@status-completer-4
-  --publicIncidentUpdateDate: string # format: date-time, default: 2026-06-11T18:39:53.653Z
+  --publicIncidentUpdateDate: string # format: date-time, default: 2026-06-11T20:27:21.790Z
   --created-at: string # format: date
   --notifySubscribers: string@bool-completer # default: false
 ]: any -> record<id: string, description: string, status: string, publicIncidentUpdateDate: string, created_at: string, notifySubscribers: bool> {
@@ -4905,7 +4906,7 @@ export def "status-pages-incidents-incident-updates put" [
   --id: string
   description: string
   --status: string@status-completer-4
-  --publicIncidentUpdateDate: string # format: date-time, default: 2026-06-11T18:39:53.653Z
+  --publicIncidentUpdateDate: string # format: date-time, default: 2026-06-11T20:27:21.790Z
   --created-at: string # format: date
   --notifySubscribers: string@bool-completer # default: false
 ]: any -> record<id: string, description: string, status: string, publicIncidentUpdateDate: string, created_at: string, notifySubscribers: bool> {

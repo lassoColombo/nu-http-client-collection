@@ -21,17 +21,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -261,11 +262,11 @@ export def "modlog get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --GetModlog: string
+  --GetModlog: record
 ]: nothing -> record<removed_posts: table<mod_remove_post: record, moderator: record, post: record, community: record>, locked_posts: table<mod_lock_post: record, moderator: record, post: record, community: record>, featured_posts: table<mod_feature_post: record, moderator: record, post: record, community: record>, removed_comments: table<mod_remove_comment: record, moderator: record, comment: record, commenter: record, post: record, community: record>, removed_communities: table<mod_remove_community: record, moderator: record, community: record>, banned_from_community: table<mod_ban_from_community: record, moderator: record, community: record, banned_person: record>, banned: table<mod_ban: record, moderator: record, banned_person: record>, added_to_community: table<mod_add_community: record, moderator: record, community: record, modded_person: record>, transferred_to_community: table<mod_transfer_community: record, moderator: record, community: record, modded_person: record>, added: table<mod_add: record, moderator: record, modded_person: record>, admin_purged_persons: table<admin_purge_person: record, admin: record>, admin_purged_communities: table<admin_purge_community: record, admin: record>, admin_purged_posts: table<admin_purge_post: record, admin: record, community: record>, admin_purged_comments: table<admin_purge_comment: record, admin: record, post: record>, hidden_communities: table<mod_hide_community: record, admin: record, community: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "GetModlog" $GetModlog "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "GetModlog" $GetModlog "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/modlog" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -283,11 +284,11 @@ export def "search get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Search: string
+  --Search: record
 ]: nothing -> record<type_: string, comments: table<comment: record, creator: record, post: record, community: record, counts: record, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>, posts: table<post: record, creator: record, community: record, image_details: record, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>, communities: table<community: record, subscribed: string, blocked: bool, counts: record, banned_from_community: bool>, users: table<person: record, counts: record, is_admin: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "Search" $Search "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "Search" $Search "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -305,11 +306,11 @@ export def "resolve-object get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ResolveObject: string
+  --ResolveObject: record
 ]: nothing -> record<comment: record<comment: record<id: int, creator_id: int, post_id: int, content: string, removed: bool, published: string, updated: string, deleted: bool, ap_id: string, local: bool, path: string, distinguished: bool, language_id: int>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, counts: record<comment_id: int, score: int, upvotes: int, downvotes: int, published: string, child_count: int>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>, post: record<post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, image_details: record<link: string, width: int, height: int, content_type: string>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record<post_id: int, comments: int, score: int, upvotes: int, downvotes: int, published: string, newest_comment_time: string>, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>, community: record<community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, subscribed: string, blocked: bool, counts: record<community_id: int, subscribers: int, posts: int, comments: int, published: string, users_active_day: int, users_active_week: int, users_active_month: int, users_active_half_year: int, subscribers_local: int>, banned_from_community: bool>, person: record<person: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, counts: record<person_id: int, post_count: int, comment_count: int>, is_admin: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ResolveObject" $ResolveObject "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ResolveObject" $ResolveObject "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/resolve_object" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -327,11 +328,11 @@ export def "community get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --GetCommunity: string
+  --GetCommunity: record
 ]: nothing -> record<community_view: record<community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, subscribed: string, blocked: bool, counts: record<community_id: int, subscribers: int, posts: int, comments: int, published: string, users_active_day: int, users_active_week: int, users_active_month: int, users_active_half_year: int, subscribers_local: int>, banned_from_community: bool>, site: record<id: int, name: string, sidebar: string, published: string, updated: string, icon: string, banner: string, description: string, actor_id: string, last_refreshed_at: string, inbox_url: string, public_key: string, instance_id: int, content_warning: string>, moderators: table<community: record, moderator: record>, discussion_languages: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "GetCommunity" $GetCommunity "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "GetCommunity" $GetCommunity "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/community" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -439,11 +440,11 @@ export def "community-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ListCommunities: string
+  --ListCommunities: record
 ]: nothing -> record<communities: table<community: record, subscribed: string, blocked: bool, counts: record, banned_from_community: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ListCommunities" $ListCommunities "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ListCommunities" $ListCommunities "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/community/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -662,11 +663,11 @@ export def "post get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --GetPost: string
+  --GetPost: record
 ]: nothing -> record<post_view: record<post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, image_details: record<link: string, width: int, height: int, content_type: string>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record<post_id: int, comments: int, score: int, upvotes: int, downvotes: int, published: string, newest_comment_time: string>, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>, community_view: record<community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, subscribed: string, blocked: bool, counts: record<community_id: int, subscribers: int, posts: int, comments: int, published: string, users_active_day: int, users_active_week: int, users_active_month: int, users_active_half_year: int, subscribers_local: int>, banned_from_community: bool>, moderators: table<community: record, moderator: record>, cross_posts: table<post: record, creator: record, community: record, image_details: record, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "GetPost" $GetPost "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "GetPost" $GetPost "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/post" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -747,11 +748,11 @@ export def "post-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --GetPosts: string
+  --GetPosts: record
 ]: nothing -> record<posts: table<post: record, creator: record, community: record, image_details: record, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>, next_page: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "GetPosts" $GetPosts "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "GetPosts" $GetPosts "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/post/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -996,11 +997,11 @@ export def "post-report-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ListPostReports: string
+  --ListPostReports: record
 ]: nothing -> record<post_reports: table<post_report: record, post: record, community: record, creator: record, post_creator: record, creator_banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int, counts: record, resolver: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ListPostReports" $ListPostReports "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ListPostReports" $ListPostReports "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/post/report/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1018,11 +1019,11 @@ export def "post-site-metadata get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --GetSiteMetadata: string
+  --GetSiteMetadata: record
 ]: nothing -> record<metadata: record<title: string, description: string, image: string, embed_video_url: string, content_type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "GetSiteMetadata" $GetSiteMetadata "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "GetSiteMetadata" $GetSiteMetadata "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/post/site_metadata" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1040,11 +1041,11 @@ export def "comment get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --GetComment: string
+  --GetComment: record
 ]: nothing -> record<comment_view: record<comment: record<id: int, creator_id: int, post_id: int, content: string, removed: bool, published: string, updated: string, deleted: bool, ap_id: string, local: bool, path: string, distinguished: bool, language_id: int>, creator: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, post: record<id: int, name: string, url: string, body: string, creator_id: int, community_id: int, removed: bool, locked: bool, published: string, updated: string, deleted: bool, nsfw: bool, embed_title: string, embed_description: string, thumbnail_url: string, ap_id: string, local: bool, embed_video_url: string, language_id: int, featured_community: bool, featured_local: bool, url_content_type: string, alt_text: string>, community: record<id: int, name: string, title: string, description: string, removed: bool, published: string, updated: string, deleted: bool, nsfw: bool, actor_id: string, local: bool, icon: string, banner: string, hidden: bool, posting_restricted_to_mods: bool, instance_id: int, visibility: string>, counts: record<comment_id: int, score: int, upvotes: int, downvotes: int, published: string, child_count: int>, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>, recipient_ids: list<int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "GetComment" $GetComment "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "GetComment" $GetComment "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/comment" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1115,11 +1116,11 @@ export def "comment-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --GetComments: string
+  --GetComments: record
 ]: nothing -> record<comments: table<comment: record, creator: record, post: record, community: record, counts: record, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "GetComments" $GetComments "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "GetComments" $GetComments "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/comment/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1338,11 +1339,11 @@ export def "comment-report-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ListCommentReports: string
+  --ListCommentReports: record
 ]: nothing -> record<comment_reports: table<comment_report: record, comment: record, post: record, community: record, creator: record, comment_creator: record, counts: record, creator_banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, creator_blocked: bool, subscribed: string, saved: bool, my_vote: int, resolver: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ListCommentReports" $ListCommentReports "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ListCommentReports" $ListCommentReports "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/comment/report/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1410,11 +1411,11 @@ export def "private-message-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --GetPrivateMessages: string
+  --GetPrivateMessages: record
 ]: nothing -> record<private_messages: table<private_message: record, creator: record, recipient: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "GetPrivateMessages" $GetPrivateMessages "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "GetPrivateMessages" $GetPrivateMessages "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/private_message/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1532,11 +1533,11 @@ export def "private-message-report-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ListPrivateMessageReports: string
+  --ListPrivateMessageReports: record
 ]: nothing -> record<private_message_reports: table<private_message_report: record, private_message: record, private_message_creator: record, creator: record, resolver: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ListPrivateMessageReports" $ListPrivateMessageReports "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ListPrivateMessageReports" $ListPrivateMessageReports "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/private_message/report/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1554,11 +1555,11 @@ export def "user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --GetPersonDetails: string
+  --GetPersonDetails: record
 ]: nothing -> record<person_view: record<person: record<id: int, name: string, display_name: string, avatar: string, banned: bool, published: string, updated: string, actor_id: string, bio: string, local: bool, banner: string, deleted: bool, matrix_user_id: string, bot_account: bool, ban_expires: string, instance_id: int>, counts: record<person_id: int, post_count: int, comment_count: int>, is_admin: bool>, site: record<id: int, name: string, sidebar: string, published: string, updated: string, icon: string, banner: string, description: string, actor_id: string, last_refreshed_at: string, inbox_url: string, public_key: string, instance_id: int, content_warning: string>, comments: table<comment: record, creator: record, post: record, community: record, counts: record, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>, posts: table<post: record, creator: record, community: record, image_details: record, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, counts: record, subscribed: string, saved: bool, read: bool, hidden: bool, creator_blocked: bool, my_vote: int, unread_comments: int>, moderates: table<community: record, moderator: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "GetPersonDetails" $GetPersonDetails "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "GetPersonDetails" $GetPersonDetails "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/user" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1628,11 +1629,11 @@ export def "user-mention get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --GetPersonMentions: string
+  --GetPersonMentions: record
 ]: nothing -> record<mentions: table<person_mention: record, comment: record, creator: record, post: record, community: record, recipient: record, counts: record, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "GetPersonMentions" $GetPersonMentions "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "GetPersonMentions" $GetPersonMentions "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/user/mention" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1675,11 +1676,11 @@ export def "user-replies get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --GetReplies: string
+  --GetReplies: record
 ]: nothing -> record<replies: table<comment_reply: record, comment: record, creator: record, post: record, community: record, recipient: record, counts: record, creator_banned_from_community: bool, banned_from_community: bool, creator_is_moderator: bool, creator_is_admin: bool, subscribed: string, saved: bool, creator_blocked: bool, my_vote: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "GetReplies" $GetReplies "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "GetReplies" $GetReplies "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/user/replies" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1974,11 +1975,11 @@ export def "user-report-count get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --GetReportCount: string
+  --GetReportCount: record
 ]: nothing -> record<community_id: int, comment_reports: int, post_reports: int, private_message_reports: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "GetReportCount" $GetReportCount "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "GetReportCount" $GetReportCount "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/user/report_count" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2127,11 +2128,11 @@ export def "admin-registration-application-list get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --ListRegistrationApplications: string
+  --ListRegistrationApplications: record
 ]: nothing -> record<registration_applications: table<registration_application: record, creator_local_user: record, creator: record, admin: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "ListRegistrationApplications" $ListRegistrationApplications "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "ListRegistrationApplications" $ListRegistrationApplications "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/admin/registration_application/list" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

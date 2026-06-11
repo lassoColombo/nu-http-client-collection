@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -67,9 +68,12 @@ def auth-scheme-completer [] { ["basic"] }
 # Completers for enum parameters
 def Format-completer [] { ["mp4" "webm"] }
 def StatusCallbackMethod-completer [] { ["DELETE" "GET" "HEAD" "PATCH" "POST" "PUT"] }
+def Status-completer [] { ["completed" "deleted" "enqueued" "failed" "processing"] }
+def Status-completer-1 [] { ["completed" "deleted" "failed" "processing"] }
+def MediaType-completer [] { ["audio" "data" "video"] }
+def Status-completer-2 [] { ["completed" "failed" "in-progress"] }
 def Type-completer [] { ["go" "group" "group-small" "peer-to-peer"] }
-def Status-completer [] { ["connected" "disconnected"] }
-def Status-completer-1 [] { ["completed" "failed" "in-progress"] }
+def Status-completer-3 [] { ["connected" "disconnected"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -295,7 +299,7 @@ export def "compositions ListComposition" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Status: string # Read only Composition resources with this status. Can be: `enqueued`, `processing`, `completed`, `deleted`, or `failed`.
+  --Status: string@Status-completer # Read only Composition resources with this status. Can be: `enqueued`, `processing`, `completed`, `deleted`, or `failed`.
   --DateCreatedAfter: string # Read only Composition resources created on or after this [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) date-time with time zone. (format: date-time)
   --DateCreatedBefore: string # Read only Composition resources created before this ISO 8601 date-time with time zone. (format: date-time)
   --RoomSid: string # Read only Composition resources with this Room SID.
@@ -449,12 +453,12 @@ export def "recordings ListRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Status: string # Read only the recordings that have this status. Can be: `processing`, `completed`, or `deleted`.
+  --Status: string@Status-completer-1 # Read only the recordings that have this status. Can be: `processing`, `completed`, or `deleted`.
   --SourceSid: string # Read only the recordings that have this `source_sid`.
   --GroupingSid: list # Read only recordings with this `grouping_sid`, which may include a `participant_sid` and/or a `room_sid`.
   --DateCreatedAfter: string # Read only recordings that started on or after this [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) date-time with time zone. (format: date-time)
   --DateCreatedBefore: string # Read only recordings that started before this [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) date-time with time zone, given as `YYYY-MM-DDThh:mm:ss+|-hh:mm` or `YYYY-MM-DDThh:mm:ssZ`. (format: date-time)
-  --MediaType: string # Read only recordings that have this media type. Can be either `audio` or `video`.
+  --MediaType: string@MediaType-completer # Read only recordings that have this media type. Can be either `audio` or `video`.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000.
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -523,7 +527,7 @@ export def "rooms ListRoom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Status: string # Read only the rooms with this status. Can be: `in-progress` (default) or `completed`
+  --Status: string@Status-completer-2 # Read only the rooms with this status. Can be: `in-progress` (default) or `completed`
   --UniqueName: string # Read only rooms with the this `unique_name`.
   --DateCreatedAfter: string # Read only rooms that started on or after this date, given as `YYYY-MM-DD`. (format: date-time)
   --DateCreatedBefore: string # Read only rooms that started before this date, given as `YYYY-MM-DD`. (format: date-time)
@@ -590,7 +594,7 @@ export def "rooms-participants ListRoomParticipant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Status: string # Read only the participants with this status. Can be: `connected` or `disconnected`. For `in-progress` Rooms the default Status is `connected`, for `completed` Rooms only `disconnected` Participants are returned.
+  --Status: string@Status-completer-3 # Read only the participants with this status. Can be: `connected` or `disconnected`. For `in-progress` Rooms the default Status is `connected`, for `completed` Rooms only `disconnected` Participants are returned.
   --Identity: string # Read only the Participants with this [User](https://www.twilio.com/docs/chat/rest/user-resource) `identity` value.
   --DateCreatedAfter: string # Read only Participants that started after this date in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601#UTC) format. (format: date-time)
   --DateCreatedBefore: string # Read only Participants that started before this date in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601#UTC) format. (format: date-time)
@@ -794,7 +798,7 @@ export def "rooms-participants UpdateRoomParticipant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Status: string@Status-completer
+  --Status: string@Status-completer-3
 ]: any -> record<account_sid: string, date_created: string, date_updated: string, duration: int, end_time: string, identity: string, links: record, room_sid: string, sid: string, start_time: string, status: string, url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -889,7 +893,7 @@ export def "rooms-recordings ListRoomRecording" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Status: string # Read only the recordings with this status. Can be: `processing`, `completed`, or `deleted`.
+  --Status: string@Status-completer-1 # Read only the recordings with this status. Can be: `processing`, `completed`, or `deleted`.
   --SourceSid: string # Read only the recordings that have this `source_sid`.
   --DateCreatedAfter: string # Read only recordings that started on or after this [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) datetime with time zone. (format: date-time)
   --DateCreatedBefore: string # Read only Recordings that started before this [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) datetime with time zone. (format: date-time)
@@ -983,7 +987,7 @@ export def "rooms UpdateRoom" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  Status: string@Status-completer-1
+  Status: string@Status-completer-2
 ]: any -> record<account_sid: string, audio_only: bool, date_created: string, date_updated: string, duration: int, empty_room_timeout: int, enable_turn: bool, end_time: string, large_room: bool, links: record, max_concurrent_published_tracks: int, max_participant_duration: int, max_participants: int, media_region: string, record_participants_on_connect: bool, sid: string, status: string, status_callback: string, status_callback_method: string, type: string, unique_name: string, unused_room_timeout: int, url: string, video_codecs: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))

@@ -22,17 +22,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -69,7 +70,7 @@ def auth-scheme-completer [] { ["plaid-client-id" "plaid-secret" "plaid-version"
 # Completers for enum parameters
 def accept-completer [] { ["application/json" "application/pdf"] }
 def consumer-report-permissible-purpose-completer [] { ["ACCOUNT_REVIEW_CREDIT" "WRITTEN_INSTRUCTION_OTHER"] }
-def user-tier-completer [] { ["free" "paid"] }
+def user-tier-completer [] { ["" "free" "paid"] }
 def consumer-report-permissible-purpose-completer-1 [] { ["ACCOUNT_REVIEW_CREDIT" "ACCOUNT_REVIEW_NON_CREDIT" "ELIGIBILITY_FOR_GOVT_BENEFITS" "EXTENSION_OF_CREDIT" "LEGITIMATE_BUSINESS_NEED_OTHER" "LEGITIMATE_BUSINESS_NEED_TENANT_SCREENING" "WRITTEN_INSTRUCTION_OTHER" "WRITTEN_INSTRUCTION_PREQUALIFICATION"] }
 def report-type-completer [] { ["QUALIFY"] }
 def inquiry-type-completer [] { ["SOFT_INQUIRY" "STANDARD_INQUIRY"] }
@@ -88,7 +89,7 @@ def report-confidence-completer [] { ["CONFIRMED" "SUSPECTED"] }
 def report-type-completer-1 [] { ["ACH_RETURN" "BANK_ACCOUNT_TAKEOVER" "BANK_CONNECTION_REVOKED" "CARD_CHARGEBACK" "CARD_TESTING" "DISPUTE" "FALSE_IDENTITY" "FIRST_PARTY_FRAUD" "LOAN_STACKING" "MISSED_PAYMENT" "MONEY_LAUNDERING" "MULTIPLE_USER_ACCOUNTS" "NO_FRAUD" "OTHER" "SCAM_VICTIM" "STOLEN_IDENTITY" "SYNTHETIC_IDENTITY" "UNAUTHORIZED_TRANSACTION" "USER_ACCOUNT_TAKEOVER"] }
 def report-source-completer [] { ["AUTOMATED_SYSTEM" "BANK_FEEDBACK" "INTERNAL_REVIEW" "NETWORK_FEEDBACK" "OTHER" "THIRD_PARTY_ALERT" "USER_SELF_REPORTED"] }
 def decision-outcome-completer [] { ["APPROVE" "NOT_EVALUATED" "REJECT" "REVIEW" "TAKE_OTHER_RISK_MEASURES"] }
-def payment-method-completer [] { ["MULTIPLE_PAYMENT_METHODS" "NEXT_DAY_ACH" "SAME_DAY_ACH" "STANDARD_ACH"] }
+def payment-method-completer [] { ["" "MULTIPLE_PAYMENT_METHODS" "NEXT_DAY_ACH" "SAME_DAY_ACH" "STANDARD_ACH"] }
 def type-completer-1 [] { ["credit" "debit"] }
 def network-completer [] { ["ach" "same-day-ach" "wire"] }
 def ach-class-completer [] { ["ccd" "ppd" "tel" "web"] }
@@ -96,17 +97,17 @@ def type-completer-2 [] { ["COMMERCIAL" "SWEEPING"] }
 def processing-mode-completer [] { ["ASYNC" "IMMEDIATE"] }
 def verification-status-completer [] { ["automatically_verified" "verification_expired"] }
 def processor-completer [] { ["achq" "adp_roll" "adyen" "alloy" "alpaca" "ansa" "apex_clearing" "array" "astra" "atomic" "atomicfi" "bakkt" "bloom_credit" "bond" "boom" "brale" "cardless" "cardlytics" "check" "checkbook" "checkout" "circle" "curinos" "drivewealth" "dwolla" "esusu" "fiant" "finix" "fortress_trust" "frame" "gainbridge" "galileo" "gemini" "gusto" "highnote" "i2c" "interchange" "interchecks" "knot" "layer" "lithic" "loanpro" "marqeta" "modern_treasury" "moov" "nuvei" "oatfi" "ocrolus" "open_ledger" "parafin" "paynote" "pinwheel" "riskified" "rize" "sardine" "scribeup" "sfox" "sila_money" "solid" "stake" "straddle" "svb_api" "taba_pay" "teal" "thread_bank" "treasury_prime" "unit" "utb" "valon" "vesta" "vopay" "wedbush" "wepay" "wyre" "zero_hash"] }
-def appearance-mode-completer [] { ["DARK" "LIGHT" "SYSTEM"] }
+def appearance-mode-completer [] { ["" "DARK" "LIGHT" "SYSTEM"] }
 def network-completer-1 [] { ["ach" "rtp" "same-day-ach" "wire"] }
 def type-completer-3 [] { ["prefunded_ach_credits" "prefunded_rtp_credits"] }
 def network-completer-2 [] { ["ach" "same-day-ach"] }
 def network-completer-3 [] { ["ach" "rtp" "same-day-ach"] }
-def direction-completer [] { ["inbound" "outbound"] }
+def direction-completer [] { ["" "inbound" "outbound"] }
 def reason-code-completer-1 [] { ["AC03" "AC14" "AM06" "AM09" "BE05" "CUST" "DUPL" "FOCR" "FRAD" "MS02" "MS03" "RR04" "RUTA" "TECH" "UPAY"] }
-def transfer-type-completer [] { ["credit" "debit"] }
+def transfer-type-completer [] { ["" "credit" "debit"] }
 def source-type-completer [] { ["REFUND" "SWEEP" "TRANSFER"] }
-def bank-transfer-type-completer [] { ["credit" "debit"] }
-def status-completer-1 [] { ["failed" "funds_available" "pending" "posted" "returned" "settled"] }
+def bank-transfer-type-completer [] { ["" "credit" "debit"] }
+def status-completer-1 [] { ["" "failed" "funds_available" "pending" "posted" "returned" "settled"] }
 def trigger-completer [] { ["automatic_aggregate" "balance_threshold" "incoming" "manual"] }
 def mode-completer [] { ["DISBURSEMENT" "PAYMENT"] }
 def purpose-completer [] { ["DUE_DILIGENCE"] }
@@ -4705,7 +4706,7 @@ export def "payment-initiation-recipient-list paymentInitiationRecipientList" [
 # Docs: /api/products/payment-initiation/#payment_initiationpaymentcreate
 # operationId: paymentInitiationPaymentCreate
 # --amount shape: {currency: "GBP"|"EUR"|"PLN"|"SEK"|"DKK"|"NOK", value: float}
-# --options shape: {request_refund_details?: bool, iban?: string, bacs?: any, scheme?: "LOCAL_DEFAULT"|"LOCAL_INSTANT"|"SEPA_CREDIT_TRANSFER"|"SEPA_CREDIT_TRANSFER_INSTANT"}
+# --options shape: {request_refund_details?: bool, iban?: string, bacs?: any, scheme?: ""|"LOCAL_DEFAULT"|"LOCAL_INSTANT"|"SEPA_CREDIT_TRANSFER"|"SEPA_CREDIT_TRANSFER_INSTANT"}
 export def "payment-initiation-payment-create paymentInitiationPaymentCreate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4720,7 +4721,7 @@ export def "payment-initiation-payment-create paymentInitiationPaymentCreate" [
   reference: string # A reference for the payment. This must be an alphanumeric string with at most 18 characters and must not contain any special characters (since not all institutions support them). In order to track settlement via Payment Confirmation, each payment must have a unique reference. If the reference provided through the API is not unique, Plaid will adjust it. Some institutions may limit the reference to less than 18 characters. If necessary, Plaid will adjust the reference by truncating it to fit the institution's requirements. Both the originally provided and automatically adjusted references (if any) can be found in the `reference` and `adjusted_reference` fields, respectively.
   amount: record # The amount and currency of a payment — shape: {currency: "GBP"|"EUR"|"PLN"|"SEK"|"DKK"|"NOK", value: float}
   --schedule: any # The schedule that the payment will be executed on. If a schedule is provided, the payment is automatically set up as a standing order. If no schedule is specified, the payment will be executed only once.
-  --options: record # Additional payment options (nullable) — shape: {request_refund_details?: bool, iban?: string, bacs?: any, scheme?: "LOCAL_DEFAULT"|"LOCAL_INSTANT"|"SEPA_CREDIT_TRANSFER"|"SEPA_CREDIT_TRANSFER_INSTANT"}
+  --options: record # Additional payment options (nullable) — shape: {request_refund_details?: bool, iban?: string, bacs?: any, scheme?: ""|"LOCAL_DEFAULT"|"LOCAL_INSTANT"|"SEPA_CREDIT_TRANSFER"|"SEPA_CREDIT_TRANSFER_INSTANT"}
 ]: any -> record<payment_id: string, status: string, request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))

@@ -21,17 +21,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -68,6 +69,7 @@ def auth-scheme-completer [] { ["bearer" "basic"] }
 # Completers for enum parameters
 def Accept-completer [] { ["application/json" "application/octet-stream" "application/toml"] }
 def accept-completer [] { ["application/json" "application/octet-stream" "application/toml"] }
+def precision-completer [] { ["ms" "ns" "s" "us"] }
 def Content-Encoding-completer [] { ["gzip" "identity"] }
 def Content-Type-completer [] { ["text/plain" "text/plain; charset=utf-8"] }
 def Accept-completer-1 [] { ["application/json"] }
@@ -887,7 +889,7 @@ export def "write PostWrite" [
   --org: string # An organization name or ID.  #### InfluxDB Cloud  - Doesn't use the `org` parameter or `orgID` parameter. - Writes data to the bucket in the organization   associated with the authorization (API token).  #### InfluxDB OSS  - Requires either the `org` parameter or the `orgID` parameter. - If you pass both `orgID` and `org`, they must both be valid. - Writes data to the bucket in the specified organization.
   --orgID: string # An organization ID.  #### InfluxDB Cloud  - Doesn't use the `org` parameter or `orgID` parameter. - Writes data to the bucket in the organization   associated with the authorization (API token).  #### InfluxDB OSS  - Requires either the `org` parameter or the `orgID` parameter. - If you pass both `orgID` and `org`, they must both be valid. - Writes data to the bucket in the specified organization.
   --bucket: string # A bucket name or ID. InfluxDB writes all points in the batch to the specified bucket.
-  --precision: string # The precision for unix timestamps in the line protocol batch.
+  --precision: string@precision-completer # The precision for unix timestamps in the line protocol batch.
   --Zap-Trace-Span: string # OpenTracing span context (e.g. {trace_id: 1, span_id: 1, baggage: {key: value}})
   --Content-Encoding: string@Content-Encoding-completer # The compression applied to the line protocol in the request payload. To send a GZIP payload, pass `Content-Encoding: gzip` header.
   --Content-Type: string@Content-Type-completer # The format of the data in the request body. To send a line protocol payload, pass `Content-Type: text/plain; charset=utf-8`.

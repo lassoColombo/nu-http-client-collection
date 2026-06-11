@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -81,6 +82,9 @@ def response-type-completer [] { ["code"] }
 def display-completer [] { ["mobile" "page" "popup" "touch"] }
 def code-challenge-method-completer [] { ["S256" "plain"] }
 def type-completer-3 [] { ["OtherPhone"] }
+def status-completer-1 [] { ["Normal" "Pending" "PortedIn" "Temporary" "Unknown"] }
+def tollType-completer [] { ["Toll" "TollFree"] }
+def extensionStatus-completer [] { ["Disabled" "Enabled" "Frozen" "NotActivated" "Unassigned"] }
 def type-completer-4 [] { ["FaxOnly" "VoiceFax" "VoiceOnly"] }
 def usageType-completer [] { ["CompanyNumber" "DirectNumber" "MainCompanyNumber" "PhoneLine"] }
 def category-completer [] { ["User"] }
@@ -92,31 +96,38 @@ def view-completer [] { ["Detailed" "Simple"] }
 def recordingType-completer [] { ["All" "Automatic" "OnDemand"] }
 def type-completer-6 [] { ["CallHandling" "UserSettings"] }
 def direction-completer [] { ["Inbound" "Outbound"] }
-def status-completer-1 [] { ["all" "optin" "optout"] }
+def status-completer-2 [] { ["all" "optin" "optout"] }
 def accept-completer-2 [] { ["application/json" "text/csv"] }
 def type-completer-7 [] { ["AfterHours" "BusinessHours" "Custom"] }
 def callHandlingAction-completer [] { ["Bypass" "Disconnect" "Operator"] }
-def status-completer-2 [] { ["Disabled" "Enabled" "NotActivated"] }
+def status-completer-3 [] { ["Disabled" "Enabled" "NotActivated"] }
 def subType-completer [] { ["Emergency"] }
 def alertTimer-completer [] { ["10" "120" "15" "180" "20" "240" "30" "300" "360" "420" "45" "480" "5" "540" "60" "600"] }
-def orderBy-completer [] { ["+address" "+addressStatus" "+name" "+siteName" "+usageStatus" "-address" "-addressStatus" "-name" "-siteName" "-usageStatus"] }
-def addressStatus-completer [] { ["Invalid" "Valid"] }
+def addressStatus-completer [] { ["Invalid" "Provisioning" "Valid"] }
 def usageStatus-completer [] { ["Active" "Inactive"] }
+def orderBy-completer [] { ["+address" "+addressStatus" "+name" "+siteName" "+usageStatus" "-address" "-addressStatus" "-name" "-siteName" "-usageStatus"] }
+def addressStatus-completer-1 [] { ["Invalid" "Valid"] }
 def visibility-completer [] { ["Public"] }
 def type-completer-8 [] { ["Announcement" "Department" "External" "IvrMenu" "Limited" "PagingOnly" "ParkLocation" "SharedLinesGroup" "User" "Voicemail"] }
 def typeGroup-completer [] { ["NonUser" "User"] }
-def extensionType-completer [] { ["Announcement" "ApplicationExtension" "Bot" "DelegatedLinesGroup" "Department" "External" "GroupCallPickup" "IvrMenu" "Limited" "PagingOnly" "ParkLocation" "Room" "SharedLinesGroup" "Site" "User" "Voicemail"] }
+def extensionType-completer [] { ["Announcement" "ApplicationExtension" "Bot" "DelegatedLinesGroup" "Department" "DigitalUser" "FaxUser" "FlexibleUser" "GroupCallPickup" "IvrMenu" "Limited" "PagingOnly" "ParkLocation" "ProxyAdmin" "Room" "RoomConnector" "SharedLinesGroup" "Site" "User" "VirtualUser" "Voicemail"] }
+def extensionType-completer-1 [] { ["Announcement" "ApplicationExtension" "Bot" "DelegatedLinesGroup" "Department" "External" "GroupCallPickup" "IvrMenu" "Limited" "PagingOnly" "ParkLocation" "Room" "SharedLinesGroup" "Site" "User" "Voicemail"] }
+def types-completer [] { ["AdminOnly" "All" "Regular"] }
 def type-completer-9 [] { ["AutomaticRecording" "Company" "StartRecording" "StopRecording" "TemplateGreeting"] }
 def scope-completer [] { ["Account" "AllExtensions" "Federation" "Group" "NonUserExtensions" "RoleBased" "Self" "UserExtensions"] }
 def setupWizardState-completer [] { ["Completed" "Incomplete" "NotStarted"] }
-def status-completer-3 [] { ["Disabled" "Enabled" "Frozen" "NotActivated" "Unassigned"] }
+def status-completer-4 [] { ["Disabled" "Enabled" "Frozen" "NotActivated" "Unassigned"] }
 def type-completer-10 [] { ["Announcement" "Department" "DigitalUser" "FlexibleUser" "Limited" "PagingOnly" "ParkLocation" "SharedLinesGroup" "User" "VirtualUser" "Voicemail"] }
-def status-completer-4 [] { ["Disabled" "Enabled" "Frozen" "NotActivated"] }
+def status-completer-5 [] { ["Disabled" "Enabled" "Frozen" "NotActivated"] }
 def type-completer-11 [] { ["Announcement" "ApplicationExtension" "DelegatedLinesGroup" "Department" "DigitalUser" "FaxUser" "FlexibleUser" "GroupCallPickup" "IvrMenu" "PagingOnly" "ParkLocation" "SharedLinesGroup" "User" "VirtualUser" "Voicemail"] }
 def subType-completer-1 [] { ["DigitalSignageOnlyRooms" "Emergency" "Unknown" "VideoPro" "VideoProPlus"] }
 def linePooling-completer [] { ["Guest" "Host" "None"] }
+def feature-completer [] { ["BLA" "CommonPhone" "HELD" "Intercom" "Paging"] }
 def type-completer-12 [] { ["BLA" "HardPhone" "MobileDevice" "OtherPhone" "Paging" "Room" "SoftPhone" "WebPhone" "WebRTC"] }
-def extensionType-completer-1 [] { ["Announcement" "ApplicationExtension" "Bot" "DelegatedLinesGroup" "Department" "DigitalUser" "FaxUser" "IvrMenu" "Limited" "PagingOnly" "ParkLocation" "Room" "SharedLinesGroup" "User" "VirtualUser" "Voicemail"] }
+def lineType-completer [] { ["BlaPrimary" "BlaSecondary" "Standalone" "StandaloneFree" "Unknown"] }
+def extensionType-completer-2 [] { ["Announcement" "ApplicationExtension" "Bot" "DelegatedLinesGroup" "Department" "DigitalUser" "FaxUser" "IvrMenu" "Limited" "PagingOnly" "ParkLocation" "Room" "SharedLinesGroup" "User" "VirtualUser" "Voicemail"] }
+def scope-completer-1 [] { ["Company" "Personal"] }
+def syncType-completer [] { ["FSync" "ISync"] }
 def accept-completer-3 [] { ["image/gif" "image/jpeg" "image/png"] }
 def type-completer-13 [] { ["Custom"] }
 def callHandlingAction-completer-1 [] { ["AgentQueue" "ForwardCalls" "PlayAnnouncementOnly" "SharedLines" "TakeMessagesOnly" "TransferToExtension" "UnconditionalForwarding"] }
@@ -138,9 +149,9 @@ def type-completer-17 [] { ["Announcement" "ConnectingAudio" "ConnectingMessage"
 def mode-completer-1 [] { ["All" "Specific"] }
 def noCallerId-completer [] { ["Allow" "BlockCallsAndFaxes" "BlockFaxes"] }
 def payPhones-completer [] { ["Allow" "Block"] }
-def status-completer-5 [] { ["Allowed" "Blocked"] }
-def syncType-completer [] { ["FSync" "ISync"] }
-def status-completer-6 [] { ["Normal" "Pending" "PortedIn" "Temporary"] }
+def status-completer-6 [] { ["Allowed" "Blocked"] }
+def status-completer-7 [] { ["Normal" "Pending" "PortedIn" "Temporary"] }
+def paymentType-completer [] { ["BusinessMobileNumberProvider" "External" "ExternalNumberProvider" "ExternalNumberProviderTollFree" "Local" "TollFree"] }
 def orderBy-completer-2 [] { ["City" "Npa"] }
 def type-completer-18 [] { ["Announcement" "Company" "ConnectingAudio" "ConnectingMessage" "HoldMusic" "Introductory" "Unavailable" "Voicemail"] }
 def usageType-completer-1 [] { ["AnnouncementExtensionAnsweringRule" "CompanyAfterHoursAnsweringRule" "CompanyAnsweringRule" "DepartmentExtensionAnsweringRule" "ExtensionAnsweringRule" "SharedLinesGroupAnsweringRule" "UserExtensionAnsweringRule" "VoicemailExtensionAnsweringRule"] }
@@ -149,16 +160,17 @@ def summaryType-completer [] { ["AbstractiveAll" "AbstractiveLong" "AbstractiveS
 def encoding-completer [] { ["Aac" "Avi" "Mp4" "Mpeg" "Ogg" "Wav" "Webm" "Webp"] }
 def orderBy-completer-3 [] { ["+creationTime" "-creationTime" "creationTime"] }
 def accept-completer-5 [] { ["application/json" "application/scim+json"] }
+def interval-completer [] { ["Day" "Hour" "Month" "Week"] }
 def completenessCondition-completer [] { ["AllAssignees" "Percentage" "Simple"] }
 def color-completer [] { ["Black" "Blue" "Green" "Magenta" "Orange" "Purple" "Red" "Yellow"] }
-def status-completer-7 [] { ["Complete" "Incomplete"] }
+def status-completer-8 [] { ["Complete" "Incomplete"] }
 def accept-completer-6 [] { ["application/json" "multipart/mixed"] }
 def assignmentStatus-completer [] { ["Assigned" "Unassigned"] }
 def assigneeStatus-completer [] { ["Completed" "Pending"] }
 def type-completer-19 [] { ["AdaptiveCard"] }
 def lang-completer [] { ["en" "es" "fr"] }
-def status-completer-8 [] { ["Active" "Draft"] }
-def status-completer-9 [] { ["Accepted" "Completed" "Expired" "Failed" "InProgress"] }
+def status-completer-9 [] { ["Active" "Draft"] }
+def status-completer-10 [] { ["Accepted" "Completed" "Expired" "Failed" "InProgress"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -1190,7 +1202,7 @@ export def "webinar-configuration-company-sessions rcwConfigListAllCompanySessio
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string # Filter to return only webinar sessions in certain status. Multiple values are supported. (e.g. Scheduled)
+  --status: string@status-completer # Filter to return only webinar sessions in certain status. Multiple values are supported. (e.g. Scheduled)
   --endTimeFrom: string # The beginning of the time window by 'endTime' (it is calculated as scheduledStartTime+scheduledDuration) (format: date-time)
   --hostUserId: list # Identifier of the user who hosts a webinar (if omitted, webinars hosted by all company users will be returned) (e.g. [77777777])
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
@@ -1218,7 +1230,7 @@ export def "webinar-configuration-sessions rcwConfigListAllSessions" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --nameFragment: string # Filter to return only webinar sessions containing particular substring within their names (e.g. All-hands)
-  --status: string # Filter to return only webinar sessions in certain status. Multiple values are supported. (e.g. Scheduled)
+  --status: string@status-completer # Filter to return only webinar sessions in certain status. Multiple values are supported. (e.g. Scheduled)
   --endTimeFrom: string # The beginning of the time window by 'endTime' (it is calculated as scheduledStartTime+scheduledDuration) (format: date-time)
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
   --pageToken: string # The token indicating the particular page of the result set to be retrieved. If omitted the first page will be returned.
@@ -1773,12 +1785,12 @@ export def "restapi-oauth-authorize authorize" [
   --redirect-uri: string # This is the URI where the Authorization Server redirects the User Agent to at the end of the authorization flow. The value of this parameter must exactly match one of the URIs registered for this client application. This parameter is required if there are more than one redirect URIs registered for the app.  (format: uri)
   --state: string # An opaque value used by the client to maintain state between the request and callback. The authorization server includes this value when redirecting the User Agent back to the client. The parameter SHOULD be used for preventing cross-site request forgery attacks.
   --scope: string # The list of space separated application permissions (OAuth scopes)
-  --display: string # Specifies how the Authorization Server displays the authentication and consent user interface pages to the End-User.
+  --display: string@display-completer # Specifies how the Authorization Server displays the authentication and consent user interface pages to the End-User.  (default: page)
   --prompt: string # Space-delimited, case-sensitive list of ASCII string values that specifies whether the Authorization Server prompts the End-User for re-authentication and consent. The defined values are:  - `login` - RingCentral native login form, - `sso` - Single Sign-On login form, - `consent` - form to show the requested scope and prompt user for consent.  Either `login` or `sso` (or both) must be specified. The default value is `login sso`  (default: login sso)
   --ui-locales: string # End-User's preferred languages and scripts for the user interface, represented as a space-separated list of [RFC-5646](https://datatracker.ietf.org/doc/html/rfc5646) language tag values, ordered by preference.  If this parameter is provided, its value overrides 'Accept-Language' header value and 'localeId' parameter value (if any)  (e.g. en-US)
   --localeId: string # DEPRECATED: `ui_locales` parameter should be used instead (DEPRECATED, e.g. en-US)
   --code-challenge: string # The code challenge value as defined by the PKCE specification - [RFC-7636 "Proof Key for Code Exchange by OAuth Public Clients"](https://datatracker.ietf.org/doc/html/rfc7636)
-  --code-challenge-method: string # The code challenge method as defined by by the PKCE specification - [RFC-7636 "Proof Key for Code Exchange by OAuth Public Clients"](https://datatracker.ietf.org/doc/html/rfc7636)
+  --code-challenge-method: string@code-challenge-method-completer # The code challenge method as defined by by the PKCE specification - [RFC-7636 "Proof Key for Code Exchange by OAuth Public Clients"](https://datatracker.ietf.org/doc/html/rfc7636)  (default: plain)
   --nonce: string # String value used to associate a Client session with an ID Token, and to mitigate replay attacks. The value is passed through unmodified from the Authentication Request to the ID Token.
   --ui-options: string # Login form user interface options (space-separated). By default, the UI options that are registered for this client application will be used
   --login-hint: string # Hint to the Authorization Server about the login identifier the End-User might use to log in.
@@ -1983,9 +1995,9 @@ export def "restapi-accounts-phone-numbers listAccountPhoneNumbersV2" [
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
   --type: list # Types of phone numbers to be returned
   --usageType: list # Usage type(s) of phone numbers to be returned
-  --status: string # Status of the phone number(s) to be returned
-  --tollType: string # Toll type of phone numbers to return
-  --extensionStatus: string # Statuses of extensions to return phone numbers for
+  --status: string@status-completer-1 # Status of the phone number(s) to be returned
+  --tollType: string@tollType-completer # Toll type of phone numbers to return (e.g. Toll)
+  --extensionStatus: string@extensionStatus-completer # Statuses of extensions to return phone numbers for
   --byocNumber: string@bool-completer # The parameter reflects whether this number is BYOC or not
   --phoneNumber: string # Phone number in e.164 format to be searched for. Parameter value can include wildcards (e.g. "+165012345**") or be an exact number "+16501234500" - single number is searched in that case. Make sure you escape the "+" in the URL as "%2B"
 ]: nothing -> record<records: table<id: string, phoneNumber: string, type: string, tollType: string, usageType: string, byocNumber: bool, status: string, extension: record>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
@@ -3890,7 +3902,7 @@ export def "restapi-v10-account-a2p-sms-opt-outs readA2PSMSOptOuts" [
   --accept: string@accept-completer-2 # Response content type
   --qp-from: string # The sender's phone number in [E.164](https://www.itu.int/rec/T-REC-E.164-201011-I) format for filtering messages. The asterisk value "*" means any number in `from` field  (e.g. 15551234455)
   --qp-to: string # The receiver's phone number (`to` field) in [E.164](https://www.itu.int/rec/T-REC-E.164-201011-I) format for filtering messages  (e.g. 15551237755)
-  --status: string@status-completer-1 # The status (opted out, opted in, or both) to be used as the filter (default: optout, e.g. optout)
+  --status: string@status-completer-2 # The status (opted out, opted in, or both) to be used as the filter (default: optout, e.g. optout)
   --pageToken: string # The page token of the page to be retrieved (e.g. pgt1)
   --perPage: int # The number of records to be returned for the page (format: int32, default: 1000, e.g. 5)
 ]: nothing -> record<records: table<from: string, to: string, status: string, source: string>, paging: record<pageToken: string, perPage: int, firstPageToken: string, previousPageToken: string, nextPageToken: string>> {
@@ -4402,7 +4414,7 @@ export def "restapi-v10-account-call-queues updateCallQueueInfo" [
   --id: string # Internal identifier of a call queue
   --extensionNumber: string # Extension number of a call queue
   --name: string # Name of a call queue
-  --status: string@status-completer-2 # Call queue status
+  --status: string@status-completer-3 # Call queue status
   --subType: string@subType-completer # Indicates whether it is an emergency call queue extension or not
   --serviceLevelSettings: record # Call queue service level settings — shape: {slaGoal?: int, slaThresholdSeconds?: int, includeAbandonedCalls?: bool, abandonedThresholdSeconds?: int}
   --editableMemberStatus: string@bool-completer # Allows members to change their queue status
@@ -4539,8 +4551,8 @@ export def "restapi-v10-account-emergency-locations listEmergencyLocations" [
   --allow-errors(-e) # Return full response without error handling
   --siteId: list # Internal identifier of a site for filtering. To indicate company main site `main-site` value should be specified. Supported only if multi-site feature is enabled for the account. Multiple values are supported.
   --searchString: string # Filters entries containing the specified substring in 'address' and 'name' fields. The character range is 0-64; not case-sensitive. If empty then the filter is ignored
-  --addressStatus: string
-  --usageStatus: string
+  --addressStatus: string@addressStatus-completer
+  --usageStatus: string@usageStatus-completer
   --domesticCountryId: string
   --orderBy: string@orderBy-completer # Comma-separated list of fields to order results, prefixed by plus sign '+' (ascending order) or minus sign '-' (descending order)  (default: +address)
   --perPage: int # Indicates a page size (number of items). The values supported: `Max` or numeric value. If not specified, 100 records are returned per one page  (format: int32, default: 100)
@@ -4573,7 +4585,7 @@ export def "restapi-v10-account-emergency-locations createEmergencyLocation" [
   --address: any
   --name: string # Emergency response location name
   --site: record # shape: {id?: string, name?: string}
-  --addressStatus: string@addressStatus-completer # Emergency address status
+  --addressStatus: string@addressStatus-completer-1 # Emergency address status
   --usageStatus: string@usageStatus-completer # Status of an emergency response location usage.
   --addressFormatId: string # Address format ID
   --visibility: string@visibility-completer # Visibility of an emergency response location. If `Private` is set, then a location is visible only for restricted number of users, specified in `owners` array  (default: Public)
@@ -4634,7 +4646,7 @@ export def "restapi-v10-account-emergency-locations updateEmergencyLocation" [
   --address: any
   --name: string # Emergency response location name
   --site: record # shape: {id?: string, name?: string}
-  --addressStatus: string@addressStatus-completer # Emergency address status
+  --addressStatus: string@addressStatus-completer-1 # Emergency address status
   --usageStatus: string@usageStatus-completer # Status of an emergency response location usage.
   --addressFormatId: string # Address format ID
   --visibility: string@visibility-completer # Visibility of an emergency response location. If `Private` is set, then a location is visible only for restricted number of users, specified in `owners` array  (default: Public)
@@ -5448,12 +5460,12 @@ export def "restapi-v10-account-directory-entries-search searchDirectoryEntries"
   --department: string # A list of department names (e.g. North office)
   --siteId: string # A list of Site IDs (e.g. 872781797006)
   --extensionStatus: string # Extension current state (e.g. Enabled)
-  --extensionType: string # Extension types
+  --extensionType: string@extensionType-completer # Extension types (e.g. User)
   --searchString: string # String value to filter the contacts. The value specified is searched through the following fields: `firstName`, `lastName`, `extensionNumber`, `phoneNumber`, `email`, `jobTitle`, `department`, `customFieldValue`
   --searchFields: list # The list of field to be searched for
   --showFederated: string@bool-completer # If `true` then contacts of all accounts in federation are returned, if it is in federation, account section will be returned. If `false` then only contacts of the current account are returned, and account section is eliminated in this case
   --showAdminOnlyContacts: string@bool-completer # Should show AdminOnly Contacts (default: false)
-  --extensionType: string@extensionType-completer # Type of directory contact to filter (e.g. User)
+  --extensionType: string@extensionType-completer-1 # Type of directory contact to filter (e.g. User)
   --siteId: string # Internal identifier of the business site to which extensions belong (e.g. 872781797006)
   --showExternalContacts: string@bool-completer # Allows to control whether External (Hybrid) contacts should be returned in the response or not (default: false, e.g. true)
   --accountIds: list # The list of Internal identifiers of an accounts (e.g. [854874047006, 422456828004, 854874151006])
@@ -5490,7 +5502,7 @@ export def "restapi-v10-account-directory-federation readDirectoryFederation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --types: string # Filter by federation types. Default is Regular
+  --types: string@types-completer # Filter by federation types. Default is Regular
   --RCExtensionId: string # RingCentral extension id
 ]: nothing -> record<accounts: table<companyName: string, conflictCount: int, federatedName: string, id: string, linkCreationTime: string, mainNumber: record>, creationTime: string, displayName: string, id: string, lastModifiedTime: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -6216,7 +6228,7 @@ export def "restapi-v10-account-extension createExtension" [
   --ivrPin: string # IVR PIN
   --setupWizardState: string@setupWizardState-completer # Initial configuration wizard state (default: NotStarted)
   --site: record # shape: {id?: string, uri?: string, name?: string, extensionNumber?: string, callerIdName?: string, email?: string, businessAddress?: record, regionalSettings?: record, operator?: record, code?: string}
-  --status: string@status-completer-3 # Extension current state
+  --status: string@status-completer-4 # Extension current state
   --statusInfo: record # Status information (reason, comment). Returned for 'Disabled' status only — shape: {comment?: string, reason?: "SuspendedVoluntarily"|"SuspendedInvoluntarily"|"CancelledVoluntarily"|"CancelledInvoluntarily", till?: string}
   --type: string@type-completer-10 # Extension type. Please note that legacy 'Department' extension type corresponds to 'Call Queue' extensions in modern RingCentral product terminology
   --hidden: string@bool-completer # Hides extension from showing in company directory. Supported for extensions of 'User' type only. For unassigned extensions the value is set to `true` by default. For assigned extensions the value is set to `false` by default
@@ -6277,7 +6289,7 @@ export def "restapi-v10-account-extension updateExtension" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string@status-completer-4
+  --status: string@status-completer-5
   --statusInfo: record # Status information (reason, comment). Returned for 'Disabled' status only — shape: {comment?: string, reason?: "SuspendedVoluntarily"|"SuspendedInvoluntarily"|"CancelledVoluntarily"|"CancelledInvoluntarily", till?: string}
   --extensionNumber: string # Extension number available
   --contact: record # shape: {firstName?: string, lastName?: string, company?: string, jobTitle?: string, email?: string, businessPhone?: string, mobilePhone?: string, businessAddress?: record, emailAsLoginName?: bool, pronouncedName?: record, department?: string}
@@ -6475,9 +6487,9 @@ export def "restapi-v10-account-extension-device listExtensionDevices" [
   --page: int # The result set page number (1-indexed) to return (format: int32, default: 1, e.g. 1)
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
   --linePooling: string@linePooling-completer # Pooling type of device - Host - a device with standalone paid phone line which can be linked to a soft client instance - Guest - a device with a linked phone line - None - a device without a phone line or with specific line (free, BLA, etc.)
-  --feature: string # Device feature or multiple features supported
+  --feature: string@feature-completer # Device feature or multiple features supported
   --type: string@type-completer-12 # Device type (default: HardPhone)
-  --lineType: string # Phone line type
+  --lineType: string@lineType-completer # Phone line type
 ]: nothing -> record<uri: string, records: table<id: string, uri: string, sku: string, type: string, name: string, serial: string, status: string, computerName: string, model: record, extension: record, emergency: record, emergencyServiceAddress: record, phoneLines: list, shipping: record, boxBillingId: int, useAsCommonPhone: bool, hotDeskDevice: bool, inCompanyNet: bool, site: record, lastLocationReportTime: string, linePooling: string, billingStatement: record>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6502,7 +6514,7 @@ export def "restapi-v10-account-extension-grant listExtensionGrants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --extensionType: string@extensionType-completer-1 # Type of extension to be returned. Multiple values are supported. Please note that legacy 'Department' extension type corresponds to 'Call Queue' extensions in modern RingCentral product terminology
+  --extensionType: string@extensionType-completer-2 # Type of extension to be returned. Multiple values are supported. Please note that legacy 'Department' extension type corresponds to 'Call Queue' extensions in modern RingCentral product terminology
   --page: int # Indicates a page number to retrieve. Only positive number values are allowed  (format: int32, default: 1)
   --perPage: int # Indicates a page size (number of items) (format: int32, default: 100)
 ]: nothing -> record<uri: string, records: table<uri: string, extension: record, callPickup: bool, callMonitoring: bool, callOnBehalfOf: bool, callDelegation: bool, groupPaging: bool, callQueueSetup: bool, callQueueMembersSetup: bool, callQueueMessages: bool, callQueueFacSetup: bool, sharedVoicemails: bool>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
@@ -6697,7 +6709,7 @@ export def "restapi-v10-account-extension-message-store-templates listUserMessag
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --siteIds: list # Site ID(s) to filter user message templates, associated with particular sites. By default the value is all - templates with all sites will be returned
-  --scope: string # Message templates scope. By default the value is all - both Personal and Company templates will be returned
+  --scope: string@scope-completer-1 # Message templates scope. By default the value is all - both Personal and Company templates will be returned
 ]: nothing -> record<records: table<id: string, displayName: string, body: record, scope: string, site: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6810,7 +6822,7 @@ export def "restapi-v10-account-extension-message-sync syncMessages" [
   --messageType: list # Type for the resulting messages. If not specified, all types of messages are returned. Multiple values are accepted
   --recordCount: int # Limits the number of records to be returned (works in combination with dateFrom and dateTo if specified)  (format: int32)
   --syncToken: string # A `syncToken` value from the previous sync response (for `ISync` mode only, mandatory)
-  --syncType: string # Type of message synchronization
+  --syncType: string@syncType-completer # Type of message synchronization
   --voicemailOwner: list # This query parameter will filter voicemail messages based on its owner. This parameter should be controlled by the 'SharedVoicemail' feature. If the feature is disabled this filter shouldn't be applied.
 ]: nothing -> record<uri: string, records: table<id: int, uri: string, extensionId: string, attachments: list, availability: string, conversationId: int, conversation: record, creationTime: string, deliveryErrorCode: string, direction: string, faxPageCount: int, faxResolution: string, from: record, lastModifiedTime: string, messageStatus: string, pgToDepartment: bool, priority: string, readStatus: string, smsDeliveryTime: string, smsSendingAttemptsCount: int, subject: string, to: list, type: string, vmTranscriptionStatus: string, coverIndex: int, coverPageText: string>, syncInfo: record<syncType: string, syncToken: string, syncTime: string, olderRecordsExist: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -7538,7 +7550,7 @@ export def "restapi-v10-account-extension-emergency-locations updateExtensionEme
   --address: any
   --name: string # Emergency response location name
   --site: record # shape: {id?: string, name?: string}
-  --addressStatus: string@addressStatus-completer # Emergency address status
+  --addressStatus: string@addressStatus-completer-1 # Emergency address status
   --usageStatus: string@usageStatus-completer # Status of an emergency response location usage.
   --addressFormatId: string # Address format ID
   --visibility: string@visibility-completer # Visibility of an emergency response location. If `Private` is set, then a location is visible only for restricted number of users, specified in `owners` array  (default: Public)
@@ -9277,7 +9289,7 @@ export def "restapi-v10-account-extension-caller-blocking-phone-numbers listBloc
   --allow-errors(-e) # Return full response without error handling
   --page: int # The result set page number (1-indexed) to return (format: int32, default: 1, e.g. 1)
   --perPage: int # The number of items per page. If provided value in the request is greater than a maximum, the maximum value is applied  (format: int32, default: 100, e.g. 100)
-  --status: string
+  --status: string@status-completer-6 # default: Blocked
 ]: nothing -> record<uri: string, records: table<uri: string, id: string, phoneNumber: string, label: string, status: string>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9304,7 +9316,7 @@ export def "restapi-v10-account-extension-caller-blocking-phone-numbers createBl
   --allow-errors(-e) # Return full response without error handling
   --phoneNumber: string # A blocked/allowed phone number in [E.164](https://www.itu.int/rec/T-REC-E.164-201011-I) format
   --label: string # Custom name of a blocked/allowed phone number
-  --status: string@status-completer-5 # Status of a phone number (default: Blocked)
+  --status: string@status-completer-6 # Status of a phone number (default: Blocked)
 ]: any -> record<uri: string, id: string, phoneNumber: string, label: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9358,7 +9370,7 @@ export def "restapi-v10-account-extension-caller-blocking-phone-numbers updateBl
   --allow-errors(-e) # Return full response without error handling
   --phoneNumber: string # A blocked/allowed phone number in [E.164](https://www.itu.int/rec/T-REC-E.164-201011-I) format
   --label: string # Custom name of a blocked/allowed phone number
-  --status: string@status-completer-5 # Status of a phone number (default: Blocked)
+  --status: string@status-completer-6 # Status of a phone number (default: Blocked)
 ]: any -> record<uri: string, id: string, phoneNumber: string, label: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -9437,7 +9449,7 @@ export def "restapi-v10-account-extension-phone-number listExtensionPhoneNumbers
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string@status-completer-6 # Status of a phone number
+  --status: string@status-completer-7 # Status of a phone number
   --usageType: list # Usage type of phone number
   --page: int # Indicates a page number to retrieve. Only positive number values are allowed. Default value is '1'  (format: int32, default: 1)
   --perPage: int # Indicates a page size (number of items). If not specified, the value is '100' by default (format: int32, default: 100)
@@ -10238,8 +10250,8 @@ export def "restapi-v10-account-phone-number listAccountPhoneNumbers" [
   --page: int # Indicates a page number to retrieve. Only positive number values are accepted  (format: int32, default: 1)
   --perPage: int # Indicates a page size (number of items) (format: int32, default: 100)
   --usageType: list # Usage type of phone number
-  --paymentType: string # Payment Type of the number
-  --status: string@status-completer-6 # Status of a phone number
+  --paymentType: string@paymentType-completer # Payment Type of the number
+  --status: string@status-completer-7 # Status of a phone number
 ]: nothing -> record<uri: string, records: table<uri: string, id: int, country: record, extension: record, label: string, location: string, paymentType: string, phoneNumber: string, status: string, type: string, usageType: string, temporaryNumber: record, contactCenterProvider: record, vanityPattern: string, primary: bool>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<perPage: int, page: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11816,7 +11828,7 @@ export def "analytics-calls-accounts-timeline-fetch analyticsCallsTimelineFetch"
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --interval: string # Aggregation interval
+  --interval: string@interval-completer # Aggregation interval
   --page: int # The current page number (positive numbers only) (format: int32)
   --perPage: int # Number of records displayed on a page (positive numbers only, max value of 20) (format: int32)
   grouping: any # This field specifies the dimensions by which the response should be grouped and specific keys to narrow the response. See also [Call Aggregate reports](https://developers.ringcentral.com/guide/analytics/aggregate) or [Call Timeline reports](https://developers.ringcentral.com/guide/analytics/timeline) pages in the developer guide for more information
@@ -11932,7 +11944,7 @@ export def "team-messaging-tasks-complete completeTaskNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string@status-completer-7 # Completeness status
+  --status: string@status-completer-8 # Completeness status
   --assignees: list # item shape: {id?: string}
   --completenessPercentage: int # format: int32
 ]: any -> any {
@@ -12482,7 +12494,7 @@ export def "team-messaging-chats-notes listChatNotesNew" [
   --creationTimeTo: string # The end datetime for resulting records in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format including timezone, e.g. 2019-03-10T18:23:45. The default value is Now.
   --creationTimeFrom: string # The start datetime for resulting records in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format including timezone
   --creatorId: string # Internal identifier of the user that created the note. Multiple values are supported
-  --status: string@status-completer-8 # Status of notes to be fetched; if not specified all notes are fetched by default.
+  --status: string@status-completer-9 # Status of notes to be fetched; if not specified all notes are fetched by default.
   --pageToken: string # Pagination token
   --recordCount: int # Max number of notes to be fetched by one request; the value range is 1-250. (format: int32, default: 30)
 ]: nothing -> record<records: table<id: string, title: string, chatIds: list, preview: string, creator: record, lastModifiedBy: record, lockedBy: record, status: string, creationTime: string, lastModifiedTime: string, type: string>, navigation: record<prevPageToken: string, nextPageToken: string>> {
@@ -12947,7 +12959,7 @@ export def "team-messaging-data-export listDataExportTasksNew" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string@status-completer-9 # Status of the task(s) to be returned. Multiple values are supported
+  --status: string@status-completer-10 # Status of the task(s) to be returned. Multiple values are supported
   --page: int # Page number to be retrieved; value range is > 0 (format: int32, default: 1)
   --perPage: int # Number of records to be returned per page; value range is 1 - 250 (format: int32, default: 30)
 ]: nothing -> record<tasks: table<uri: string, id: string, creationTime: string, lastModifiedTime: string, status: string, creator: record, specific: record, datasets: list>, navigation: record<firstPage: record<uri: string>, nextPage: record<uri: string>, previousPage: record<uri: string>, lastPage: record<uri: string>>, paging: record<page: int, perPage: int, pageStart: int, pageEnd: int, totalPages: int, totalElements: int>> {

@@ -19,17 +19,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -3421,7 +3422,7 @@ export def "namespaces-workflows-update UpdateWorkflowExecution-by-namespace-wor
   --firstExecutionRunId: string # If set, this call will error if the most recent (if no Run Id is set on  `workflow_execution`), or specified (if it is) Workflow Execution is not  part of the same execution chain as this Id.
   --waitPolicy: any # Specifies client's intent to wait for Update results.  NOTE: This field works together with API call timeout which is limited by  server timeout (maximum wait time). If server timeout is expired before  user specified timeout, API call returns even if specified stage is not reached.  Actual reached stage will be included in the response.
   --request: any # The request information that will be delivered all the way down to the  Workflow Execution.
-]: any -> record<updateRef: record<workflowExecution: record<workflowId: string, runId: string>, updateId: string>, outcome: record<success: record<payloads: list>, failure: record<message: string, source: string, stackTrace: string, encodedAttributes: record, cause: record, applicationFailureInfo: record, timeoutFailureInfo: record, canceledFailureInfo: record, terminatedFailureInfo: record, serverFailureInfo: record, resetWorkflowFailureInfo: record, activityFailureInfo: record, childWorkflowExecutionFailureInfo: record, nexusOperationExecutionFailureInfo: record, nexusHandlerFailureInfo: record>>, stage: string, link: record<workflowEvent: record<namespace: string, workflowId: string, runId: string, eventRef: record, requestIdRef: record>, batchJob: record<jobId: string>, activity: record<namespace: string, activityId: string, runId: string>, nexusOperation: record<namespace: string, operationId: string, runId: string>, workflow: record<namespace: string, workflowId: string, runId: string, reason: string>>> {
+]: any -> record<updateRef: record<workflowExecution: record<workflowId: string, runId: string>, updateId: string>, outcome: record<success: record<payloads: list>, failure: record<message: string, source: string, stackTrace: string, encodedAttributes: record, cause: any, applicationFailureInfo: record, timeoutFailureInfo: record, canceledFailureInfo: record, terminatedFailureInfo: record, serverFailureInfo: record, resetWorkflowFailureInfo: record, activityFailureInfo: record, childWorkflowExecutionFailureInfo: record, nexusOperationExecutionFailureInfo: record, nexusHandlerFailureInfo: record>>, stage: string, link: record<workflowEvent: record<namespace: string, workflowId: string, runId: string, eventRef: record, requestIdRef: record>, batchJob: record<jobId: string>, activity: record<namespace: string, activityId: string, runId: string>, nexusOperation: record<namespace: string, operationId: string, runId: string>, workflow: record<namespace: string, workflowId: string, runId: string, reason: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7021,7 +7022,7 @@ export def "namespaces-workflows-update UpdateWorkflowExecution-by-namespace-wor
   --firstExecutionRunId: string # If set, this call will error if the most recent (if no Run Id is set on  `workflow_execution`), or specified (if it is) Workflow Execution is not  part of the same execution chain as this Id.
   --waitPolicy: any # Specifies client's intent to wait for Update results.  NOTE: This field works together with API call timeout which is limited by  server timeout (maximum wait time). If server timeout is expired before  user specified timeout, API call returns even if specified stage is not reached.  Actual reached stage will be included in the response.
   --request: any # The request information that will be delivered all the way down to the  Workflow Execution.
-]: any -> record<updateRef: record<workflowExecution: record<workflowId: string, runId: string>, updateId: string>, outcome: record<success: record<payloads: list>, failure: record<message: string, source: string, stackTrace: string, encodedAttributes: record, cause: record, applicationFailureInfo: record, timeoutFailureInfo: record, canceledFailureInfo: record, terminatedFailureInfo: record, serverFailureInfo: record, resetWorkflowFailureInfo: record, activityFailureInfo: record, childWorkflowExecutionFailureInfo: record, nexusOperationExecutionFailureInfo: record, nexusHandlerFailureInfo: record>>, stage: string, link: record<workflowEvent: record<namespace: string, workflowId: string, runId: string, eventRef: record, requestIdRef: record>, batchJob: record<jobId: string>, activity: record<namespace: string, activityId: string, runId: string>, nexusOperation: record<namespace: string, operationId: string, runId: string>, workflow: record<namespace: string, workflowId: string, runId: string, reason: string>>> {
+]: any -> record<updateRef: record<workflowExecution: record<workflowId: string, runId: string>, updateId: string>, outcome: record<success: record<payloads: list>, failure: record<message: string, source: string, stackTrace: string, encodedAttributes: record, cause: any, applicationFailureInfo: record, timeoutFailureInfo: record, canceledFailureInfo: record, terminatedFailureInfo: record, serverFailureInfo: record, resetWorkflowFailureInfo: record, activityFailureInfo: record, childWorkflowExecutionFailureInfo: record, nexusOperationExecutionFailureInfo: record, nexusHandlerFailureInfo: record>>, stage: string, link: record<workflowEvent: record<namespace: string, workflowId: string, runId: string, eventRef: record, requestIdRef: record>, batchJob: record<jobId: string>, activity: record<namespace: string, activityId: string, runId: string>, nexusOperation: record<namespace: string, operationId: string, runId: string>, workflow: record<namespace: string, workflowId: string, runId: string, reason: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

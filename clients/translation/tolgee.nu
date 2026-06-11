@@ -19,17 +19,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -6907,7 +6908,7 @@ export def "public-slack slackCommand" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --payload: string
+  --payload: record
   --X-Slack-Signature: string
   --X-Slack-Request-Timestamp: string
   --body: record
@@ -6915,7 +6916,7 @@ export def "public-slack slackCommand" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "payload" $payload "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/public/slack" $qp)
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let extra_headers = {"X-Slack-Signature": $X_Slack_Signature, "X-Slack-Request-Timestamp": $X_Slack_Request_Timestamp} | compact
@@ -11976,12 +11977,12 @@ export def "api-keys allByUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --pageable: string
+  --pageable: record
   --filterProjectId: int # format: int64
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageable" $pageable "scalar") (serialize-qp "filterProjectId" $filterProjectId "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageable" $pageable "multi") (serialize-qp "filterProjectId" $filterProjectId "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/api-keys" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -12553,7 +12554,7 @@ export def "user-managed-by get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<organizationModel: record<id: int, name: string, slug: string, description: string, basePermissions: record<scopes: list, type: string, permittedLanguageIds: list, translateLanguageIds: list, viewLanguageIds: list, stateChangeLanguageIds: list, suggestLanguageIds: list, _links: record>, currentUserRole: string, avatar: record<large: string, thumbnail: string>, _links: record>, enabledFeatures: list<string>, quickStart: record<finished: bool, completedSteps: list<string>, open: bool, _links: record>, activeCloudSubscription: record<trialEnd: int, currentBillingPeriod: string, plan: record<metricType: string, archivedAt: string, includedUsage: record, free: bool, public: bool, enabledFeatures: list, nonCommercial: bool, name: string, id: int, type: string>, cancelAtPeriodEnd: bool, status: string>, basePermissions: record<scopes: list<string>, type: string, permittedLanguageIds: list<int>, translateLanguageIds: list<int>, viewLanguageIds: list<int>, stateChangeLanguageIds: list<int>, suggestLanguageIds: list<int>, _links: record>, currentUserRole: string, avatar: record<large: string, thumbnail: string>, slug: string, description: string, name: string, id: int, _links: record> {
+]: nothing -> record<organizationModel: record<id: int, name: string, slug: string, description: string, basePermissions: record<scopes: list, type: string, permittedLanguageIds: list, translateLanguageIds: list, viewLanguageIds: list, stateChangeLanguageIds: list, suggestLanguageIds: list, _links: record>, currentUserRole: string, avatar: record<large: string, thumbnail: string>, _links: record>, enabledFeatures: list<string>, quickStart: record<finished: bool, completedSteps: list<string>, open: bool, _links: record>, activeCloudSubscription: record<plan: record<free: bool, public: bool, includedUsage: record, metricType: string, archivedAt: string, enabledFeatures: list, nonCommercial: bool, name: string, id: int, type: string>, trialEnd: int, currentBillingPeriod: string, cancelAtPeriodEnd: bool, status: string>, basePermissions: record<scopes: list<string>, type: string, permittedLanguageIds: list<int>, translateLanguageIds: list<int>, viewLanguageIds: list<int>, stateChangeLanguageIds: list<int>, suggestLanguageIds: list<int>, _links: record>, currentUserRole: string, avatar: record<large: string, thumbnail: string>, slug: string, description: string, name: string, id: int, _links: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/user/managed-by")
@@ -15488,11 +15489,11 @@ export def "projects-api-keys allByProject" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --pageable: string
+  --pageable: record
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "pageable" $pageable "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "pageable" $pageable "multi")] | flatten | str join "&"
   let full_url = (build-url $base $"/v2/projects/($projectId)/api-keys" $qp)
   let accept_val = "*/*"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

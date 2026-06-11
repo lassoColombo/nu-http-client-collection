@@ -21,17 +21,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -75,11 +76,16 @@ def status-completer [] { ["busy" "cancel" "completed" "created" "failed" "in-pr
 def status-completer-1 [] { ["draft" "error" "inbox" "outbox" "scheduled" "sent"] }
 def direction-completer-1 [] { ["incoming" "outgoing"] }
 def status-completer-2 [] { ["draft" "published"] }
+def transform-y-completer [] { ["avg" "max" "min" "sum"] }
 def object-type-completer [] { ["contact" "lead"] }
 def type-completer-1 [] { ["contact" "lead" "opportunity"] }
+def bulk-object-type-completer [] { ["contact" "lead"] }
+def contact-preference-completer [] { ["all" "contact" "lead"] }
+def mode-completer [] { ["contact" "lead"] }
 def status-completer-3 [] { ["active" "archived"] }
 def type-completer-2 [] { ["custom" "vm-dropped"] }
 def sharing-completer [] { ["group" "personal"] }
+def order-by-completer [] { ["first_name,last_name" "last_name,first_name"] }
 def auto-record-calls-completer [] { ["disabled" "enabled" "unset"] }
 
 # List all available API commands with their parameters
@@ -3537,7 +3543,7 @@ export def "report-custom get-custom" [
   --x: string
   --y: string
   --group-by: string
-  --transform-y: string
+  --transform-y: string@transform-y-completer
   --interval: string
   --start: string
   --end: string
@@ -6300,9 +6306,9 @@ export def "email-template-render render" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --email-account-id: string
-  --bulk-object-type: string
+  --bulk-object-type: string@bulk-object-type-completer
   --contact-id: string
-  --contact-preference: string
+  --contact-preference: string@contact-preference-completer
   --entry: int
   --lead-id: string
   --limit: int
@@ -6311,7 +6317,7 @@ export def "email-template-render render" [
   --s-query: string
   --sender: string # format: email
   --qp-sort: list
-  --mode: string
+  --mode: string@mode-completer
   --Authorization: string # Use your API key as the username and leave the password empty.
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
@@ -7902,7 +7908,7 @@ export def "user list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --order-by: string
+  --order-by: string@order-by-completer
   --limit: int # Number of results to return. (default: 100)
   --skip: int # Number of results to skip before returning, for pagination. (default: 0)
   --Authorization: string # Use your API key as the username and leave the password empty.
@@ -7957,7 +7963,7 @@ export def "user get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --order-by: string
+  --order-by: string@order-by-completer
   --limit: int # Number of results to return. (default: 100)
   --skip: int # Number of results to skip before returning, for pagination. (default: 0)
   --Authorization: string # Use your API key as the username and leave the password empty.

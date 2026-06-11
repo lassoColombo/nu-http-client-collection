@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -70,6 +71,8 @@ def AutoCreationType-completer [] { ["default" "studio" "webhook"] }
 def AutoCreationWebhookMethod-completer [] { ["get" "post"] }
 def Target-completer [] { ["flex" "webhook"] }
 def State-completer [] { ["active" "closed" "inactive" "initializing"] }
+def X-Twilio-Webhook-Enabled-completer [] { ["false" "true"] }
+def Order-completer [] { ["asc" "desc"] }
 def Target-completer-1 [] { ["studio" "trigger" "webhook"] }
 def ConfigurationMethod-completer [] { ["get" "post"] }
 def Type-completer-1 [] { ["apn" "fcm" "gcm"] }
@@ -348,7 +351,7 @@ export def "conversations CreateConversation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
   --FriendlyName: string # The human-readable name of this conversation, limited to 256 characters. Optional.
   --UniqueName: string # An application-defined string that uniquely identifies the resource. It can be used to address the resource in place of the resource's `sid` in the URL.
   --DateCreated: string # The date that this resource was created. (format: date-time)
@@ -388,7 +391,7 @@ export def "conversations ListConversation" [
   --allow-errors(-e) # Return full response without error handling
   --StartDate: string # Specifies the beginning of the date range for filtering Conversations based on their creation date. Conversations that were created on or after this date will be included in the results. The date must be in ISO8601 format, specifically starting at the beginning of the specified date (YYYY-MM-DDT00:00:00Z), for precise filtering. This parameter can be combined with other filters. If this filter is used, the returned list is sorted by latest conversation creation date in descending order.
   --EndDate: string # Defines the end of the date range for filtering conversations by their creation date. Only conversations that were created on or before this date will appear in the results.  The date must be in ISO8601 format, specifically capturing up to the end of the specified date (YYYY-MM-DDT23:59:59Z), to ensure that conversations from the entire end day are included. This parameter can be combined with other filters. If this filter is used, the returned list is sorted by latest conversation creation date in descending order.
-  --State: string # State for sorting and filtering list of Conversations. Can be `active`, `inactive` or `closed`
+  --State: string@State-completer # State for sorting and filtering list of Conversations. Can be `active`, `inactive` or `closed`
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 100. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -415,7 +418,7 @@ export def "conversations UpdateConversation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
   --FriendlyName: string # The human-readable name of this conversation, limited to 256 characters. Optional.
   --DateCreated: string # The date that this resource was created. (format: date-time)
   --DateUpdated: string # The date that this resource was last updated. (format: date-time)
@@ -454,7 +457,7 @@ export def "conversations DeleteConversation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -501,7 +504,7 @@ export def "conversations-messages CreateConversationMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
   --Author: string # The channel specific identifier of the message's author. Defaults to `system`.
   --Body: string # The content of the message, can be up to 1,600 characters long.
   --DateCreated: string # The date that this resource was created. (format: date-time)
@@ -538,7 +541,7 @@ export def "conversations-messages ListConversationMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Order: string # The sort order of the returned messages. Can be: `asc` (ascending) or `desc` (descending), with `asc` as the default.
+  --Order: string@Order-completer # The sort order of the returned messages. Can be: `asc` (ascending) or `desc` (descending), with `asc` as the default.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 100. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -566,7 +569,7 @@ export def "conversations-messages UpdateConversationMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
   --Author: string # The channel specific identifier of the message's author. Defaults to `system`.
   --Body: string # The content of the message, can be up to 1,600 characters long.
   --DateCreated: string # The date that this resource was created. (format: date-time)
@@ -601,7 +604,7 @@ export def "conversations-messages DeleteConversationMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -700,7 +703,7 @@ export def "conversations-participants CreateConversationParticipant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
   --Identity: string # A unique string identifier for the conversation participant as [Conversation User](https://www.twilio.com/docs/conversations/api/user-resource). This parameter is non-null if (and only if) the participant is using the Conversations SDK to communicate. Limited to 256 characters.
   --MessagingBindingAddress: string # The address of the participant's device, e.g. a phone or WhatsApp number. Together with the Proxy address, this determines a participant uniquely. This field (with proxy_address) is only null when the participant is interacting from an SDK endpoint (see the 'identity' field).
   --MessagingBindingProxyAddress: string # The address of the Twilio phone number (or WhatsApp number) that the participant is in contact with. This field, together with participant address, is only null when the participant is interacting from an SDK endpoint (see the 'identity' field).
@@ -763,7 +766,7 @@ export def "conversations-participants UpdateConversationParticipant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
   --DateCreated: string # The date that this resource was created. (format: date-time)
   --DateUpdated: string # The date that this resource was last updated. (format: date-time)
   --Attributes: string # An optional string metadata field you can use to store any data you wish. The string value must contain structurally valid JSON if specified.  **Note** that if the attributes are not set "{}" will be returned.
@@ -801,7 +804,7 @@ export def "conversations-participants DeleteConversationParticipant" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -983,7 +986,7 @@ export def "conversation-with-participants CreateConversationWithParticipants" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
   --FriendlyName: string # The human-readable name of this conversation, limited to 256 characters. Optional.
   --UniqueName: string # An application-defined string that uniquely identifies the resource. It can be used to address the resource in place of the resource's `sid` in the URL.
   --DateCreated: string # The date that this resource was created. (format: date-time)
@@ -1523,7 +1526,7 @@ export def "services-conversations CreateServiceConversation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
   --FriendlyName: string # The human-readable name of this conversation, limited to 256 characters. Optional.
   --UniqueName: string # An application-defined string that uniquely identifies the resource. It can be used to address the resource in place of the resource's `sid` in the URL.
   --Attributes: string # An optional string metadata field you can use to store any data you wish. The string value must contain structurally valid JSON if specified.  **Note** that if the attributes are not set "{}" will be returned.
@@ -1564,7 +1567,7 @@ export def "services-conversations ListServiceConversation" [
   --allow-errors(-e) # Return full response without error handling
   --StartDate: string # Specifies the beginning of the date range for filtering Conversations based on their creation date. Conversations that were created on or after this date will be included in the results. The date must be in ISO8601 format, specifically starting at the beginning of the specified date (YYYY-MM-DDT00:00:00Z), for precise filtering. This parameter can be combined with other filters. If this filter is used, the returned list is sorted by latest conversation creation date in descending order.
   --EndDate: string # Defines the end of the date range for filtering conversations by their creation date. Only conversations that were created on or before this date will appear in the results.  The date must be in ISO8601 format, specifically capturing up to the end of the specified date (YYYY-MM-DDT23:59:59Z), to ensure that conversations from the entire end day are included. This parameter can be combined with other filters. If this filter is used, the returned list is sorted by latest conversation creation date in descending order.
-  --State: string # State for sorting and filtering list of Conversations. Can be `active`, `inactive` or `closed`
+  --State: string@State-completer # State for sorting and filtering list of Conversations. Can be `active`, `inactive` or `closed`
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 100. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -1592,7 +1595,7 @@ export def "services-conversations UpdateServiceConversation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
   --FriendlyName: string # The human-readable name of this conversation, limited to 256 characters. Optional.
   --DateCreated: string # The date that this resource was created. (format: date-time)
   --DateUpdated: string # The date that this resource was last updated. (format: date-time)
@@ -1632,7 +1635,7 @@ export def "services-conversations DeleteServiceConversation" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -1681,7 +1684,7 @@ export def "services-conversations-messages CreateServiceConversationMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
   --Author: string # The channel specific identifier of the message's author. Defaults to `system`.
   --Body: string # The content of the message, can be up to 1,600 characters long.
   --DateCreated: string # The date that this resource was created. (format: date-time)
@@ -1719,7 +1722,7 @@ export def "services-conversations-messages ListServiceConversationMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --Order: string # The sort order of the returned messages. Can be: `asc` (ascending) or `desc` (descending), with `asc` as the default.
+  --Order: string@Order-completer # The sort order of the returned messages. Can be: `asc` (ascending) or `desc` (descending), with `asc` as the default.
   --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 100. (format: int64)
   --Page: int # The page index. This value is simply for client state.
   --PageToken: string # The page token. This is provided by the API.
@@ -1748,7 +1751,7 @@ export def "services-conversations-messages UpdateServiceConversationMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
   --Author: string # The channel specific identifier of the message's author. Defaults to `system`.
   --Body: string # The content of the message, can be up to 1,600 characters long.
   --DateCreated: string # The date that this resource was created. (format: date-time)
@@ -1784,7 +1787,7 @@ export def "services-conversations-messages DeleteServiceConversationMessage" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -1887,7 +1890,7 @@ export def "services-conversations-participants CreateServiceConversationPartici
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
   --Identity: string # A unique string identifier for the conversation participant as [Conversation User](https://www.twilio.com/docs/conversations/api/user-resource). This parameter is non-null if (and only if) the participant is using the [Conversation SDK](https://www.twilio.com/docs/conversations/sdk-overview) to communicate. Limited to 256 characters.
   --MessagingBindingAddress: string # The address of the participant's device, e.g. a phone or WhatsApp number. Together with the Proxy address, this determines a participant uniquely. This field (with `proxy_address`) is only null when the participant is interacting from an SDK endpoint (see the `identity` field).
   --MessagingBindingProxyAddress: string # The address of the Twilio phone number (or WhatsApp number) that the participant is in contact with. This field, together with participant address, is only null when the participant is interacting from an SDK endpoint (see the `identity` field).
@@ -1952,7 +1955,7 @@ export def "services-conversations-participants UpdateServiceConversationPartici
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
   --DateCreated: string # The date on which this resource was created. (format: date-time)
   --DateUpdated: string # The date on which this resource was last updated. (format: date-time)
   --Identity: string # A unique string identifier for the conversation participant as [Conversation User](https://www.twilio.com/docs/conversations/api/user-resource). This parameter is non-null if (and only if) the participant is using the [Conversation SDK](https://www.twilio.com/docs/conversations/sdk-overview) to communicate. Limited to 256 characters.
@@ -1991,7 +1994,7 @@ export def "services-conversations-participants DeleteServiceConversationPartici
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -2180,7 +2183,7 @@ export def "services-conversation-with-participants CreateServiceConversationWit
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
   --FriendlyName: string # The human-readable name of this conversation, limited to 256 characters. Optional.
   --UniqueName: string # An application-defined string that uniquely identifies the resource. It can be used to address the resource in place of the resource's `sid` in the URL.
   --DateCreated: string # The date that this resource was created. (format: date-time)
@@ -2435,7 +2438,7 @@ export def "services-users CreateServiceUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
   Identity: string # The application-defined string that uniquely identifies the resource's User within the [Conversation Service](https://www.twilio.com/docs/conversations/api/service-resource). This value is often a username or an email address, and is case-sensitive.
   --FriendlyName: string # The string that you assigned to describe the resource.
   --Attributes: string # The JSON Object string that stores application-specific data. If attributes have not been set, `{}` is returned.
@@ -2494,7 +2497,7 @@ export def "services-users UpdateServiceUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
   --FriendlyName: string # The string that you assigned to describe the resource.
   --Attributes: string # The JSON Object string that stores application-specific data. If attributes have not been set, `{}` is returned.
   --RoleSid: string # The SID of a service-level [Role](https://www.twilio.com/docs/conversations/api/role-resource) to assign to the user.
@@ -2526,7 +2529,7 @@ export def "services-users DeleteServiceUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")
@@ -2729,7 +2732,7 @@ export def "users CreateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
   Identity: string # The application-defined string that uniquely identifies the resource's User within the [Conversation Service](https://www.twilio.com/docs/conversations/api/service-resource). This value is often a username or an email address, and is case-sensitive.
   --FriendlyName: string # The string that you assigned to describe the resource.
   --Attributes: string # The JSON Object string that stores application-specific data. If attributes have not been set, `{}` is returned.
@@ -2786,7 +2789,7 @@ export def "users UpdateUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
   --FriendlyName: string # The string that you assigned to describe the resource.
   --Attributes: string # The JSON Object string that stores application-specific data. If attributes have not been set, `{}` is returned.
   --RoleSid: string # The SID of a service-level [Role](https://www.twilio.com/docs/conversations/api/role-resource) to assign to the user.
@@ -2817,7 +2820,7 @@ export def "users DeleteUser" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --X-Twilio-Webhook-Enabled: string # The X-Twilio-Webhook-Enabled HTTP request header
+  --X-Twilio-Webhook-Enabled: string@X-Twilio-Webhook-Enabled-completer # The X-Twilio-Webhook-Enabled HTTP request header
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default "https://conversations.twilio.com")

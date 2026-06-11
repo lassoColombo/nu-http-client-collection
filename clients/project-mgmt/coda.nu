@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -70,19 +71,30 @@ def mode-completer [] { ["edit" "play" "view"] }
 def contentFormat-completer [] { ["plainText"] }
 def outputFormat-completer [] { ["html" "markdown"] }
 def sortBy-completer [] { ["name"] }
+def sortBy-completer-1 [] { ["createdAt" "natural" "updatedAt"] }
+def valueFormat-completer [] { ["rich" "simple" "simpleWithArrays"] }
 def scale-completer [] { ["cumulative" "daily"] }
 def orderBy-completer [] { ["aiCredits" "aiCreditsAssistant" "aiCreditsBlock" "aiCreditsChat" "aiCreditsColumn" "aiCreditsReviewer" "copies" "createdAt" "date" "docId" "likes" "publishedAt" "sessionsDesktop" "sessionsMobile" "sessionsOther" "title" "totalSessions" "views"] }
 def direction-completer [] { ["ascending" "descending"] }
 def orderBy-completer-1 [] { ["createdAt" "date" "docInstalls" "docsActivelyUsing" "docsActivelyUsing30Day" "docsActivelyUsing7Day" "docsActivelyUsing90Day" "docsActivelyUsingAllTime" "name" "numActionInvocations" "numFormulaInvocations" "numMetadataInvocations" "numSyncInvocations" "packId" "revenueUsd" "workspaceInstalls" "workspacesActivelyUsing" "workspacesActivelyUsing30Day" "workspacesActivelyUsing7Day" "workspacesActivelyUsing90Day" "workspacesActivelyUsingAllTime" "workspacesWithActiveSubscriptions" "workspacesWithSuccessfulTrials"] }
 def orderBy-completer-2 [] { ["date" "docsActivelyUsing" "docsActivelyUsing30Day" "docsActivelyUsing7Day" "docsActivelyUsing90Day" "docsActivelyUsingAllTime" "errors" "formulaInvocations" "formulaName" "formulaType" "medianLatencyMs" "medianResponseSizeBytes" "workspacesActivelyUsing" "workspacesActivelyUsing30Day" "workspacesActivelyUsing7Day" "workspacesActivelyUsing90Day" "workspacesActivelyUsingAllTime"] }
 def newRole-completer [] { ["Admin" "DocMaker" "Editor"] }
+def accessType-completer [] { ["admin" "edit" "none" "test" "view"] }
+def sortBy-completer-2 [] { ["createdAt" "title" "updatedAt"] }
 def packEntrypoint-completer [] { ["docs" "go"] }
 def sourceCodeVisibility-completer [] { ["private" "shared"] }
 def source-completer [] { ["cli" "web"] }
+def status-completer [] { ["approved" "canceled" "denied" "pending" "superseded"] }
 def type-completer [] { ["awsAccessKey" "awsAssumeRole" "custom" "googleServiceAccount" "header" "httpBasic" "multiHeader" "oauth2ClientCredentials" "urlParam"] }
 def access-completer-1 [] { ["admin" "edit" "none" "test" "view"] }
 def packAssetType-completer [] { ["agentImage" "cover" "exampleImage" "logo"] }
+def sortBy-completer-3 [] { ["agentDirectorySort" "name" "packId" "packVersion" "packVersionModifiedAt"] }
+def orderBy-completer-3 [] { ["agentDirectorySort" "name" "packId" "packVersion" "packVersionModifiedAt"] }
+def installContext-completer [] { ["doc" "workspace"] }
+def releaseChannel-completer [] { ["LATEST" "LIVE"] }
 def order-completer [] { ["asc" "desc"] }
+def ingestionStatus-completer [] { ["CANCELLED" "COMPLETED" "FAILED" "QUEUED" "STARTED" "UP_FOR_RETRY"] }
+def executionType-completer [] { ["FULL" "INCREMENTAL"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -817,9 +829,9 @@ export def "docs-tables-rows listRows" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --qp-query: string # Query used to filter returned rows, specified as `<column_id_or_name>:<value>`. If you'd like to use a column name instead of an ID, you must quote it (e.g., `"My Column":123`). Also note that `value` is a JSON value; if you'd like to use a string, you must surround it in quotes (e.g., `"groceries"`).  (e.g. c-tuVwxYz:"Apple")
-  --sortBy: string # Specifies the sort order of the rows returned. If left unspecified, rows are returned by creation time ascending. "UpdatedAt" sort ordering is the order of rows based upon when they were last updated. This does not include updates to calculated values. "Natural" sort ordering is the order that the rows appear in the table view in the application. This ordering is only meaningfully defined for rows that are visible (unfiltered). Because of this, using this sort order will imply visibleOnly=true, that is, to only return visible rows. If you pass sortBy=natural and visibleOnly=false explicitly, this will result in a Bad Request error as this condition cannot be satisfied.
+  --sortBy: string@sortBy-completer-1 # Specifies the sort order of the rows returned. If left unspecified, rows are returned by creation time ascending. "UpdatedAt" sort ordering is the order of rows based upon when they were last updated. This does not include updates to calculated values. "Natural" sort ordering is the order that the rows appear in the table view in the application. This ordering is only meaningfully defined for rows that are visible (unfiltered). Because of this, using this sort order will imply visibleOnly=true, that is, to only return visible rows. If you pass sortBy=natural and visibleOnly=false explicitly, this will result in a Bad Request error as this condition cannot be satisfied.
   --useColumnNames: string@bool-completer # Use column names instead of column IDs in the returned output. This is generally discouraged as it is fragile. If columns are renamed, code using original names may throw errors.  (e.g. true)
-  --valueFormat: string # The format that cell values are returned as.
+  --valueFormat: string@valueFormat-completer # The format that cell values are returned as.
   --visibleOnly: string@bool-completer # If true, returns only visible rows and columns for the table. (e.g. true)
   --limit: int # Maximum number of results to return in this query. (default: 25, e.g. 10)
   --pageToken: string # An opaque token used to fetch the next page of results. (e.g. eyJsaW1pd)
@@ -908,7 +920,7 @@ export def "docs-tables-rows get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --useColumnNames: string@bool-completer # Use column names instead of column IDs in the returned output. This is generally discouraged as it is fragile. If columns are renamed, code using original names may throw errors.  (e.g. true)
-  --valueFormat: string # The format that cell values are returned as.
+  --valueFormat: string@valueFormat-completer # The format that cell values are returned as.
 ]: nothing -> record<id: string, type: string, href: string, name: string, index: int, browserLink: string, createdAt: string, updatedAt: string, values: record, parent: record<id: string, type: string, tableType: string, href: string, browserLink: string, name: string, parent: record<id: string, type: string, href: string, browserLink: string, name: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1742,9 +1754,9 @@ export def "packs listPacks" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --accessType: string # Deprecated, use accessTypes instead. Filter to only return the Packs for which the current user has this access type (e.g. edit)
+  --accessType: string@accessType-completer # Deprecated, use accessTypes instead. Filter to only return the Packs for which the current user has this access type (e.g. edit)
   --accessTypes: list # Filter to only return the Packs for which the current user has these access types. (e.g. edit)
-  --sortBy: string # The sort order of the Packs returned. (e.g. true)
+  --sortBy: string@sortBy-completer-2 # The sort order of the Packs returned. (e.g. true)
   --limit: int # Maximum number of results to return in this query. (default: 25, e.g. 10)
   --direction: string@direction-completer # Direction to sort results in.
   --pageToken: string # An opaque token used to fetch the next page of results. (e.g. eyJsaW1pd)
@@ -2129,7 +2141,7 @@ export def "packs-reviews listPackReviews" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Maximum number of results to return. (default: 25)
   --pageToken: string # An opaque token used to fetch the next page of results. (e.g. eyJsaW1pd)
-  --status: string # Filter reviews by status.
+  --status: string@status-completer # Filter reviews by status.
 ]: nothing -> record<items: table<packReviewId: string, packId: int, packVersion: string, includesListingReview: bool, packReviewStatus: string, submittedByUserId: int, submissionTimestamp: string, additionalInformation: record>, nextPageToken: string, nextPageLink: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2941,12 +2953,12 @@ export def "packs-listings listPackListings" [
   --packEntrypoint: string@packEntrypoint-completer # Entrypoint for which this pack call is being made. Used to filter non relevant packs
   --certifiedAgentsOnly: string@bool-completer # Only include Packs that are certified for agent use. Depending on server configuration, may also include Packs that the user is an admin of.  (default: false)
   --packCategories: list # Filter Packs by one or more category types.
-  --sortBy: string # Specify a sort order for the returned Pack listings returned.
-  --orderBy: string # Deprecated: use sortBy instead.
+  --sortBy: string@sortBy-completer-3 # Specify a sort order for the returned Pack listings returned.
+  --orderBy: string@orderBy-completer-3 # Deprecated: use sortBy instead.
   --direction: string@direction-completer # Direction to sort results in.
   --limit: int # Maximum number of results to return in this query. (default: 25, e.g. 10)
   --pageToken: string # An opaque token used to fetch the next page of results. (e.g. eyJsaW1pd)
-  --installContext: string # Type of installation context for which Pack information is being requested. (e.g. workspace)
+  --installContext: string@installContext-completer # Type of installation context for which Pack information is being requested. (e.g. workspace)
 ]: nothing -> record<items: table<packId: float, packVersion: string, releaseId: float, lastReleasedAt: string, logoUrl: string, logo: record, coverUrl: string, cover: record, exampleImages: list, agentImages: list, name: string, description: string, shortDescription: string, agentShortDescription: string, agentDescription: string, supportEmail: string, termsOfServiceUrl: string, privacyPolicyUrl: string, categories: list, makers: list, certified: bool, certifiedAgent: bool, minimumFeatureSet: string, unrestrictedFeatureSet: string, externalMetadataUrl: string, standardPackPlan: record, bundledPackPlan: record, sourceCodeVisibility: string, sdkVersion: string, packCategoryType: string>, nextPageToken: string, nextPageLink: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2973,8 +2985,8 @@ export def "packs-listing get" [
   --workspaceId: string # ID of the target workspace (if applicable) for checking installation privileges. (e.g. ws-1Ab234)
   --docId: string # ID of the target document for checking installation privileges (e.g. fleHfrkw3L)
   --ingestionId: string # ID of the target ingestion for checking limit settings (e.g. uuid-uuid-uuid-uuid)
-  --installContext: string # Type of installation context for which Pack information is being requested. (e.g. workspace)
-  --releaseChannel: string # Release channel for which Pack information is being requested. (e.g. LIVE)
+  --installContext: string@installContext-completer # Type of installation context for which Pack information is being requested. (e.g. workspace)
+  --releaseChannel: string@releaseChannel-completer # Release channel for which Pack information is being requested. (e.g. LIVE)
 ]: nothing -> record<packId: float, packVersion: string, releaseId: float, lastReleasedAt: string, logoUrl: string, logo: record<filename: string, imageUrl: string, assetId: string, altText: string, mimeType: string>, coverUrl: string, cover: record<filename: string, imageUrl: string, assetId: string, altText: string, mimeType: string>, exampleImages: table<filename: string, imageUrl: string, assetId: string, altText: string, mimeType: string>, agentImages: table<filename: string, imageUrl: string, assetId: string, altText: string, mimeType: string>, name: string, description: string, shortDescription: string, agentShortDescription: string, agentDescription: string, supportEmail: string, termsOfServiceUrl: string, privacyPolicyUrl: string, categories: table<categoryId: string, categoryName: string, categorySlug: string>, makers: table<name: string, pictureLink: string, slug: string, jobTitle: string, employer: string, description: string>, certified: bool, certifiedAgent: bool, minimumFeatureSet: string, unrestrictedFeatureSet: string, externalMetadataUrl: string, standardPackPlan: record<packPlanId: string, packId: float, pricing: any, createdAt: string>, bundledPackPlan: record<packPlanId: string, packId: float, pricing: record<type: string, minimumFeatureSet: string>, createdAt: string>, sourceCodeVisibility: string, sdkVersion: string, packCategoryType: string, discoverability: string, userAccess: record<canEdit: bool, canTest: bool, canView: bool, canInstall: bool, canPurchase: bool, requiresTrial: bool, canConnectAccount: bool, organization: any, ingestionLimitSettings: record<tableSettings: record, maxBytesPerSyncTableDefault: float, allowedTablesCount: float>>, codaHelpCenterUrl: string, configuration: record<configurationId: string, name: string, policy: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3038,7 +3050,7 @@ export def "packs-tenant-id-root-ingestion-id-logs listIngestionLogs" [
   --ingestionExecutionId: string # ID of the ingestion execution. (format: uuid, e.g. a4e293c4-4a85-45a4-b2ba-7f305cba2703)
   --beforeTimestamp: string # Only return logs before the given time (non-inclusive).  (format: date-time, e.g. 2018-04-11T00:18:57.946Z)
   --afterTimestamp: string # Only return logs after the given time (non-inclusive).  (format: date-time, e.g. 2018-04-11T00:18:57.946Z)
-  --ingestionStatus: string # Only fetch logs with the given ingestion status. This only works in combination with the onlyExecutionCompletions parameter.
+  --ingestionStatus: string@ingestionStatus-completer # Only fetch logs with the given ingestion status. This only works in combination with the onlyExecutionCompletions parameter.
   --onlyExecutionCompletions: string@bool-completer # Only fetch logs that represent the completion of a child execution.
   --order: string@order-completer # Specifies if the logs will be returned in time desc or asc. Default is desc.
   --q: string # A search query that follows Lucene syntax.  (e.g. context.doc_id:"fleHfrkw3L" AND event.action:"FormulaRequest")
@@ -3133,11 +3145,11 @@ export def "packs-tenant-id-root-ingestion-id-ingestion-batch-executions listIng
   --pageToken: string # An opaque token used to fetch the next page of results. (e.g. eyJsaW1pd)
   --limit: int # Maximum number of results to return in this query. (default: 25, e.g. 10)
   --datasource: string # Only show batch executions for this datasource (sync table).
-  --executionType: string # Only show batch executions with this execution type.
+  --executionType: string@executionType-completer # Only show batch executions with this execution type.
   --includeDeletedIngestions: string@bool-completer # Include deleted ingestion executions in the response
   --ingestionExecutionId: string # Only retrieve this single batch execution.
   --ingestionId: string # Only show batch executions for this sync table ingestion.
-  --ingestionStatus: string # Only show batch executions with this status.
+  --ingestionStatus: string@ingestionStatus-completer # Only show batch executions with this status.
 ]: nothing -> record<items: table<completionTimestamp: float, creationTimestamp: float, dynamicLabel: string, dynamicUrl: string, executionType: string, fullExecutionId: string, ingestionExecutionId: string, ingestionId: string, ingestionName: string, ingestionStatusCounts: record, lastFinishedFullWorkflowExecutionId: string, lastFinishedIncrementalWorkflowExecutionId: string, latestFullWorkflowExecutionId: string, latestIncrementalWorkflowExecutionId: string, latestIngestionSequenceId: string, liveIngestionSequenceId: string, parentSyncTableIngestionId: string, startTimestamp: float, totalRowCount: float>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3167,7 +3179,7 @@ export def "packs-tenant-id-root-ingestion-id-ingestion-batch-executions-parent-
   --pageToken: string # An opaque token used to fetch the next page of results. (e.g. eyJsaW1pd)
   --limit: int # Maximum number of results to return in this query. (default: 25, e.g. 10)
   --ingestionId: string # The ID of the sync table ingestion. Enables faster lookup. (format: uuid)
-  --ingestionStatus: string # Only show parent items with this status.
+  --ingestionStatus: string@ingestionStatus-completer # Only show parent items with this status.
 ]: nothing -> record<items: table<attemptNumber: float, completionTimestamp: float, errorMessage: string, executionType: string, ingestionChildExecutionIndex: float, ingestionExecutionId: string, ingestionName: string, ingestionStatus: string, parentItemId: string, startTimestamp: float, rowCount: float, latestCheckpointTimestamp: float>, nextPageToken: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

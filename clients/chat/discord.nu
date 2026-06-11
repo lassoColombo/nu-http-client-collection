@@ -20,17 +20,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -553,11 +554,11 @@ export def "applications-entitlements entitlements" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --user-id: string
+  --user-id: string # format: snowflake
   --sku-ids: string
-  --guild-id: string
-  --before: string
-  --after: string
+  --guild-id: string # format: snowflake
+  --before: string # format: snowflake
+  --after: string # format: snowflake
   --limit: int
   --exclude-ended: string@bool-completer
   --exclude-deleted: string@bool-completer
@@ -1133,9 +1134,9 @@ export def "channels-messages messages" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --around: string
-  --before: string
-  --after: string
+  --around: string # format: snowflake
+  --before: string # format: snowflake
+  --after: string # format: snowflake
   --limit: int
 ]: nothing -> table<type: int, content: string, mentions: list<record>, mention_roles: list<string>, attachments: list<record>, embeds: list<record>, timestamp: string, edited_timestamp: string, flags: int, components: list<any>, stickers: list<any>, sticker_items: list<record>, id: string, channel_id: string, author: record<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any>, pinned: bool, mention_everyone: bool, tts: bool, call: record<ended_timestamp: string, participants: list>, activity: record<type: int, party_id: string>, application: record<id: string, name: string, icon: string, description: string, type: any, cover_image: string, primary_sku_id: string, bot: record>, application_id: string, interaction: record<id: string, type: int, name: string, user: record, name_localized: string>, nonce: any, webhook_id: string, message_reference: record<type: int, channel_id: string, message_id: string, guild_id: string>, thread: record<id: string, type: int, last_message_id: any, flags: int, last_pin_timestamp: string, guild_id: string, name: string, parent_id: any, rate_limit_per_user: int, bitrate: int, user_limit: int, rtc_region: string, video_quality_mode: int, permissions: string, owner_id: string, thread_metadata: record, message_count: int, member_count: int, total_message_sent: int, applied_tags: list, member: record>, mention_channels: list<record>, role_subscription_data: record<role_subscription_listing_id: string, tier_name: string, total_months_subscribed: int, is_renewal: bool>, purchase_notification: record<type: int, guild_product_purchase: record>, position: int, resolved: record<users: record, members: record, channels: record, roles: record>, poll: record<question: record, answers: list, expiry: string, allow_multiselect: bool, layout_type: int, results: record>, shared_client_theme: record<colors: list, gradient_angle: int, base_mix: int, base_theme: int>, interaction_metadata: any, message_snapshots: list<record>, reactions: list<record>, referenced_message: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1415,9 +1416,9 @@ export def "channels-messages-reactions emoji-by-channel_id-message_id-emoji_nam
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --after: string
+  --after: string # format: snowflake
   --limit: int
-  --type: string
+  --type: int # format: int32
 ]: nothing -> table<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1678,7 +1679,7 @@ export def "channels-polls-answers voters" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --after: string
+  --after: string # format: snowflake
   --limit: int
 ]: nothing -> record<users: table<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1801,7 +1802,7 @@ export def "channels-thread-members members" [
   --allow-errors(-e) # Return full response without error handling
   --with-member: string@bool-completer
   --limit: int
-  --after: string
+  --after: string # format: snowflake
 ]: nothing -> table<id: string, user_id: string, join_timestamp: string, flags: int, member: record<avatar: string, avatar_decoration_data: any, banner: string, communication_disabled_until: string, flags: int, joined_at: string, nick: string, pending: bool, premium_since: string, roles: list, collectibles: any, user: record, mute: bool, deaf: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2016,8 +2017,8 @@ export def "channels-threads-search search" [
   --allow-errors(-e) # Return full response without error handling
   --name: string
   --slop: int
-  --min-id: string
-  --max-id: string
+  --min-id: string # format: snowflake
+  --max-id: string # format: snowflake
   --tag: string
   --tag-setting: string
   --archived: string@bool-completer
@@ -2068,7 +2069,7 @@ export def "channels-users-me-threads-archived-private threads" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --before: string
+  --before: string # format: snowflake
   --limit: int
 ]: nothing -> record<threads: table<id: string, type: int, last_message_id: any, flags: int, last_pin_timestamp: string, guild_id: string, name: string, parent_id: any, rate_limit_per_user: int, bitrate: int, user_limit: int, rtc_region: string, video_quality_mode: int, permissions: string, owner_id: string, thread_metadata: record, message_count: int, member_count: int, total_message_sent: int, applied_tags: list, member: record>, members: table<id: string, user_id: string, join_timestamp: string, flags: int, member: record>, has_more: bool, first_messages: table<type: int, content: string, mentions: list, mention_roles: list, attachments: list, embeds: list, timestamp: string, edited_timestamp: string, flags: int, components: list, stickers: list, sticker_items: list, id: string, channel_id: string, author: record, pinned: bool, mention_everyone: bool, tts: bool, call: record, activity: record, application: record, application_id: string, interaction: record, nonce: any, webhook_id: string, message_reference: record, thread: record, mention_channels: list, role_subscription_data: record, purchase_notification: record, position: int, resolved: record, poll: record, shared_client_theme: record, interaction_metadata: any, message_snapshots: list, reactions: list, referenced_message: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2294,11 +2295,11 @@ export def "guilds-audit-logs entries" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --user-id: string
-  --target-id: string
-  --action-type: string
-  --before: string
-  --after: string
+  --user-id: string # format: snowflake
+  --target-id: string # format: snowflake
+  --action-type: int # format: int32
+  --before: string # format: snowflake
+  --after: string # format: snowflake
   --limit: int
 ]: nothing -> record<audit_log_entries: table<id: string, action_type: int, user_id: any, target_id: any, changes: list, options: record, reason: string>, users: table<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any>, integrations: list<any>, webhooks: list<any>, guild_scheduled_events: list<any>, threads: table<id: string, type: int, last_message_id: any, flags: int, last_pin_timestamp: string, guild_id: string, name: string, parent_id: any, rate_limit_per_user: int, bitrate: int, user_limit: int, rtc_region: string, video_quality_mode: int, permissions: string, owner_id: string, thread_metadata: record, message_count: int, member_count: int, total_message_sent: int, applied_tags: list, member: record>, application_commands: table<id: string, application_id: string, version: string, default_member_permissions: string, type: int, name: string, name_localized: string, name_localizations: record, description: string, description_localized: string, description_localizations: record, guild_id: string, dm_permission: bool, contexts: list, integration_types: list, options: list, nsfw: bool, handler: int>, auto_moderation_rules: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2455,8 +2456,8 @@ export def "guilds-bans bans" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --limit: int
-  --before: string
-  --after: string
+  --before: string # format: snowflake
+  --after: string # format: snowflake
 ]: nothing -> table<user: record<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any>, reason: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3118,8 +3119,8 @@ export def "guilds-messages-search search" [
   --replied-to-user-id: list
   --replied-to-message-id: list
   --mention-everyone: string@bool-completer
-  --min-id: string
-  --max-id: string
+  --min-id: string # format: snowflake
+  --max-id: string # format: snowflake
   --limit: int
   --offset: int
   --has: list
@@ -3320,8 +3321,8 @@ export def "guilds-requests requests" [
   --allow-errors(-e) # Return full response without error handling
   --status: string
   --limit: int
-  --before: string
-  --after: string
+  --before: string # format: snowflake
+  --after: string # format: snowflake
 ]: nothing -> record<total: int, guild_join_requests: table<id: string, created_at: string, reviewed_at: string, application_status: any, rejection_reason: string, guild_id: string, user_id: string, user: any, form_responses: list, actioned_by_user: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3775,8 +3776,8 @@ export def "guilds-scheduled-events-users list" [
   --allow-errors(-e) # Return full response without error handling
   --with-member: string@bool-completer
   --limit: int
-  --before: string
-  --after: string
+  --before: string # format: snowflake
+  --after: string # format: snowflake
 ]: nothing -> table<guild_scheduled_event_id: string, guild_scheduled_event_exception_id: any, user_id: string, user: record<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any>, member: record<avatar: string, avatar_decoration_data: any, banner: string, communication_disabled_until: string, flags: int, joined_at: string, nick: string, pending: bool, premium_since: string, roles: list, collectibles: any, user: record, mute: bool, deaf: bool>, response: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3829,8 +3830,8 @@ export def "guilds-scheduled-events-users users" [
   --allow-errors(-e) # Return full response without error handling
   --with-member: string@bool-completer
   --limit: int
-  --before: string
-  --after: string
+  --before: string # format: snowflake
+  --after: string # format: snowflake
 ]: nothing -> table<guild_scheduled_event_id: string, guild_scheduled_event_exception_id: any, user_id: string, user: record<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any>, member: record<avatar: string, avatar_decoration_data: any, banner: string, communication_disabled_until: string, flags: int, joined_at: string, nick: string, pending: bool, premium_since: string, roles: list, collectibles: any, user: record, mute: bool, deaf: bool>, response: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4545,7 +4546,7 @@ export def "invites resolve" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --with-counts: string@bool-completer
-  --guild-scheduled-event-id: string
+  --guild-scheduled-event-id: string # format: snowflake
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5251,10 +5252,10 @@ export def "skus-subscriptions subscriptions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --before: string
-  --after: string
+  --before: string # format: snowflake
+  --after: string # format: snowflake
   --limit: int
-  --user-id: string
+  --user-id: string # format: snowflake
 ]: nothing -> table<id: string, user_id: string, sku_ids: list<string>, renewal_sku_ids: list<string>, entitlement_ids: list<string>, current_period_start: string, current_period_end: string, status: int, canceled_at: string, country: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5279,7 +5280,7 @@ export def "skus-subscriptions subscription" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --user-id: string
+  --user-id: string # format: snowflake
 ]: nothing -> record<id: string, user_id: string, sku_ids: list<string>, renewal_sku_ids: list<string>, entitlement_ids: list<string>, current_period_start: string, current_period_end: string, status: int, canceled_at: string, country: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5664,8 +5665,8 @@ export def "users-me-guilds guilds" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --before: string
-  --after: string
+  --before: string # format: snowflake
+  --after: string # format: snowflake
   --limit: int
   --with-counts: string@bool-completer
 ]: nothing -> table<id: string, name: string, icon: string, banner: string, owner: bool, permissions: string, features: list<string>, approximate_member_count: int, approximate_presence_count: int> {
@@ -5868,7 +5869,7 @@ export def "webhooks webhook-by-webhook_id-webhook_token" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --wait: string@bool-completer
-  --thread-id: string
+  --thread-id: string # format: snowflake
   --with-components: string@bool-completer
   --content: string # nullable
   --embeds: list # nullable — item shape: {type?: string, url?: string, title?: string, color?: int, timestamp?: string, description?: string, author?: any, image?: any, thumbnail?: any, footer?: any, fields?: list, provider?: any, video?: any}
@@ -5960,7 +5961,7 @@ export def "webhooks-github webhook" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --wait: string@bool-completer
-  --thread-id: string
+  --thread-id: string # format: snowflake
   --action: string # nullable
   --ref: string # nullable
   --ref-type: string # nullable
@@ -6007,7 +6008,7 @@ export def "webhooks-messages-original message-by-webhook_id-webhook_token" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --thread-id: string
+  --thread-id: string # format: snowflake
 ]: nothing -> record<type: int, content: string, mentions: table<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any>, mention_roles: list<string>, attachments: table<id: string, filename: string, size: int, url: string, proxy_url: string, width: int, height: int, duration_secs: float, waveform: string, description: string, content_type: string, ephemeral: bool, flags: int, placeholder: string, placeholder_version: int, title: string, application: record, clip_created_at: string, clip_participants: list>, embeds: table<type: string, url: string, title: string, description: string, color: int, timestamp: string, fields: list, author: record, provider: record, image: record, thumbnail: record, video: record, footer: record, flags: int, components: list>, timestamp: string, edited_timestamp: string, flags: int, components: list<any>, stickers: list<any>, sticker_items: table<id: string, name: string, format_type: int>, id: string, channel_id: string, author: record<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any>, pinned: bool, mention_everyone: bool, tts: bool, call: record<ended_timestamp: string, participants: list<string>>, activity: record<type: int, party_id: string>, application: record<id: string, name: string, icon: string, description: string, type: any, cover_image: string, primary_sku_id: string, bot: record<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any>>, application_id: string, interaction: record<id: string, type: int, name: string, user: record<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any>, name_localized: string>, nonce: any, webhook_id: string, message_reference: record<type: int, channel_id: string, message_id: string, guild_id: string>, thread: record<id: string, type: int, last_message_id: any, flags: int, last_pin_timestamp: string, guild_id: string, name: string, parent_id: any, rate_limit_per_user: int, bitrate: int, user_limit: int, rtc_region: string, video_quality_mode: int, permissions: string, owner_id: string, thread_metadata: record<archived: bool, archive_timestamp: string, auto_archive_duration: int, locked: bool, create_timestamp: string, invitable: bool>, message_count: int, member_count: int, total_message_sent: int, applied_tags: list<string>, member: record<id: string, user_id: string, join_timestamp: string, flags: int, member: record>>, mention_channels: table<id: string, name: string, type: int, guild_id: string>, role_subscription_data: record<role_subscription_listing_id: string, tier_name: string, total_months_subscribed: int, is_renewal: bool>, purchase_notification: record<type: int, guild_product_purchase: record<listing_id: string, product_name: string>>, position: int, resolved: record<users: record, members: record, channels: record, roles: record>, poll: record<question: record<text: string, emoji: record>, answers: list<record>, expiry: string, allow_multiselect: bool, layout_type: int, results: record<answer_counts: list, is_finalized: bool>>, shared_client_theme: record<colors: list<string>, gradient_angle: int, base_mix: int, base_theme: int>, interaction_metadata: any, message_snapshots: table<message: record>, reactions: table<emoji: record, count: int, count_details: record, burst_colors: list, me_burst: bool, me: bool>, referenced_message: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6031,7 +6032,7 @@ export def "webhooks-messages-original message-by-webhook_id-webhook_token-1" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --thread-id: string
+  --thread-id: string # format: snowflake
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6057,7 +6058,7 @@ export def "webhooks-messages-original message-by-webhook_id-webhook_token-2" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --thread-id: string
+  --thread-id: string # format: snowflake
   --with-components: string@bool-completer
   --content: string # nullable
   --embeds: list # nullable — item shape: {type?: string, url?: string, title?: string, color?: int, timestamp?: string, description?: string, author?: any, image?: any, thumbnail?: any, footer?: any, fields?: list, provider?: any, video?: any}
@@ -6093,7 +6094,7 @@ export def "webhooks-messages message-by-webhook_id-webhook_token-message_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --thread-id: string
+  --thread-id: string # format: snowflake
 ]: nothing -> record<type: int, content: string, mentions: table<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any>, mention_roles: list<string>, attachments: table<id: string, filename: string, size: int, url: string, proxy_url: string, width: int, height: int, duration_secs: float, waveform: string, description: string, content_type: string, ephemeral: bool, flags: int, placeholder: string, placeholder_version: int, title: string, application: record, clip_created_at: string, clip_participants: list>, embeds: table<type: string, url: string, title: string, description: string, color: int, timestamp: string, fields: list, author: record, provider: record, image: record, thumbnail: record, video: record, footer: record, flags: int, components: list>, timestamp: string, edited_timestamp: string, flags: int, components: list<any>, stickers: list<any>, sticker_items: table<id: string, name: string, format_type: int>, id: string, channel_id: string, author: record<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any>, pinned: bool, mention_everyone: bool, tts: bool, call: record<ended_timestamp: string, participants: list<string>>, activity: record<type: int, party_id: string>, application: record<id: string, name: string, icon: string, description: string, type: any, cover_image: string, primary_sku_id: string, bot: record<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any>>, application_id: string, interaction: record<id: string, type: int, name: string, user: record<id: string, username: string, avatar: string, discriminator: string, public_flags: int, flags: int, bot: bool, system: bool, banner: string, accent_color: int, global_name: string, avatar_decoration_data: any, collectibles: any, primary_guild: any>, name_localized: string>, nonce: any, webhook_id: string, message_reference: record<type: int, channel_id: string, message_id: string, guild_id: string>, thread: record<id: string, type: int, last_message_id: any, flags: int, last_pin_timestamp: string, guild_id: string, name: string, parent_id: any, rate_limit_per_user: int, bitrate: int, user_limit: int, rtc_region: string, video_quality_mode: int, permissions: string, owner_id: string, thread_metadata: record<archived: bool, archive_timestamp: string, auto_archive_duration: int, locked: bool, create_timestamp: string, invitable: bool>, message_count: int, member_count: int, total_message_sent: int, applied_tags: list<string>, member: record<id: string, user_id: string, join_timestamp: string, flags: int, member: record>>, mention_channels: table<id: string, name: string, type: int, guild_id: string>, role_subscription_data: record<role_subscription_listing_id: string, tier_name: string, total_months_subscribed: int, is_renewal: bool>, purchase_notification: record<type: int, guild_product_purchase: record<listing_id: string, product_name: string>>, position: int, resolved: record<users: record, members: record, channels: record, roles: record>, poll: record<question: record<text: string, emoji: record>, answers: list<record>, expiry: string, allow_multiselect: bool, layout_type: int, results: record<answer_counts: list, is_finalized: bool>>, shared_client_theme: record<colors: list<string>, gradient_angle: int, base_mix: int, base_theme: int>, interaction_metadata: any, message_snapshots: table<message: record>, reactions: table<emoji: record, count: int, count_details: record, burst_colors: list, me_burst: bool, me: bool>, referenced_message: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6118,7 +6119,7 @@ export def "webhooks-messages message-by-webhook_id-webhook_token-message_id-1" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --thread-id: string
+  --thread-id: string # format: snowflake
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6145,7 +6146,7 @@ export def "webhooks-messages message-by-webhook_id-webhook_token-message_id-2" 
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --thread-id: string
+  --thread-id: string # format: snowflake
   --with-components: string@bool-completer
   --content: string # nullable
   --embeds: list # nullable — item shape: {type?: string, url?: string, title?: string, color?: int, timestamp?: string, description?: string, author?: any, image?: any, thumbnail?: any, footer?: any, fields?: list, provider?: any, video?: any}
@@ -6182,7 +6183,7 @@ export def "webhooks-slack webhook" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --wait: string@bool-completer
-  --thread-id: string
+  --thread-id: string # format: snowflake
   --text: string # nullable
   --username: string # nullable
   --icon-url: string # nullable, format: uri

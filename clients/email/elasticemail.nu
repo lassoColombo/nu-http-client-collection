@@ -21,17 +21,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -67,7 +68,10 @@ def auth-scheme-completer [] { ["x-elasticemail-apikey" "x-auth-token"] }
 
 # Completers for enum parameters
 def Status-completer [] { ["Active" "Cancelled" "Completed" "Deleted" "Draft" "Paused" "Processing" "Sending"] }
+def fileFormat-completer [] { ["Csv" "Json" "Xml"] }
+def compressionFormat-completer [] { ["None" "Zip"] }
 def CertificateStatus-completer [] { ["CertNotSet" "ErrorOccured" "NotValid" "Valid"] }
+def orderBy-completer [] { ["DateAscending" "DateDescending"] }
 def FilterType-completer [] { ["EmailAddress" "Subject"] }
 def ActionType-completer [] { ["ForwardToEmail" "NotifyViaHttp" "Stop"] }
 def TemplateScope-completer [] { ["Global" "Personal"] }
@@ -415,10 +419,10 @@ export def "contacts-export contactsExportPost" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --fileFormat: string # Format of the exported file
+  --fileFormat: string@fileFormat-completer # Format of the exported file (default: Csv)
   --rule: string # Query used for filtering. (format: string, e.g. Status%20=%20Engaged)
   --emails: list # Comma delimited list of contact emails (e.g. [mail@contact.com,mail1@contact.com,mail2@contact.com])
-  --compressionFormat: string # FileResponse compression format. None or Zip.
+  --compressionFormat: string@compressionFormat-completer # FileResponse compression format. None or Zip. (default: None)
   --fileName: string # Name of your file including extension. (format: string, e.g. filename.txt)
 ]: nothing -> record<Link: string, PublicExportID: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
@@ -830,7 +834,7 @@ export def "events eventsGet" [
   --eventTypes: list # Types of Events to return
   --qp-from: string # Starting date for search in YYYY-MM-DDThh:mm:ss format. (nullable, format: date-time)
   --qp-to: string # Ending date for search in YYYY-MM-DDThh:mm:ss format. (nullable, format: date-time)
-  --orderBy: string
+  --orderBy: string@orderBy-completer # default: DateDescending
   --limit: int # How many items to load. Maximum for this request is 1000 items (format: int32)
   --offset: int # How many items should be returned ahead. (format: int32, e.g. 20)
 ]: nothing -> table<TransactionID: string, MsgID: string, FromEmail: string, To: string, Subject: string, EventType: string, EventDate: string, ChannelName: string, MessageCategory: string, NextTryOn: string, Message: string, IPAddress: string, PoolName: string> {
@@ -858,7 +862,7 @@ export def "events eventsByTransactionidGet" [
   --allow-errors(-e) # Return full response without error handling
   --qp-from: string # Starting date for search in YYYY-MM-DDThh:mm:ss format. (nullable, format: date-time)
   --qp-to: string # Ending date for search in YYYY-MM-DDThh:mm:ss format. (nullable, format: date-time)
-  --orderBy: string
+  --orderBy: string@orderBy-completer # default: DateDescending
   --limit: int # Maximum number of returned items. (format: int32, e.g. 100)
   --offset: int # How many items should be returned ahead. (format: int32, e.g. 20)
 ]: nothing -> table<TransactionID: string, MsgID: string, FromEmail: string, To: string, Subject: string, EventType: string, EventDate: string, ChannelName: string, MessageCategory: string, NextTryOn: string, Message: string, IPAddress: string, PoolName: string> {
@@ -887,7 +891,7 @@ export def "events-channels eventsChannelsByNameGet" [
   --eventTypes: list # Types of Events to return
   --qp-from: string # Starting date for search in YYYY-MM-DDThh:mm:ss format. (nullable, format: date-time)
   --qp-to: string # Ending date for search in YYYY-MM-DDThh:mm:ss format. (nullable, format: date-time)
-  --orderBy: string
+  --orderBy: string@orderBy-completer # default: DateDescending
   --limit: int # How many items to load. Maximum for this request is 1000 items (format: int32)
   --offset: int # How many items should be returned ahead. (format: int32, e.g. 20)
 ]: nothing -> table<TransactionID: string, MsgID: string, FromEmail: string, To: string, Subject: string, EventType: string, EventDate: string, ChannelName: string, MessageCategory: string, NextTryOn: string, Message: string, IPAddress: string, PoolName: string> {
@@ -916,8 +920,8 @@ export def "events-channels-export eventsChannelsByNameExportPost" [
   --eventTypes: list # Types of Events to return
   --qp-from: string # Starting date for search in YYYY-MM-DDThh:mm:ss format. (nullable, format: date-time)
   --qp-to: string # Ending date for search in YYYY-MM-DDThh:mm:ss format. (nullable, format: date-time)
-  --fileFormat: string # Format of the exported file
-  --compressionFormat: string # FileResponse compression format. None or Zip.
+  --fileFormat: string@fileFormat-completer # Format of the exported file (default: Csv)
+  --compressionFormat: string@compressionFormat-completer # FileResponse compression format. None or Zip. (default: None)
   --fileName: string # Name of your file including extension. (format: string, e.g. filename.txt)
 ]: nothing -> record<Link: string, PublicExportID: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))
@@ -966,8 +970,8 @@ export def "events-export eventsExportPost" [
   --eventTypes: list # Types of Events to return
   --qp-from: string # Starting date for search in YYYY-MM-DDThh:mm:ss format. (nullable, format: date-time)
   --qp-to: string # Ending date for search in YYYY-MM-DDThh:mm:ss format. (nullable, format: date-time)
-  --fileFormat: string # Format of the exported file
-  --compressionFormat: string # FileResponse compression format. None or Zip.
+  --fileFormat: string@fileFormat-completer # Format of the exported file (default: Csv)
+  --compressionFormat: string@compressionFormat-completer # FileResponse compression format. None or Zip. (default: None)
   --fileName: string # Name of your file including extension. (format: string, e.g. filename.txt)
 ]: nothing -> record<Link: string, PublicExportID: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-elasticemail-apikey"))

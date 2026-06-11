@@ -21,17 +21,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -74,7 +75,10 @@ def exactOnSingleWordQuery-completer [] { ["attribute" "none" "word"] }
 def type-completer [] { ["altCorrection1" "altCorrection2" "altcorrection1" "altcorrection2" "oneWaySynonym" "onewaysynonym" "placeholder" "synonym"] }
 def anchoring-completer [] { ["contains" "endsWith" "is" "startsWith"] }
 def language-completer [] { ["af" "ar" "az" "bg" "bn" "ca" "cs" "cy" "da" "de" "el" "en" "eo" "es" "et" "eu" "fa" "fi" "fo" "fr" "ga" "gl" "he" "hi" "hu" "hy" "id" "is" "it" "ja" "ka" "kk" "ko" "ku" "ky" "lt" "lv" "mi" "mn" "mr" "ms" "mt" "nb" "nl" "no" "ns" "pl" "ps" "pt" "pt-br" "qu" "ro" "ru" "sk" "sq" "sv" "sw" "ta" "te" "th" "tl" "tn" "tr" "tt" "uk" "ur" "uz" "zh"] }
+def type-completer-1 [] { ["all" "build" "error" "query"] }
 def operation-completer [] { ["copy" "move"] }
+def operation-completer-1 [] { ["add" "delete" "update"] }
+def action-completer [] { ["addObject" "clear" "delete" "deleteObject" "partialUpdateObject" "partialUpdateObjectNoCreate" "updateObject"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -444,14 +448,14 @@ export def "1-indexes-delete-by-query post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --facetFilters: any # Filter the search by facet values, so that only records with the same facet values are retrieved.  **Prefer using the `filters` parameter, which supports all filter types and combinations with boolean operators.**  - `[filter1, filter2]` is interpreted as `filter1 AND filter2`. - `[[filter1, filter2], filter3]` is interpreted as `filter1 OR filter2 AND filter3`. - `facet:-value` is interpreted as `NOT facet:value`.  While it's best to avoid attributes that start with a `-`, you can still filter them by escaping with a backslash: `facet:\-value`.  (e.g. [category:Book, category:-Movie, author:John Doe])
+  --facetFilters: any # Filter the search by facet values, so that only records with the same facet values are retrieved.  **Prefer using the `filters` parameter, which supports all filter types and combinations with boolean operators.**  - `[filter1, filter2]` is interpreted as `filter1 AND filter2`. - `[[filter1, filter2], filter3]` is interpreted as `filter1 OR filter2 AND filter3`. - `facet:-value` is interpreted as `NOT facet:value`.  While it's best to avoid attributes that start with a `-`, you can still filter them by escaping with a backslash: `facet:\-value`.  (e.g. [[category:Book, category:-Movie], author:John Doe])
   --filters: string # Filter expression to only include items that match the filter criteria in the response.  You can use these filter expressions:  - **Numeric filters.** `<facet> <op> <number>`, where `<op>` is one of `<`, `<=`, `=`, `!=`, `>`, `>=`. - **Ranges.** `<facet>:<lower> TO <upper>`, where `<lower>` and `<upper>` are the lower and upper limits of the range (inclusive). - **Facet filters.** `<facet>:<value>`, where `<facet>` is a facet attribute (case-sensitive) and `<value>` a facet value. - **Tag filters.** `_tags:<value>` or just `<value>` (case-sensitive). - **Boolean filters.** `<facet>: true | false`.  You can combine filters with `AND`, `OR`, and `NOT` operators with the following restrictions:  - You can only combine filters of the same type with `OR`.   **Not supported:** `facet:value OR num > 3`. - You can't use `NOT` with combinations of filters.   **Not supported:** `NOT(facet:value OR facet:value)` - You can't combine conjunctions (`AND`) with `OR`.   **Not supported:** `facet:value OR (facet:value AND facet:value)`  Use quotes if the facet attribute name or facet value contains spaces, keywords (`OR`, `AND`, `NOT`), or quotes. If a facet attribute is an array, the filter matches if it matches at least one element of the array.  For more information, see [Filters](https://www.algolia.com/doc/guides/managing-results/refine-results/filtering).  (e.g. (category:Book OR category:Ebook) AND _tags:published)
-  --numericFilters: any # Filter by numeric facets.  **Prefer using the `filters` parameter, which supports all filter types and combinations with boolean operators.**  You can use numeric comparison operators: `<`, `<=`, `=`, `!=`, `>`, `>=`. Comparisons are precise up to 3 decimals. You can also provide ranges: `facet:<lower> TO <upper>`. The range includes the lower and upper boundaries. The same combination rules apply as for `facetFilters`.  (e.g. [inStock = 1, deliveryDate < 1441755506, price < 1000])
-  --tagFilters: any # Filter the search by values of the special `_tags` attribute.  **Prefer using the `filters` parameter, which supports all filter types and combinations with boolean operators.**  Different from regular facets, `_tags` can only be used for filtering (including or excluding records). You won't get a facet count. The same combination and escaping rules apply as for `facetFilters`.  (e.g. [Book, Movie, SciFi])
+  --numericFilters: any # Filter by numeric facets.  **Prefer using the `filters` parameter, which supports all filter types and combinations with boolean operators.**  You can use numeric comparison operators: `<`, `<=`, `=`, `!=`, `>`, `>=`. Comparisons are precise up to 3 decimals. You can also provide ranges: `facet:<lower> TO <upper>`. The range includes the lower and upper boundaries. The same combination rules apply as for `facetFilters`.  (e.g. [[inStock = 1, deliveryDate < 1441755506], price < 1000])
+  --tagFilters: any # Filter the search by values of the special `_tags` attribute.  **Prefer using the `filters` parameter, which supports all filter types and combinations with boolean operators.**  Different from regular facets, `_tags` can only be used for filtering (including or excluding records). You won't get a facet count. The same combination and escaping rules apply as for `facetFilters`.  (e.g. [[Book, Movie], SciFi])
   --aroundLatLng: string # Coordinates for the center of a circle, expressed as a comma-separated string of latitude and longitude.  Only records included within a circle around this central location are included in the results. The radius of the circle is determined by the `aroundRadius` and `minimumAroundRadius` settings. This parameter is ignored if you also specify `insidePolygon` or `insideBoundingBox`.  (default: , e.g. 40.71,-74.01)
   --aroundRadius: any # Maximum radius for a search around a central location.  This parameter works in combination with the `aroundLatLng` and `aroundLatLngViaIP` parameters. By default, the search radius is determined automatically from the density of hits around the central location. The search radius is small if there are many hits close to the central coordinates.
   --insideBoundingBox: any
-  --insidePolygon: list # Coordinates of a polygon in which to search.  Polygons are defined by 3 to 10,000 points. Each point is represented by its latitude and longitude. Provide multiple polygons as nested arrays. For more information, see [filtering inside polygons](https://www.algolia.com/doc/guides/managing-results/refine-results/geolocation/#filtering-inside-rectangular-or-polygonal-areas). This parameter is ignored if you also specify `insideBoundingBox`.  (e.g. [47.3165, 4.9665, 47.3424, 5.0201, 47.32, 4.9, 40.9234, 2.1185, 38.643, 1.9916, 39.2587, 2.0104])
+  --insidePolygon: list # Coordinates of a polygon in which to search.  Polygons are defined by 3 to 10,000 points. Each point is represented by its latitude and longitude. Provide multiple polygons as nested arrays. For more information, see [filtering inside polygons](https://www.algolia.com/doc/guides/managing-results/refine-results/geolocation/#filtering-inside-rectangular-or-polygonal-areas). This parameter is ignored if you also specify `insideBoundingBox`.  (e.g. [[47.3165, 4.9665, 47.3424, 5.0201, 47.32, 4.9], [40.9234, 2.1185, 38.643, 1.9916, 39.2587, 2.0104]])
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
@@ -1666,7 +1670,7 @@ export def "1-logs get" [
   --offset: int # First log entry to retrieve. The most recent entries are listed first. (default: 0)
   --length: int # Maximum number of entries to retrieve. (default: 10)
   --indexName: string # Index for which to retrieve log entries. By default, log entries are retrieved for all indices.  (e.g. products)
-  --type: string # Type of log entries to retrieve. By default, all log entries are retrieved.
+  --type: string@type-completer-1 # Type of log entries to retrieve. By default, all log entries are retrieved.  (default: all)
 ]: nothing -> record<logs: table<timestamp: string, method: string, answer_code: string, query_body: string, answer: string, url: string, ip: string, query_headers: string, sha1: string, nb_api_calls: string, processing_time_ms: string, index: string, query_params: string, query_nb_hits: string, inner_queries: list>> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1787,12 +1791,12 @@ export def "wait-for-api-key waitForApiKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --key: string # API key to wait for.
-  --operation: string # Whether the API key was created, updated, or deleted.
-  --apiKey: string # Used to compare fields of the `getApiKey` response on an `update` operation, to check if the `key` has been updated.
+  --operation: string@operation-completer-1 # Whether the API key was created, updated, or deleted.
+  --apiKey: record # Used to compare fields of the `getApiKey` response on an `update` operation, to check if the `key` has been updated.
 ]: nothing -> record<value: string, createdAt: int, acl: list<string>, description: string, indexes: list<string>, maxHitsPerQuery: int, maxQueriesPerIPPerHour: int, queryParameters: string, referers: list<string>, validity: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "operation" $operation "scalar") (serialize-qp "apiKey" $apiKey "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "operation" $operation "scalar") (serialize-qp "apiKey" $apiKey "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/waitForApiKey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1883,11 +1887,11 @@ export def "generate-secured-api-key generateSecuredApiKey" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --parentApiKey: string # API key from which the secured API key will inherit its restrictions.
-  --restrictions: string # Restrictions to add to the API key.
+  --restrictions: record # Restrictions to add to the API key.
 ]: nothing -> string {
   let auth = (build-auth $token ($auth_scheme | default "x-algolia-application-id"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "parentApiKey" $parentApiKey "scalar") (serialize-qp "restrictions" $restrictions "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "parentApiKey" $parentApiKey "scalar") (serialize-qp "restrictions" $restrictions "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/generateSecuredApiKey" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1987,7 +1991,7 @@ export def "chunked-batch chunkedBatch" [
   --allow-errors(-e) # Return full response without error handling
   --indexName: string # The `indexName` to replace `objects` in.
   --objects: list # List of objects to replace the current objects with.
-  --action: string # The `batch` `action` to perform on the given array of `objects`, defaults to `addObject`.
+  --action: string@action-completer # The `batch` `action` to perform on the given array of `objects`, defaults to `addObject`.
   --waitForTasks: string@bool-completer # Whether to wait until every `batch` task has been processed. This may take longer but is more reliable.
   --batchSize: int # The size of the chunk of `objects`. The number of `batch` calls will be equal to `length(objects) / batchSize`. Defaults to 1,000.
 ]: nothing -> table<taskID: int, objectIDs: list<string>> {
