@@ -13,11 +13,6 @@ on:
         required: false
         default: "main"
         type: string
-      force:
-        description: "Regenerate clients even if their output file already exists."
-        required: false
-        default: true
-        type: boolean
   push:
     branches: [main]
     paths:
@@ -39,7 +34,6 @@ jobs:
     env:
       EVENT_NAME: ${{ github.event_name }}
       DISPATCH_CLIENT: ${{ github.event.inputs.client || 'all' }}
-      DISPATCH_FORCE: ${{ github.event.inputs.force || 'true' }}
       GENERATOR_REF: ${{ github.event.inputs.generator_ref || 'main' }}
       BEFORE: ${{ github.event.before }}
       AFTER: ${{ github.sha }}
@@ -65,11 +59,7 @@ jobs:
           set -e
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             echo "scope=$DISPATCH_CLIENT" >> "$GITHUB_OUTPUT"
-            force_flag=""
-            if [ "$DISPATCH_FORCE" = "true" ]; then
-              force_flag="--force"
-            fi
-            nu scripts/generate.nu "$DISPATCH_CLIENT" $force_flag
+            nu scripts/generate.nu "$DISPATCH_CLIENT" --force
             exit 0
           fi
 
