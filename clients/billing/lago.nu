@@ -1,4 +1,4 @@
-# Auto-generated client for Lago API documentation v1.48.0
+# Auto-generated client for Lago API documentation v1.48.1
 # Source: https://raw.githubusercontent.com/getlago/lago-openapi/main/openapi.yaml
 # Auth: --token flag or $env.LAGO_API_DOCUMENTATION_TOKEN
 

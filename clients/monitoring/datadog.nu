@@ -16755,8 +16755,10 @@ export def "metrics ListTagConfigurations" [
 # Delete tags for multiple metrics
 #
 # DELETE /api/v2/metrics/config/bulk-tags
+# DEPRECATED
 # operationId: DeleteBulkTagsMetricsConfiguration
 # --data shape: {attributes?: record, id: string, type: "metric_bulk_configure_tags"}
+@deprecated
 export def "metrics-config-bulk-tags DeleteBulkTagsMetricsConfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16781,8 +16783,10 @@ export def "metrics-config-bulk-tags DeleteBulkTagsMetricsConfiguration" [
 # Configure tags for multiple metrics
 #
 # POST /api/v2/metrics/config/bulk-tags
+# DEPRECATED
 # operationId: CreateBulkTagsMetricsConfiguration
 # --data shape: {attributes?: record, id: string, type: "metric_bulk_configure_tags"}
+@deprecated
 export def "metrics-config-bulk-tags CreateBulkTagsMetricsConfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

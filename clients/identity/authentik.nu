@@ -99,6 +99,7 @@ def digits-completer [] { ["6" "8"] }
 def not-configured-action-completer [] { ["configure" "deny" "skip"] }
 def user-verification-completer [] { ["discouraged" "preferred" "required"] }
 def resident-key-requirement-completer [] { ["discouraged" "preferred" "required"] }
+def request-content-type-completer [] { ["application/json" "application/x-www-form-urlencoded"] }
 def mode-completer-1 [] { ["always_require" "expiring" "permanent"] }
 def mode-completer-2 [] { ["optional" "required"] }
 def cert-attribute-completer [] { ["common_name" "email" "subject"] }
@@ -26449,7 +26450,7 @@ export def "stages-captcha list" [
   --page-size: int # Number of results to return per page.
   --public-key: string
   --search: string # A search term.
-]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: list, public_key: string, js_url: string, api_url: string, interactive: bool, score_min_threshold: float, score_max_threshold: float, error_on_invalid_score: bool>, autocomplete: record> {
+]: nothing -> record<pagination: record<next: float, previous: float, count: float, current: float, total_pages: float, start_index: float, end_index: float>, results: table<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: list, public_key: string, js_url: string, api_url: string, request_content_type: string, interactive: bool, score_min_threshold: float, score_max_threshold: float, error_on_invalid_score: bool>, autocomplete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "ordering" $ordering "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "public_key" $public_key "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -26476,16 +26477,17 @@ export def "stages-captcha create" [
   private_key: string # Private key, acquired your captcha Provider.
   --js-url: string
   --api-url: string
+  --request-content-type: string@request-content-type-completer
   --interactive: string@bool-completer
   --score-min-threshold: float # format: double
   --score-max-threshold: float # format: double
   --error-on-invalid-score: string@bool-completer # When enabled and the received captcha score is outside of the given threshold, the stage will show an error message. When not enabled, the flow will continue, but the data from the captcha will be available in the context for policy decisions
-]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, public_key: string, js_url: string, api_url: string, interactive: bool, score_min_threshold: float, score_max_threshold: float, error_on_invalid_score: bool> {
+]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, public_key: string, js_url: string, api_url: string, request_content_type: string, interactive: bool, score_min_threshold: float, score_max_threshold: float, error_on_invalid_score: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/stages/captcha/")
-  let body = {name: $name, public_key: $public_key, private_key: $private_key, js_url: $js_url, api_url: $api_url, interactive: $interactive, score_min_threshold: $score_min_threshold, score_max_threshold: $score_max_threshold, error_on_invalid_score: $error_on_invalid_score} | compact
+  let body = {name: $name, public_key: $public_key, private_key: $private_key, js_url: $js_url, api_url: $api_url, request_content_type: $request_content_type, interactive: $interactive, score_min_threshold: $score_min_threshold, score_max_threshold: $score_max_threshold, error_on_invalid_score: $error_on_invalid_score} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -26505,7 +26507,7 @@ export def "stages-captcha get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, public_key: string, js_url: string, api_url: string, interactive: bool, score_min_threshold: float, score_max_threshold: float, error_on_invalid_score: bool> {
+]: nothing -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, public_key: string, js_url: string, api_url: string, request_content_type: string, interactive: bool, score_min_threshold: float, score_max_threshold: float, error_on_invalid_score: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/stages/captcha/($stage_uuid)/")
@@ -26532,16 +26534,17 @@ export def "stages-captcha update" [
   private_key: string # Private key, acquired your captcha Provider.
   --js-url: string
   --api-url: string
+  --request-content-type: string@request-content-type-completer
   --interactive: string@bool-completer
   --score-min-threshold: float # format: double
   --score-max-threshold: float # format: double
   --error-on-invalid-score: string@bool-completer # When enabled and the received captcha score is outside of the given threshold, the stage will show an error message. When not enabled, the flow will continue, but the data from the captcha will be available in the context for policy decisions
-]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, public_key: string, js_url: string, api_url: string, interactive: bool, score_min_threshold: float, score_max_threshold: float, error_on_invalid_score: bool> {
+]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, public_key: string, js_url: string, api_url: string, request_content_type: string, interactive: bool, score_min_threshold: float, score_max_threshold: float, error_on_invalid_score: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/stages/captcha/($stage_uuid)/")
-  let body = {name: $name, public_key: $public_key, private_key: $private_key, js_url: $js_url, api_url: $api_url, interactive: $interactive, score_min_threshold: $score_min_threshold, score_max_threshold: $score_max_threshold, error_on_invalid_score: $error_on_invalid_score} | compact
+  let body = {name: $name, public_key: $public_key, private_key: $private_key, js_url: $js_url, api_url: $api_url, request_content_type: $request_content_type, interactive: $interactive, score_min_threshold: $score_min_threshold, score_max_threshold: $score_max_threshold, error_on_invalid_score: $error_on_invalid_score} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -26566,16 +26569,17 @@ export def "stages-captcha patch" [
   --private-key: string # Private key, acquired your captcha Provider.
   --js-url: string
   --api-url: string
+  --request-content-type: string@request-content-type-completer
   --interactive: string@bool-completer
   --score-min-threshold: float # format: double
   --score-max-threshold: float # format: double
   --error-on-invalid-score: string@bool-completer # When enabled and the received captcha score is outside of the given threshold, the stage will show an error message. When not enabled, the flow will continue, but the data from the captcha will be available in the context for policy decisions
-]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, public_key: string, js_url: string, api_url: string, interactive: bool, score_min_threshold: float, score_max_threshold: float, error_on_invalid_score: bool> {
+]: any -> record<pk: string, name: string, component: string, verbose_name: string, verbose_name_plural: string, meta_model_name: string, flow_set: table<pk: string, policybindingmodel_ptr_id: string, name: string, slug: string, title: string, designation: record, background_url: string, policy_engine_mode: string, compatibility_mode: bool, export_url: string, layout: string, denied_action: record>, public_key: string, js_url: string, api_url: string, request_content_type: string, interactive: bool, score_min_threshold: float, score_max_threshold: float, error_on_invalid_score: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/stages/captcha/($stage_uuid)/")
-  let body = {name: $name, public_key: $public_key, private_key: $private_key, js_url: $js_url, api_url: $api_url, interactive: $interactive, score_min_threshold: $score_min_threshold, score_max_threshold: $score_max_threshold, error_on_invalid_score: $error_on_invalid_score} | compact
+  let body = {name: $name, public_key: $public_key, private_key: $private_key, js_url: $js_url, api_url: $api_url, request_content_type: $request_content_type, interactive: $interactive, score_min_threshold: $score_min_threshold, score_max_threshold: $score_max_threshold, error_on_invalid_score: $error_on_invalid_score} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
