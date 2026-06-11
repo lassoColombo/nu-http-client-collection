@@ -1354,6 +1354,102 @@ clients:
     - name: crossref
       type: openapi
       source: https://api.crossref.org/swagger-docs
+    - name: nasa-neows
+      type: openapi
+      source: https://api.apis.guru/v2/specs/nasa.gov/asteroids%20neows/3.4.0/openapi.json
+    - name: launch-library2
+      type: openapi
+      source: https://ll.thespacedevs.com/2.3.0/schema/
+    - name: amentum-atmosphere
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amentum.space/atmosphere/1.1.1/openapi.json
+    - name: amentum-gravity
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amentum.space/gravity/1.1.1/openapi.json
+    - name: amentum-space-radiation
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amentum.space/space_radiation/1.1.2/openapi.json
+    - name: census
+      type: openapi
+      source: https://api.census.gov/openapi
+    - name: fbi-wanted
+      type: openapi
+      source: https://api.fbi.gov/openapi.json
+    - name: uspto-bdss
+      type: openapi
+      source: https://api.apis.guru/v2/specs/uspto.gov/bdss/1.0.0/swagger.json
+    - name: canada-holidays
+      type: openapi
+      source: https://api.apis.guru/v2/specs/canada-holidays.ca/1.8.0/openapi.json
+    - name: bc-bcdc
+      type: openapi
+      source: https://api.apis.guru/v2/specs/gov.bc.ca/bcdc/3.0.1/openapi.json
+    - name: bc-open511
+      type: openapi
+      source: https://api.apis.guru/v2/specs/gov.bc.ca/open511/1.0.0/openapi.json
+    - name: bc-router
+      type: openapi
+      source: https://api.apis.guru/v2/specs/gov.bc.ca/router/2.0.0/openapi.json
+    - name: bc-news
+      type: openapi
+      source: https://api.apis.guru/v2/specs/gov.bc.ca/news/1.0/openapi.json
+    - name: bc-gwells
+      type: openapi
+      source: https://api.apis.guru/v2/specs/gov.bc.ca/gwells/v1/openapi.json
+    - name: nager-date
+      type: openapi
+      source: https://date.nager.at/openapi/v3.json
+    - name: uk-water-quality
+      type: openapi
+      source: https://environment.data.gov.uk/water-quality/openapi.json
+    - name: europeana
+      type: openapi
+      source: https://api.apis.guru/v2/specs/europeana.eu/version%20unknown/swagger.json
+    - name: wikimedia
+      type: openapi
+      source: https://api.apis.guru/v2/specs/wikimedia.org/1.0.0/swagger.json
+    - name: wiktionary
+      type: openapi
+      source: https://en.wiktionary.org/api/rest_v1/?spec
+    - name: wikidata-rest
+      type: openapi
+      source: https://www.wikidata.org/api/rest_v1/?spec
+    - name: gbif-registry
+      type: openapi
+      source: https://techdocs.gbif.org/openapi/registry.json
+    - name: gbif-occurrence
+      type: openapi
+      source: https://techdocs.gbif.org/openapi/occurrence.json
+    - name: gbif-literature
+      type: openapi
+      source: https://techdocs.gbif.org/openapi/literature.json
+    - name: gbif-vocabulary
+      type: openapi
+      source: https://techdocs.gbif.org/openapi/vocabulary.json
+    - name: gbif-validator
+      type: openapi
+      source: https://techdocs.gbif.org/openapi/validator.json
+    - name: inaturalist
+      type: openapi
+      source: https://api.inaturalist.org/v1/swagger.json
+    - name: semantic-scholar
+      type: openapi
+      source: https://api.semanticscholar.org/graph/v1/swagger.json
+    - name: ebi-proteins
+      type: openapi
+      source: https://www.ebi.ac.uk/proteins/api/openapi.json
+    - name: ena-portal
+      type: openapi
+      source: https://www.ebi.ac.uk/ena/portal/api/api-docs?group=public
+    - name: openfoodfacts-folksonomy
+      type: openapi
+      source: https://api.folksonomy.openfoodfacts.org/openapi.json
+    - name: openfoodfacts-search
+      type: openapi
+      source: https://search.openfoodfacts.org/openapi.json
+    - name: openf1
+      type: openapi
+      source: https://api.openf1.org/openapi.json
 
   sandbox:
     - name: petstore

@@ -556,22 +556,52 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [atlassian-compass](clients/project-mgmt/atlassian-compass.nu)             | openapi | <https://developer.atlassian.com/cloud/compass/swagger.v3.json>                                             |
 | [microsoft-planner](clients/project-mgmt/microsoft-planner.nu)             | openapi | <https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Planner.yml> |
 | [google-tasks](clients/project-mgmt/google-tasks.nu)                       | openapi | <https://api.apis.guru/v2/specs/googleapis.com/tasks/v1/openapi.json>                                       |
-| [todoist](clients/project-mgmt/todoist.nu)                                 | openapi | <https://developer.todoist.com/api/v1/openapi.yaml>                                                         |
-| [shortcut](clients/project-mgmt/shortcut.nu)                               | openapi | <https://raw.githubusercontent.com/Shortcut/shortcut-api/main/openapi.json>                                 |
 
 ## public-data
 
-| Client                                              | Type    | Source                                                            |
-| --------------------------------------------------- | ------- | ----------------------------------------------------------------- |
-| [countries](clients/public-data/countries.nu)       | graphql | <https://countries.trevorblades.com/graphql>                      |
-| [wikipedia](clients/public-data/wikipedia.nu)       | openapi | <https://en.wikipedia.org/api/rest_v1/?spec>                      |
-| [open-library](clients/public-data/open-library.nu) | openapi | <https://openlibrary.org/static/openapi.json>                     |
-| [open5e](clients/public-data/open5e.nu)             | openapi | <https://api.open5e.com/schema/?format=json>                      |
-| [tfl](clients/public-data/tfl.nu)                   | openapi | <https://api.tfl.gov.uk/swagger/docs/v1>                          |
-| [met-norway](clients/public-data/met-norway.nu)     | openapi | <https://api.met.no/weatherapi/locationforecast/2.0/swagger>      |
-| [nasa-apod](clients/public-data/nasa-apod.nu)       | openapi | <https://api.apis.guru/v2/specs/nasa.gov/apod/1.0.0/openapi.json> |
-| [fec](clients/public-data/fec.nu)                   | openapi | <https://api.apis.guru/v2/specs/fec.gov/1.0/openapi.json>         |
-| [crossref](clients/public-data/crossref.nu)         | openapi | <https://api.crossref.org/swagger-docs>                           |
+| Client                                                                      | Type    | Source                                                                            |
+| --------------------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------- |
+| [countries](clients/public-data/countries.nu)                               | graphql | <https://countries.trevorblades.com/graphql>                                      |
+| [wikipedia](clients/public-data/wikipedia.nu)                               | openapi | <https://en.wikipedia.org/api/rest_v1/?spec>                                      |
+| [open-library](clients/public-data/open-library.nu)                         | openapi | <https://openlibrary.org/static/openapi.json>                                     |
+| [open5e](clients/public-data/open5e.nu)                                     | openapi | <https://api.open5e.com/schema/?format=json>                                      |
+| [tfl](clients/public-data/tfl.nu)                                           | openapi | <https://api.tfl.gov.uk/swagger/docs/v1>                                          |
+| [met-norway](clients/public-data/met-norway.nu)                             | openapi | <https://api.met.no/weatherapi/locationforecast/2.0/swagger>                      |
+| [nasa-apod](clients/public-data/nasa-apod.nu)                               | openapi | <https://api.apis.guru/v2/specs/nasa.gov/apod/1.0.0/openapi.json>                 |
+| [fec](clients/public-data/fec.nu)                                           | openapi | <https://api.apis.guru/v2/specs/fec.gov/1.0/openapi.json>                         |
+| [crossref](clients/public-data/crossref.nu)                                 | openapi | <https://api.crossref.org/swagger-docs>                                           |
+| [nasa-neows](clients/public-data/nasa-neows.nu)                             | openapi | <https://api.apis.guru/v2/specs/nasa.gov/asteroids%20neows/3.4.0/openapi.json>    |
+| [launch-library2](clients/public-data/launch-library2.nu)                   | openapi | <https://ll.thespacedevs.com/2.3.0/schema/>                                       |
+| [amentum-atmosphere](clients/public-data/amentum-atmosphere.nu)             | openapi | <https://api.apis.guru/v2/specs/amentum.space/atmosphere/1.1.1/openapi.json>      |
+| [amentum-gravity](clients/public-data/amentum-gravity.nu)                   | openapi | <https://api.apis.guru/v2/specs/amentum.space/gravity/1.1.1/openapi.json>         |
+| [amentum-space-radiation](clients/public-data/amentum-space-radiation.nu)   | openapi | <https://api.apis.guru/v2/specs/amentum.space/space_radiation/1.1.2/openapi.json> |
+| [census](clients/public-data/census.nu)                                     | openapi | <https://api.census.gov/openapi>                                                  |
+| [fbi-wanted](clients/public-data/fbi-wanted.nu)                             | openapi | <https://api.fbi.gov/openapi.json>                                                |
+| [uspto-bdss](clients/public-data/uspto-bdss.nu)                             | openapi | <https://api.apis.guru/v2/specs/uspto.gov/bdss/1.0.0/swagger.json>                |
+| [canada-holidays](clients/public-data/canada-holidays.nu)                   | openapi | <https://api.apis.guru/v2/specs/canada-holidays.ca/1.8.0/openapi.json>            |
+| [bc-bcdc](clients/public-data/bc-bcdc.nu)                                   | openapi | <https://api.apis.guru/v2/specs/gov.bc.ca/bcdc/3.0.1/openapi.json>                |
+| [bc-open511](clients/public-data/bc-open511.nu)                             | openapi | <https://api.apis.guru/v2/specs/gov.bc.ca/open511/1.0.0/openapi.json>             |
+| [bc-router](clients/public-data/bc-router.nu)                               | openapi | <https://api.apis.guru/v2/specs/gov.bc.ca/router/2.0.0/openapi.json>              |
+| [bc-news](clients/public-data/bc-news.nu)                                   | openapi | <https://api.apis.guru/v2/specs/gov.bc.ca/news/1.0/openapi.json>                  |
+| [bc-gwells](clients/public-data/bc-gwells.nu)                               | openapi | <https://api.apis.guru/v2/specs/gov.bc.ca/gwells/v1/openapi.json>                 |
+| [nager-date](clients/public-data/nager-date.nu)                             | openapi | <https://date.nager.at/openapi/v3.json>                                           |
+| [uk-water-quality](clients/public-data/uk-water-quality.nu)                 | openapi | <https://environment.data.gov.uk/water-quality/openapi.json>                      |
+| [europeana](clients/public-data/europeana.nu)                               | openapi | <https://api.apis.guru/v2/specs/europeana.eu/version%20unknown/swagger.json>      |
+| [wikimedia](clients/public-data/wikimedia.nu)                               | openapi | <https://api.apis.guru/v2/specs/wikimedia.org/1.0.0/swagger.json>                 |
+| [wiktionary](clients/public-data/wiktionary.nu)                             | openapi | <https://en.wiktionary.org/api/rest_v1/?spec>                                     |
+| [wikidata-rest](clients/public-data/wikidata-rest.nu)                       | openapi | <https://www.wikidata.org/api/rest_v1/?spec>                                      |
+| [gbif-registry](clients/public-data/gbif-registry.nu)                       | openapi | <https://techdocs.gbif.org/openapi/registry.json>                                 |
+| [gbif-occurrence](clients/public-data/gbif-occurrence.nu)                   | openapi | <https://techdocs.gbif.org/openapi/occurrence.json>                               |
+| [gbif-literature](clients/public-data/gbif-literature.nu)                   | openapi | <https://techdocs.gbif.org/openapi/literature.json>                               |
+| [gbif-vocabulary](clients/public-data/gbif-vocabulary.nu)                   | openapi | <https://techdocs.gbif.org/openapi/vocabulary.json>                               |
+| [gbif-validator](clients/public-data/gbif-validator.nu)                     | openapi | <https://techdocs.gbif.org/openapi/validator.json>                                |
+| [inaturalist](clients/public-data/inaturalist.nu)                           | openapi | <https://api.inaturalist.org/v1/swagger.json>                                     |
+| [semantic-scholar](clients/public-data/semantic-scholar.nu)                 | openapi | <https://api.semanticscholar.org/graph/v1/swagger.json>                           |
+| [ebi-proteins](clients/public-data/ebi-proteins.nu)                         | openapi | <https://www.ebi.ac.uk/proteins/api/openapi.json>                                 |
+| [ena-portal](clients/public-data/ena-portal.nu)                             | openapi | <https://www.ebi.ac.uk/ena/portal/api/api-docs?group=public>                      |
+| [openfoodfacts-folksonomy](clients/public-data/openfoodfacts-folksonomy.nu) | openapi | <https://api.folksonomy.openfoodfacts.org/openapi.json>                           |
+| [openfoodfacts-search](clients/public-data/openfoodfacts-search.nu)         | openapi | <https://search.openfoodfacts.org/openapi.json>                                   |
+| [openf1](clients/public-data/openf1.nu)                                     | openapi | <https://api.openf1.org/openapi.json>                                             |
 
 ## sandbox
 
