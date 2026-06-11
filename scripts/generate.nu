@@ -25,8 +25,8 @@ def main [
     --config: path = "clients.yaml"          # path to the registry file
     --generator: path = "_generator"         # path to the nu-http-client-generator directory
     --out-dir: path = "clients"              # where to write generated `.nu` files
-    --list-file: path = "CLIENTS.md"         # markdown file listing the registry; fully overwritten
-    --list-only                              # skip generation; only refresh the list file from `clients.yaml`
+    --list-file: path = "README.md"          # markdown file listing the registry; the section after the marker is overwritten
+    --list-only                              # skip generation; only refresh the list section from `clients.yaml`
     --force                                  # regenerate even if the output file already exists (default: skip existing)
 ] {
     if ($name != null) and ($category != null) {
@@ -208,25 +208,38 @@ def filter-existing [clients: list, out_dir: path]: nothing -> list {
     $clients | where {|c| ($out_dir | path join $c.category $"($c.name).nu") | path exists }
 }
 
-# Overwrite `list_path` with a markdown document listing every client in `clients`.
-# Fully owned by this script — do not edit by hand.
+# Replace the auto-generated section at the bottom of `list_path` with a table
+# listing every client in `clients`. Everything above the marker is preserved.
+# The marker is the line `## Available clients` preceded by an `---` separator.
+const LIST_MARKER = "---\n\n## The collection\n"
 def write-list-file [list_path: path, clients: list, out_dir: path] {
     let count = ($clients | length)
-    let header = $"# Available clients\n\n_This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do not edit by hand._\n\nThis collection contains ($count) clients.\n"
     let body = (render-clients-sections $clients $out_dir)
-    $header + "\n" + $body + "\n" | save -f $list_path
+    let section = $"($LIST_MARKER)\n_This section is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do not edit by hand._\n\nThis collection contains ($count) clients.\n\n($body)\n"
+    let existing = if ($list_path | path exists) { open --raw $list_path } else { "" }
+    let prefix = if ($existing | str contains $LIST_MARKER) {
+        $existing | split row $LIST_MARKER | first
+    } else {
+        $existing
+    }
+    let prefix = ($prefix | str trim --right) + "\n\n"
+    $prefix + $section | save -f $list_path
 }
 
 def render-clients-sections [clients: list, out_dir: path]: nothing -> string {
     $clients
-    | sort-by category name
-    | each {|c|
-        {
-            Category: $c.category
-            Client: $"[($c.name)]\(($out_dir)/($c.category)/($c.name).nu\)"
-            Type: $c.type
-            Source: $"<($c.source)>"
-        }
+    | group-by category
+    | transpose category entries
+    | sort-by category
+    | each {|grp|
+        let rows = ($grp.entries | sort-by name | each {|c|
+            {
+                Client: $"[($c.name)]\(($out_dir)/($c.category)/($c.name).nu\)"
+                Type: $c.type
+                Source: $"<($c.source)>"
+            }
+        })
+        $"### ($grp.category)\n\n" + ($rows | to md --pretty)
     }
-    | to md --pretty
+    | str join "\n\n"
 }
