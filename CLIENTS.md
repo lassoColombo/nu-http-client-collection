@@ -711,6 +711,7 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [trello](clients/project-mgmt/trello.nu)                                   | openapi | <https://developer.atlassian.com/cloud/trello/swagger.v3.json>                                              |
 | [notion](clients/project-mgmt/notion.nu)                                   | openapi | <https://developers.notion.com/openapi.json>                                                                |
 | [jira-service-management](clients/project-mgmt/jira-service-management.nu) | openapi | <https://developer.atlassian.com/cloud/jira/service-desk/swagger.v3.json>                                   |
+| [confluence](clients/project-mgmt/confluence.nu)                           | openapi | <https://developer.atlassian.com/cloud/confluence/swagger.v3.json>                                          |
 | [coda](clients/project-mgmt/coda.nu)                                       | openapi | <https://coda.io/apis/v1/openapi.json>                                                                      |
 | [atlassian-compass](clients/project-mgmt/atlassian-compass.nu)             | openapi | <https://developer.atlassian.com/cloud/compass/swagger.v3.json>                                             |
 | [microsoft-planner](clients/project-mgmt/microsoft-planner.nu)             | openapi | <https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Planner.yml> |
@@ -738,7 +739,6 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [amentum-atmosphere](clients/public-data/amentum-atmosphere.nu)             | openapi | <https://api.apis.guru/v2/specs/amentum.space/atmosphere/1.1.1/openapi.json>      |
 | [amentum-gravity](clients/public-data/amentum-gravity.nu)                   | openapi | <https://api.apis.guru/v2/specs/amentum.space/gravity/1.1.1/openapi.json>         |
 | [amentum-space-radiation](clients/public-data/amentum-space-radiation.nu)   | openapi | <https://api.apis.guru/v2/specs/amentum.space/space_radiation/1.1.2/openapi.json> |
-| [census](clients/public-data/census.nu)                                     | openapi | <https://api.census.gov/openapi>                                                  |
 | [fbi-wanted](clients/public-data/fbi-wanted.nu)                             | openapi | <https://api.fbi.gov/openapi.json>                                                |
 | [uspto-bdss](clients/public-data/uspto-bdss.nu)                             | openapi | <https://api.apis.guru/v2/specs/uspto.gov/bdss/1.0.0/swagger.json>                |
 | [canada-holidays](clients/public-data/canada-holidays.nu)                   | openapi | <https://api.apis.guru/v2/specs/canada-holidays.ca/1.8.0/openapi.json>            |

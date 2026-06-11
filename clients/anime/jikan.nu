@@ -19,17 +19,18 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
 # Serialize a single query parameter based on collection style
 def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
   if ($value == null) { return [] }
+  let n = ($name | url encode)
   let is_list = ($value | describe | str starts-with "list")
-  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
-  if not $is_list { return [$"($name)=($value)"] }
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($n)[($in.k | into string | url encode)]=($in.v | into string | url encode)" }) }
+  if not $is_list { return [$"($n)=($value | into string | url encode)"] }
   match $style {
-    "multi" => { $value | each {|v| $"($name)=($v)" } }
-    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
-    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
-    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
-    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
-    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
-    _ => { $value | each {|v| $"($name)=($v)" } }
+    "multi" => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
+    "csv" => { let joined = ($value | each { $in | into string | url encode } | str join ","); [$"($n)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string | url encode } | str join "%20"); [$"($n)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string | url encode } | str join "%09"); [$"($n)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string | url encode } | str join "|"); [$"($n)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($n)[]=($v | into string | url encode)" } }
+    _ => { $value | each {|v| $"($n)=($v | into string | url encode)" } }
   }
 }
 
@@ -65,11 +66,31 @@ def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
 def filter-completer [] { ["all" "episode" "other"] }
-def filter-completer-1 [] { ["friday" "monday" "other" "saturday" "sunday" "thursday" "tuesday" "unknown" "wednesday"] }
+def filter-completer-1 [] { ["demographics" "explicit_genres" "genres" "themes"] }
+def order-by-completer [] { ["count" "mal_id" "name"] }
+def sort-completer [] { ["asc" "desc"] }
+def filter-completer-2 [] { ["friday" "monday" "other" "saturday" "sunday" "thursday" "tuesday" "unknown" "wednesday"] }
 def kids-completer [] { ["false" "true"] }
 def sfw-completer [] { ["false" "true"] }
-def filter-completer-2 [] { ["movie" "music" "ona" "ova" "special" "tv"] }
-def type-completer [] { ["anime" "manga"] }
+def status-completer [] { ["airing" "complete" "upcoming"] }
+def rating-completer [] { ["g" "pg" "pg13" "r" "r17" "rx"] }
+def order-by-completer-1 [] { ["end_date" "episodes" "favorites" "mal_id" "members" "popularity" "rank" "score" "scored_by" "start_date" "title"] }
+def type-completer [] { ["doujin" "lightnovel" "manga" "manhua" "manhwa" "novel" "oneshot"] }
+def status-completer-1 [] { ["complete" "discontinued" "hiatus" "publishing" "upcoming"] }
+def order-by-completer-2 [] { ["chapters" "end_date" "favorites" "mal_id" "members" "popularity" "rank" "score" "scored_by" "start_date" "title" "volumes"] }
+def order-by-completer-3 [] { ["birthday" "favorites" "mal_id" "name"] }
+def order-by-completer-4 [] { ["favorites" "mal_id" "name"] }
+def gender-completer [] { ["any" "female" "male" "nonbinary"] }
+def type-completer-1 [] { ["private" "public" "secret"] }
+def category-completer [] { ["actors_and_artists" "anime" "characters" "cities_and_neighborhoods" "companies" "conventions" "games" "japan" "manga" "music" "other" "schools"] }
+def order-by-completer-5 [] { ["created" "mal_id" "members_count" "name"] }
+def order-by-completer-6 [] { ["count" "established" "favorites" "mal_id"] }
+def filter-completer-3 [] { ["movie" "music" "ona" "ova" "special" "tv"] }
+def filter-completer-4 [] { ["airing" "bypopularity" "favorite" "upcoming"] }
+def filter-completer-5 [] { ["bypopularity" "favorite" "publishing" "upcoming"] }
+def type-completer-2 [] { ["anime" "manga"] }
+def status-completer-2 [] { ["all" "completed" "dropped" "onhold" "plantowatch" "watching"] }
+def status-completer-3 [] { ["all" "completed" "dropped" "onhold" "plantoread" "reading"] }
 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
@@ -752,7 +773,7 @@ export def "genres-anime get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --filter: string
+  --filter: string@filter-completer-1
 ]: nothing -> record<data: table<mal_id: int, name: string, url: string, count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -774,7 +795,7 @@ export def "genres-manga get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --filter: string
+  --filter: string@filter-completer-1
 ]: nothing -> record<data: table<mal_id: int, name: string, url: string, count: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -799,8 +820,8 @@ export def "magazines get" [
   --page: int
   --limit: int
   --q: string
-  --order-by: string
-  --qp-sort: string
+  --order-by: string@order-by-completer
+  --qp-sort: string@sort-completer
   --letter: string # Return entries starting with the given letter
 ]: nothing -> record<data: table<mal_id: int, name: string, url: string, count: int>, pagination: record<last_visible_page: int, has_next_page: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1487,7 +1508,7 @@ export def "schedules get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --filter: string@filter-completer-1 # Filter by day
+  --filter: string@filter-completer-2 # Filter by day
   --kids: string@kids-completer # When supplied, it will filter entries with the `Kids` Genre Demographic. When supplied as `kids=true`, it will return only Kid entries and when supplied as `kids=false`, it will filter out any Kid entries. Defaults to `false`.
   --sfw: string@sfw-completer # 'Safe For Work'. When supplied, it will filter entries with the `Hentai` Genre. When supplied as `sfw=true`, it will return only SFW entries and when supplied as `sfw=false`, it will filter out any Hentai entries. Defaults to `false`.
   --unapproved: string@bool-completer # This is a flag. When supplied it will include entries which are unapproved. Unapproved entries on MyAnimeList are those that are user submitted and have not yet been approved by MAL to show up on other pages. They will have their own specifc pages and are often removed resulting in a 404 error. You do not need to pass a value to it. e.g usage: `?unapproved`
@@ -1522,13 +1543,13 @@ export def "anime list" [
   --score: float
   --min-score: float # Set a minimum score for results.
   --max-score: float # Set a maximum score for results
-  --status: string
-  --rating: string
+  --status: string@status-completer
+  --rating: string@rating-completer
   --sfw: string@bool-completer # Filter out Adult entries
   --genres: string # Filter by genre(s) IDs. Can pass multiple with a comma as a delimiter. e.g 1,2,3
   --genres-exclude: string # Exclude genre(s) IDs. Can pass multiple with a comma as a delimiter. e.g 1,2,3
-  --order-by: string
-  --qp-sort: string
+  --order-by: string@order-by-completer-1
+  --qp-sort: string@sort-completer
   --letter: string # Return entries starting with the given letter
   --producers: string # Filter by producer(s) IDs. Can pass multiple with a comma as a delimiter. e.g 1,2,3
   --start-date: string # Filter by starting date. Format: YYYY-MM-DD. e.g `2022`, `2005-05`, `2005-01-01`
@@ -1558,16 +1579,16 @@ export def "manga list" [
   --page: int
   --limit: int
   --q: string
-  --type: string
+  --type: string@type-completer
   --score: float
   --min-score: float # Set a minimum score for results.
   --max-score: float # Set a maximum score for results
-  --status: string
+  --status: string@status-completer-1
   --sfw: string@bool-completer # Filter out Adult entries
   --genres: string # Filter by genre(s) IDs. Can pass multiple with a comma as a delimiter. e.g 1,2,3
   --genres-exclude: string # Exclude genre(s) IDs. Can pass multiple with a comma as a delimiter. e.g 1,2,3
-  --order-by: string
-  --qp-sort: string
+  --order-by: string@order-by-completer-2
+  --qp-sort: string@sort-completer
   --letter: string # Return entries starting with the given letter
   --magazines: string # Filter by magazine(s) IDs. Can pass multiple with a comma as a delimiter. e.g 1,2,3
   --start-date: string # Filter by starting date. Format: YYYY-MM-DD. e.g `2022`, `2005-05`, `2005-01-01`
@@ -1596,8 +1617,8 @@ export def "people list" [
   --page: int
   --limit: int
   --q: string
-  --order-by: string
-  --qp-sort: string
+  --order-by: string@order-by-completer-3
+  --qp-sort: string@sort-completer
   --letter: string # Return entries starting with the given letter
 ]: nothing -> record<data: table<mal_id: int, url: string, website_url: string, images: record, name: string, given_name: string, family_name: string, alternate_names: list, birthday: string, favorites: int, about: string>, pagination: record<last_visible_page: int, has_next_page: bool, current_page: int, items: record<count: int, total: int, per_page: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1623,8 +1644,8 @@ export def "characters list" [
   --page: int
   --limit: int
   --q: string
-  --order-by: string
-  --qp-sort: string
+  --order-by: string@order-by-completer-4
+  --qp-sort: string@sort-completer
   --letter: string # Return entries starting with the given letter
 ]: nothing -> record<data: table<mal_id: int, url: string, images: record, name: string, name_kanji: string, nicknames: list, favorites: int, about: string>, pagination: record<last_visible_page: int, has_next_page: bool, current_page: int, items: record<count: int, total: int, per_page: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1650,7 +1671,7 @@ export def "users list" [
   --page: int
   --limit: int
   --q: string
-  --gender: string
+  --gender: string@gender-completer
   --location: string
   --maxAge: int
   --minAge: int
@@ -1699,10 +1720,10 @@ export def "clubs list" [
   --page: int
   --limit: int
   --q: string
-  --type: string
-  --category: string
-  --order-by: string
-  --qp-sort: string
+  --type: string@type-completer-1
+  --category: string@category-completer
+  --order-by: string@order-by-completer-5
+  --qp-sort: string@sort-completer
   --letter: string # Return entries starting with the given letter
 ]: nothing -> record<data: table<mal_id: int, name: string, url: string, images: record, members: int, category: string, created: string, access: string>, pagination: record<last_visible_page: int, has_next_page: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1728,8 +1749,8 @@ export def "producers list" [
   --page: int
   --limit: int
   --q: string
-  --order-by: string
-  --qp-sort: string
+  --order-by: string@order-by-completer-6
+  --qp-sort: string@sort-completer
   --letter: string # Return entries starting with the given letter
 ]: nothing -> record<data: table<mal_id: int, url: string, titles: list, images: record, favorites: int, count: int, established: string, about: string>, pagination: record<last_visible_page: int, has_next_page: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -1752,7 +1773,7 @@ export def "seasons-now get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --filter: string@filter-completer-2 # Entry types
+  --filter: string@filter-completer-3 # Entry types
   --sfw: string@bool-completer # 'Safe For Work'. This is a flag. When supplied it will filter out entries according to the SFW Policy. You do not need to pass a value to it. e.g usage: `?sfw`
   --unapproved: string@bool-completer # This is a flag. When supplied it will include entries which are unapproved. Unapproved entries on MyAnimeList are those that are user submitted and have not yet been approved by MAL to show up on other pages. They will have their own specifc pages and are often removed resulting in a 404 error. You do not need to pass a value to it. e.g usage: `?unapproved`
   --continuing: string@bool-completer # This is a flag. When supplied it will include entries which are continuing from previous seasons. MAL includes these items on the seasons view in the &#8243;TV (continuing)&#8243; section. (Example: https://myanimelist.net/anime/season/2024/winter) <br />Example usage: `?continuing`
@@ -1781,7 +1802,7 @@ export def "seasons get-by-year-season" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --filter: string@filter-completer-2 # Entry types
+  --filter: string@filter-completer-3 # Entry types
   --sfw: string@bool-completer # 'Safe For Work'. This is a flag. When supplied it will filter out entries according to the SFW Policy. You do not need to pass a value to it. e.g usage: `?sfw`
   --unapproved: string@bool-completer # This is a flag. When supplied it will include entries which are unapproved. Unapproved entries on MyAnimeList are those that are user submitted and have not yet been approved by MAL to show up on other pages. They will have their own specifc pages and are often removed resulting in a 404 error. You do not need to pass a value to it. e.g usage: `?unapproved`
   --continuing: string@bool-completer # This is a flag. When supplied it will include entries which are continuing from previous seasons. MAL includes these items on the seasons view in the &#8243;TV (continuing)&#8243; section. (Example: https://myanimelist.net/anime/season/2024/winter) <br />Example usage: `?continuing`
@@ -1828,7 +1849,7 @@ export def "seasons-upcoming get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --filter: string@filter-completer-2 # Entry types
+  --filter: string@filter-completer-3 # Entry types
   --sfw: string@bool-completer # 'Safe For Work'. This is a flag. When supplied it will filter out entries according to the SFW Policy. You do not need to pass a value to it. e.g usage: `?sfw`
   --unapproved: string@bool-completer # This is a flag. When supplied it will include entries which are unapproved. Unapproved entries on MyAnimeList are those that are user submitted and have not yet been approved by MAL to show up on other pages. They will have their own specifc pages and are often removed resulting in a 404 error. You do not need to pass a value to it. e.g usage: `?unapproved`
   --continuing: string@bool-completer # This is a flag. When supplied it will include entries which are continuing from previous seasons. MAL includes these items on the seasons view in the &#8243;TV (continuing)&#8243; section. (Example: https://myanimelist.net/anime/season/2024/winter) <br />Example usage: `?continuing`
@@ -1856,8 +1877,8 @@ export def "top-anime get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --type: string
-  --filter: string
-  --rating: string
+  --filter: string@filter-completer-4
+  --rating: string@rating-completer
   --sfw: string@bool-completer # Filter out Adult entries
   --page: int
   --limit: int
@@ -1882,8 +1903,8 @@ export def "top-manga get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --type: string
-  --filter: string
+  --type: string@type-completer
+  --filter: string@filter-completer-5
   --page: int
   --limit: int
 ]: nothing -> record<data: table<mal_id: int, url: string, images: record, approved: bool, titles: list, title: string, title_english: string, title_japanese: string, type: string, chapters: int, volumes: int, status: string, publishing: bool, published: record, score: float, scored_by: int, rank: int, popularity: int, members: int, favorites: int, synopsis: string, background: string, authors: list, serializations: list, genres: list, explicit_genres: list, themes: list, demographics: list>, pagination: record<last_visible_page: int, has_next_page: bool, current_page: int, items: record<count: int, total: int, per_page: int>>> {
@@ -1954,7 +1975,7 @@ export def "top-reviews get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --page: int
-  --type: string
+  --type: string@type-completer-2
   --preliminary: string@bool-completer # Whether the results include preliminary reviews or not. Defaults to true.
   --spoilers: string@bool-completer # Whether the results include reviews with spoilers or not. Defaults to true.
 ]: nothing -> record<data: record<data: list<any>, pagination: record<last_visible_page: int, has_next_page: bool>>> {
@@ -2105,7 +2126,7 @@ export def "users-history get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --type: string@type-completer
+  --type: string@type-completer-2
 ]: nothing -> record<data: table<entry: record, increment: int, date: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2154,7 +2175,7 @@ export def "users-animelist get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string
+  --status: string@status-completer-2
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2180,7 +2201,7 @@ export def "users-mangalist get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string
+  --status: string@status-completer-3
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

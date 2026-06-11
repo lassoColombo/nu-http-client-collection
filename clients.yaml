@@ -1744,9 +1744,9 @@ clients:
     - name: jira-service-management
       type: openapi
       source: https://developer.atlassian.com/cloud/jira/service-desk/swagger.v3.json
-    # - name: confluence
-    #   type: openapi
-    #   source: https://developer.atlassian.com/cloud/confluence/swagger.v3.json
+    - name: confluence
+      type: openapi
+      source: https://developer.atlassian.com/cloud/confluence/swagger.v3.json
     - name: coda
       type: openapi
       source: https://coda.io/apis/v1/openapi.json
@@ -1834,9 +1834,6 @@ clients:
     - name: amentum-space-radiation
       type: openapi
       source: https://api.apis.guru/v2/specs/amentum.space/space_radiation/1.1.2/openapi.json
-    - name: census
-      type: openapi
-      source: https://api.census.gov/openapi
     - name: fbi-wanted
       type: openapi
       source: https://api.fbi.gov/openapi.json
