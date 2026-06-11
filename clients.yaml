@@ -127,6 +127,27 @@ clients:
     - name: google-calendar
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/calendar/v3/openapi.json
+    - name: onsched-consumer
+      type: openapi
+      source: https://api.apis.guru/v2/specs/onsched.com/consumer/v1/openapi.json
+    - name: onsched-setup
+      type: openapi
+      source: https://api.apis.guru/v2/specs/onsched.com/setup/v1/openapi.json
+    - name: onsched-utility
+      type: openapi
+      source: https://api.apis.guru/v2/specs/onsched.com/utility/v1/openapi.json
+    - name: hetras-booking
+      type: openapi
+      source: https://api.apis.guru/v2/specs/hetras-certification.net/booking/v0/swagger.json
+    - name: gotomeeting
+      type: openapi
+      source: https://api.apis.guru/v2/specs/citrixonline.com/gotomeeting/1.0.0/swagger.json
+    - name: microsoft-graph-calendar
+      type: openapi
+      source: https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Calendar.yml
+    - name: microsoft-graph-bookings
+      type: openapi
+      source: https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/main/openApiDocs/v1.0/Bookings.yml
 
   cdn:
     - name: cloudflare
@@ -190,6 +211,24 @@ clients:
     - name: circleci
       type: openapi
       source: https://api.apis.guru/v2/specs/circleci.com/v1/openapi.json
+    - name: aws-codebuild
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/codebuild/2016-10-06/openapi.json
+    - name: aws-codedeploy
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/codedeploy/2014-10-06/openapi.json
+    - name: aws-codepipeline
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/codepipeline/2015-07-09/openapi.json
+    - name: google-cloudbuild
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/cloudbuild/v1/openapi.json
+    - name: google-clouddeploy
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/clouddeploy/v1/openapi.json
+    - name: octopus-deploy
+      type: openapi
+      source: https://demo.octopus.app/api/swagger.json
 
   cloud:
     - name: digitalocean
@@ -317,11 +356,59 @@ clients:
     - name: hubspot-crm
       type: openapi
       source: https://api.apis.guru/v2/specs/hubapi.com/crm/v3/openapi.json
+    - name: apideck-crm
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apideck.com/crm/9.3.0/openapi.json
+    - name: data2crm
+      type: openapi
+      source: https://api.apis.guru/v2/specs/data2crm.com/1/swagger.json
+    - name: salesforce-einstein
+      type: openapi
+      source: https://api.apis.guru/v2/specs/salesforce.local/einstein/2.0.1/openapi.json
+    - name: pipedrive
+      type: openapi
+      source: https://developers.pipedrive.com/docs/api/v1/openapi.yaml
+    - name: attio
+      type: openapi
+      source: https://api.attio.com/openapi/api
+    - name: close-com
+      type: openapi
+      source: https://developer.close.com/openapi.json
+    - name: streak
+      type: openapi
+      source: https://www.streak.com/api/openapi.json
 
   data-pipeline:
     - name: airflow
       type: openapi
       source: https://api.apis.guru/v2/specs/apache.org/airflow/2.5.1/openapi.json
+    - name: airbyte-config
+      type: openapi
+      source: https://api.apis.guru/v2/specs/airbyte.local/config/1.0.0/openapi.json
+    - name: airbyte-platform-server
+      type: openapi
+      source: https://raw.githubusercontent.com/airbytehq/airbyte-platform/main/airbyte-api/server-api/src/main/openapi/config.yaml
+    - name: prefect-cloud
+      type: openapi
+      source: https://api.prefect.cloud/api/openapi.json
+    - name: windmill
+      type: openapi
+      source: https://raw.githubusercontent.com/windmill-labs/windmill/main/backend/windmill-api/openapi.yaml
+    - name: temporal
+      type: openapi
+      source: https://raw.githubusercontent.com/temporalio/api/master/openapi/openapiv3.yaml
+    - name: google-datapipelines
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/datapipelines/v1/openapi.json
+    - name: google-workflows
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/workflows/v1/openapi.json
+    - name: google-workflowexecutions
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/workflowexecutions/v1/openapi.json
+    - name: aws-datapipeline
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/datapipeline/2012-10-29/openapi.json
 
   dns:
     - name: aws-route53
@@ -453,11 +540,41 @@ clients:
     - name: formapi-io
       type: openapi
       source: https://api.apis.guru/v2/specs/formapi.io/v1/openapi.json
+    - name: qualtrics
+      type: openapi
+      source: https://api.apis.guru/v2/specs/qualtrics.com/0.2/openapi.json
+    - name: va-gov-forms
+      type: openapi
+      source: https://api.apis.guru/v2/specs/va.gov/forms/0.0.0/openapi.json
+    - name: hubspot-forms
+      type: openapi
+      source: https://raw.githubusercontent.com/HubSpot/HubSpot-public-api-spec-collection/main/PublicApiSpecs/Marketing/Forms/Rollouts/144909/v3/forms.json
+    - name: tally
+      type: openapi
+      source: https://api.tally.so/openapi.json
 
   fraud:
     - name: aws-fraud-detector
       type: openapi
       source: https://api.apis.guru/v2/specs/amazonaws.com/frauddetector/2019-11-15/openapi.json
+    - name: fraudlabspro-fraud-detection
+      type: openapi
+      source: https://api.apis.guru/v2/specs/fraudlabspro.com/fraud-detection/1.1/openapi.json
+    - name: fraudlabspro-sms-verification
+      type: openapi
+      source: https://api.apis.guru/v2/specs/fraudlabspro.com/sms-verification/1.0/openapi.json
+    - name: google-webrisk
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/webrisk/v1/openapi.json
+    - name: vonage-verify
+      type: openapi
+      source: https://api.apis.guru/v2/specs/nexmo.com/verify/1.2.4/openapi.json
+    - name: twilio-verify
+      type: openapi
+      source: https://api.apis.guru/v2/specs/twilio.com/twilio_verify_v2/1.42.0/openapi.json
+    - name: onfido
+      type: openapi
+      source: https://raw.githubusercontent.com/onfido/onfido-openapi-spec/master/generated/artifacts/openapi/openapi.json
 
   gaming:
     - name: pokeapi
@@ -500,6 +617,33 @@ clients:
     - name: google-healthcare
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/healthcare/v1beta1/openapi.json
+    - name: aws-comprehend-medical
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/comprehendmedical/2018-10-30/openapi.json
+    - name: aws-healthlake
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/healthlake/2017-07-01/openapi.json
+    - name: azure-healthcare-apis
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/healthcareapis-healthcare-apis/2019-09-16/swagger.json
+    - name: cdc-prime-data-hub
+      type: openapi
+      source: https://api.apis.guru/v2/specs/cdcgov.local/prime-data-hub/0.2.0-oas3/openapi.json
+    - name: healthcare-gov
+      type: openapi
+      source: https://api.apis.guru/v2/specs/healthcare.gov/1.0.0/openapi.json
+    - name: infermedica
+      type: openapi
+      source: https://api.apis.guru/v2/specs/infermedica.com/v2/swagger.json
+    - name: ndhm-healthid
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ndhm.gov.in/ndhm-healthid/1.0/openapi.json
+    - name: patientview
+      type: openapi
+      source: https://api.apis.guru/v2/specs/patientview.org/1.0/openapi.json
+    - name: twine-health
+      type: openapi
+      source: https://api.apis.guru/v2/specs/twinehealth.com/v7.78.1/openapi.json
 
   identity:
     - name: okta
@@ -606,6 +750,21 @@ clients:
     - name: hubspot-marketing
       type: openapi
       source: https://api.apis.guru/v2/specs/hubapi.com/marketing/v3/openapi.json
+    - name: klaviyo
+      type: openapi
+      source: https://raw.githubusercontent.com/klaviyo/openapi/main/openapi/stable.json
+    - name: mailchimp-marketing
+      type: openapi
+      source: https://api.mailchimp.com/schema/3.0/Swagger.json?expand
+    - name: iterable
+      type: openapi
+      source: https://api.iterable.com/api-docs
+    - name: onesignal
+      type: openapi
+      source: https://documentation.onesignal.com/openapi.json
+    - name: aws-pinpoint
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/pinpoint/2016-12-01/openapi.json
 
   monitoring:
     - name: grafana
@@ -844,11 +1003,6 @@ clients:
       source: https://swapi-graphql.netlify.app/graphql
       flags:
         default-base-url: https://swapi-graphql.netlify.app/graphql
-    - name: rick-and-morty
-      type: graphql
-      source: https://rickandmortyapi.com/graphql
-      flags:
-        default-base-url: https://rickandmortyapi.com/graphql
     - name: dnd5e
       type: openapi
       source: https://api.apis.guru/v2/specs/dnd5eapi.co/0.1/openapi.json
@@ -1020,6 +1174,27 @@ clients:
     - name: pinecone
       type: openapi
       source: https://api.apis.guru/v2/specs/pinecone.io/20230401.1/openapi.json
+    - name: pinecone-db-data
+      type: openapi
+      source: https://raw.githubusercontent.com/pinecone-io/pinecone-api/main/2026-04/db_data_2026-04.oas.yaml
+    - name: pinecone-db-control
+      type: openapi
+      source: https://raw.githubusercontent.com/pinecone-io/pinecone-api/main/2026-04/db_control_2026-04.oas.yaml
+    - name: pinecone-inference
+      type: openapi
+      source: https://raw.githubusercontent.com/pinecone-io/pinecone-api/main/2026-04/inference_2026-04.oas.yaml
+    - name: pinecone-admin
+      type: openapi
+      source: https://raw.githubusercontent.com/pinecone-io/pinecone-api/main/2026-04/admin_2026-04.oas.yaml
+    - name: pinecone-assistant-control
+      type: openapi
+      source: https://raw.githubusercontent.com/pinecone-io/pinecone-api/main/2026-04/assistant_control_2026-04.oas.yaml
+    - name: pinecone-assistant-data
+      type: openapi
+      source: https://raw.githubusercontent.com/pinecone-io/pinecone-api/main/2026-04/assistant_data_2026-04.oas.yaml
+    - name: chroma
+      type: openapi
+      source: https://docs.trychroma.com/openapi.json
 
   version-control:
     - name: github

@@ -1,0 +1,171 @@
+# Auto-generated client for FraudLabs Pro Fraud Detection v1.1
+# Source: https://api.apis.guru/v2/specs/fraudlabspro.com/fraud-detection/1.1/openapi.json
+# Auth: --token flag or $env.FRAUDLABS_PRO_FRAUD_DETECTION_TOKEN
+
+const BASE_URL = "https://api.fraudlabspro.com"
+const DEFAULT_AUTH = "bearer"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o FRAUDLABS_PRO_FRAUD_DETECTION_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
+  if not $is_list { return [$"($name)=($value)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($name)=($v)" } }
+    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
+    _ => { $value | each {|v| $"($name)=($v)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def bool-completer [] { ["'true'" "'false'"] }
+def base-url-completer [] { ["https://api.fraudlabspro.com" "https://virtserver.swaggerhub.com/fraudlabspro/fraudlabspro/1.0"] }
+def auth-scheme-completer [] { ["bearer"] }
+
+# Completers for enum parameters
+def format-completer [] { ["json" "xml"] }
+def action-completer [] { ["APPROVE" "REJECT" "REJECT_BLACKLIST"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "order-feedback post" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Feedback the status of an order transaction.
+#
+# POST /v1/order/feedback
+export def "order-feedback post" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --id: string
+  --key: string
+  --format: string@format-completer
+  --action: string@action-completer
+  --notes: string # allows empty value
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "notes" $notes "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/order/feedback" $qp)
+  let accept_val = "application/json; charset=utf-8"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Screen order for payment fraud.
+#
+# POST /v1/order/screen
+export def "order-screen post" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --ip: string
+  --key: string
+  --format: string@format-completer
+  --last-name: string # allows empty value
+  --first-name: string # allows empty value
+  --bill-addr: string # allows empty value
+  --bill-city: string # allows empty value
+  --bill-state: string # allows empty value
+  --bill-country: string # allows empty value
+  --bill-zip-code: string # allows empty value
+  --ship-addr: string # allows empty value
+  --ship-city: string # allows empty value
+  --ship-state: string # allows empty value
+  --ship-country: string
+  --ship-zip-code: string # allows empty value
+  --email-domain: string # allows empty value
+  --user-phone: string # allows empty value
+  --email: string # allows empty value
+  --email-hash: string # allows empty value
+  --username-hash: string # allows empty value
+  --password-hash: string # allows empty value
+  --bin-no: string # allows empty value
+  --card-hash: string # allows empty value
+  --avs-result: string # allows empty value
+  --cvv-result: string # allows empty value
+  --user-order-id: string # allows empty value
+  --user-order-memo: string # allows empty value
+  --amount: float # allows empty value
+  --quantity: int # allows empty value
+  --currency: string # allows empty value
+  --department: string # allows empty value
+  --payment-mode: string # allows empty value
+  --flp-checksum: string # allows empty value
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "ip" $ip "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "first_name" $first_name "scalar") (serialize-qp "bill_addr" $bill_addr "scalar") (serialize-qp "bill_city" $bill_city "scalar") (serialize-qp "bill_state" $bill_state "scalar") (serialize-qp "bill_country" $bill_country "scalar") (serialize-qp "bill_zip_code" $bill_zip_code "scalar") (serialize-qp "ship_addr" $ship_addr "scalar") (serialize-qp "ship_city" $ship_city "scalar") (serialize-qp "ship_state" $ship_state "scalar") (serialize-qp "ship_country" $ship_country "scalar") (serialize-qp "ship_zip_code" $ship_zip_code "scalar") (serialize-qp "email_domain" $email_domain "scalar") (serialize-qp "user_phone" $user_phone "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "email_hash" $email_hash "scalar") (serialize-qp "username_hash" $username_hash "scalar") (serialize-qp "password_hash" $password_hash "scalar") (serialize-qp "bin_no" $bin_no "scalar") (serialize-qp "card_hash" $card_hash "scalar") (serialize-qp "avs_result" $avs_result "scalar") (serialize-qp "cvv_result" $cvv_result "scalar") (serialize-qp "user_order_id" $user_order_id "scalar") (serialize-qp "user_order_memo" $user_order_memo "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "department" $department "scalar") (serialize-qp "payment_mode" $payment_mode "scalar") (serialize-qp "flp_checksum" $flp_checksum "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/order/screen" $qp)
+  let accept_val = "application/json; charset=utf-8"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
