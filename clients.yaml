@@ -311,6 +311,21 @@ clients:
     - name: gcore-fastedge
       type: openapi
       source: https://gcore.com/docs/api-reference/services_docs_mintlify/fastedge_api.yaml
+    - name: akamai-ccu
+      type: openapi
+      source: https://raw.githubusercontent.com/akamai/akamai-apis/main/apis/ccu/v3/openapi.json
+    - name: akamai-appsec
+      type: openapi
+      source: https://raw.githubusercontent.com/akamai/akamai-apis/main/apis/appsec/v1/openapi.json
+    - name: akamai-gtm
+      type: openapi
+      source: https://raw.githubusercontent.com/akamai/akamai-apis/main/apis/config-gtm/v1/openapi.json
+    - name: akamai-edge-diagnostics
+      type: openapi
+      source: https://raw.githubusercontent.com/akamai/akamai-apis/main/apis/edge-diagnostics/v1/openapi.json
+    - name: akamai-amfa
+      type: openapi
+      source: https://raw.githubusercontent.com/akamai/akamai-apis/main/apis/amfa/v1/openapi.json
 
   chat:
     - name: slack
@@ -644,6 +659,9 @@ clients:
     - name: snyk
       type: openapi
       source: https://api.apis.guru/v2/specs/snyk.io/1.0.0/openapi.json
+    - name: zot
+      type: openapi
+      source: https://raw.githubusercontent.com/project-zot/zot/main/swagger/swagger.json
 
   crm:
     - name: hubspot-crm
@@ -723,6 +741,9 @@ clients:
     - name: aws-datapipeline
       type: openapi
       source: https://api.apis.guru/v2/specs/amazonaws.com/datapipeline/2012-10-29/openapi.json
+    - name: kestra
+      type: openapi
+      source: https://raw.githubusercontent.com/kestra-io/client-sdk/main/kestra-ee.yml
 
   data-warehouse:
     - name: snowflake-account
@@ -1193,6 +1214,9 @@ clients:
     - name: google-play-games-management
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/gamesManagement/v1management/openapi.json
+    - name: twitch-helix
+      type: openapi
+      source: https://raw.githubusercontent.com/DmitryScaletta/twitch-api-swagger/main/openapi.json
 
   healthcare:
     - name: google-healthcare
@@ -1361,6 +1385,12 @@ clients:
     - name: better-stack
       type: openapi
       source: https://raw.githubusercontent.com/api-evangelist/better-stack/main/openapi/better-stack-openapi.yml
+    - name: firehydrant
+      type: openapi
+      source: https://raw.githubusercontent.com/firehydrant/firehydrant-go-sdk/main/openapi.yaml
+    - name: rootly
+      type: openapi
+      source: https://raw.githubusercontent.com/Rootly-AI-Labs/Rootly-MCP-server/main/rootly_openapi.json
 
   iot:
     - name: aws-greengrass
@@ -1502,6 +1532,27 @@ clients:
     - name: ip2location-io
       type: openapi
       source: https://api.apis.guru/v2/specs/ip2location.io/1.0/openapi.json
+    - name: stadia-maps
+      type: openapi
+      source: https://api.stadiamaps.com/openapi.yaml
+    - name: geoapify-forward-geocoding
+      type: openapi
+      source: https://raw.githubusercontent.com/geoapify/geoapify-openapi-specs/main/api-specs/geocoding/forward_geocoding.yaml
+    - name: geoapify-reverse-geocoding
+      type: openapi
+      source: https://raw.githubusercontent.com/geoapify/geoapify-openapi-specs/main/api-specs/geocoding/reverse_geocoding.yaml
+    - name: geoapify-address-autocomplete
+      type: openapi
+      source: https://raw.githubusercontent.com/geoapify/geoapify-openapi-specs/main/api-specs/geocoding/address_autocomplete.yaml
+    - name: geoapify-routing
+      type: openapi
+      source: https://raw.githubusercontent.com/geoapify/geoapify-openapi-specs/main/api-specs/routing/routing.yaml
+    - name: geoapify-places
+      type: openapi
+      source: https://raw.githubusercontent.com/geoapify/geoapify-openapi-specs/main/api-specs/places/places.yaml
+    - name: geoapify-isoline
+      type: openapi
+      source: https://raw.githubusercontent.com/geoapify/geoapify-openapi-specs/main/api-specs/isoline/isoline.yaml
 
   marketing:
     - name: braze
@@ -2035,6 +2086,12 @@ clients:
     - name: ergast-f1
       type: openapi
       source: https://raw.githubusercontent.com/adampax/ergast-f1-openapi-doc/master/ergast-openapi-doc.yaml
+    - name: randomlovecraft
+      type: openapi
+      source: https://api.apis.guru/v2/specs/randomlovecraft.com/1.0/openapi.json
+    - name: randommer
+      type: openapi
+      source: https://api.apis.guru/v2/specs/randommer.io/v1/openapi.json
 
   sci-fi:
     - name: swapi
@@ -2579,6 +2636,21 @@ clients:
     - name: quotes-rest
       type: openapi
       source: https://api.apis.guru/v2/specs/quotes.rest/3.1/openapi.json
+    - name: fungenerators-trivia
+      type: openapi
+      source: https://api.apis.guru/v2/specs/fungenerators.com/trivia/1.5/swagger.json
+    - name: fungenerators-riddle
+      type: openapi
+      source: https://api.apis.guru/v2/specs/fungenerators.com/riddle/1.5/openapi.json
+    - name: fungenerators-shakespeare
+      type: openapi
+      source: https://api.apis.guru/v2/specs/fungenerators.com/shakespeare/1.5/openapi.json
+    - name: fungenerators-pirate
+      type: openapi
+      source: https://api.apis.guru/v2/specs/fungenerators.com/pirate/1.5/openapi.json
+    - name: lambdatest-screenshots
+      type: openapi
+      source: https://api.apis.guru/v2/specs/lambdatest.com/1.0.1/openapi.json
 
   translation:
     - name: deepl
