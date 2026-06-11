@@ -281,8 +281,8 @@ export def "train post" [
 # List Classifiers
 #
 # GET /v1/classifiers
-# operationId: list_classifiers_v1_classifiers_post
-export def "classifiers post" [
+# operationId: list_classifiers_v1_classifiers_get
+export def "classifiers get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,8 +302,8 @@ export def "classifiers post" [
 # List Classifiers
 #
 # POST /v1/classifiers
-# operationId: list_classifiers_v1_classifiers_post
-export def "classifiers post-1" [
+# operationId: list_classifiers_v1_classifiers_get
+export def "classifiers get-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

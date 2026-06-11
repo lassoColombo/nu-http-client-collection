@@ -1,4 +1,4 @@
-# Auto-generated client for logflare v1.43.4
+# Auto-generated client for logflare v1.44.3
 # Source: https://logflare.app/api/openapi
 # Auth: --token flag or $env.LOGFLARE_API_KEY
 
