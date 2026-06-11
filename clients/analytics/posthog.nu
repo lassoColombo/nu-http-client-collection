@@ -5466,8 +5466,6 @@ export def "environments-error-tracking-issues get" [
 #
 # DEPRECATED
 # operationId: environments_error_tracking_issues_update
-# --external_issues item shape: {integration_id: int, config: any, issue: string}
-# --cohort shape: {id?: int, name?: string}
 @deprecated
 export def "environments-error-tracking-issues update" [
   environment_id: string
@@ -5479,18 +5477,15 @@ export def "environments-error-tracking-issues update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string@status-completer-1 # * `archived` - Archived * `active` - Active * `resolved` - Resolved * `pending_release` - Pending release * `suppressed` - Suppressed
-  --name: string # nullable
-  --description: string # nullable
-  first_seen: string # format: date-time
-  assignee: record
-  external_issues: list # item shape: {integration_id: int, config: any, issue: string}
+  --status: any # Issue status to set. Deprecated archived and pending_release values are rejected.  * `active` - active * `resolved` - resolved * `suppressed` - suppressed
+  --name: string # Optional issue display name. (nullable)
+  --description: string # Optional issue description. (nullable)
 ]: any -> record<id: string, status: string, name: string, description: string, first_seen: string, assignee: record<id: any, type: string>, external_issues: table<id: string, integration: record, integration_id: int, config: any, issue: string, external_url: string>, cohort: record<id: int, name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/environments/($environment_id)/error_tracking/issues/($id)/")
-  let body = {status: $status, name: $name, description: $description, first_seen: $first_seen, assignee: $assignee, external_issues: $external_issues} | compact
+  let body = {status: $status, name: $name, description: $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -5501,8 +5496,6 @@ export def "environments-error-tracking-issues update" [
 #
 # DEPRECATED
 # operationId: environments_error_tracking_issues_partial_update
-# --external_issues item shape: {integration_id: int, config: any, issue: string}
-# --cohort shape: {id?: int, name?: string}
 @deprecated
 export def "environments-error-tracking-issues patch" [
   environment_id: string
@@ -5514,18 +5507,15 @@ export def "environments-error-tracking-issues patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string@status-completer-1 # * `archived` - Archived * `active` - Active * `resolved` - Resolved * `pending_release` - Pending release * `suppressed` - Suppressed
-  --name: string # nullable
-  --description: string # nullable
-  --first-seen: string # format: date-time
-  --assignee: record
-  --external-issues: list # item shape: {integration_id: int, config: any, issue: string}
+  --status: any # Issue status to set. Deprecated archived and pending_release values are rejected.  * `active` - active * `resolved` - resolved * `suppressed` - suppressed
+  --name: string # Optional issue display name. (nullable)
+  --description: string # Optional issue description. (nullable)
 ]: any -> record<id: string, status: string, name: string, description: string, first_seen: string, assignee: record<id: any, type: string>, external_issues: table<id: string, integration: record, integration_id: int, config: any, issue: string, external_url: string>, cohort: record<id: int, name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/environments/($environment_id)/error_tracking/issues/($id)/")
-  let body = {status: $status, name: $name, description: $description, first_seen: $first_seen, assignee: $assignee, external_issues: $external_issues} | compact
+  let body = {status: $status, name: $name, description: $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -21972,7 +21962,7 @@ export def "environments-conversations list" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # Number of results to return per page.
   --offset: int # The initial index from which to return the results.
-]: nothing -> record<count: int, next: string, previous: string, results: table<id: string, status: record, title: string, user: record, created_at: string, updated_at: string, type: record, is_internal: bool, slack_thread_key: string, slack_workspace_domain: string>> {
+]: nothing -> record<count: int, next: string, previous: string, results: table<id: string, status: record, title: string, topic: any, user: record, created_at: string, updated_at: string, type: record, is_internal: bool, slack_thread_key: string, slack_workspace_domain: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -22030,7 +22020,7 @@ export def "environments-conversations get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<id: string, status: record, title: string, user: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, created_at: string, updated_at: string, type: record, is_internal: bool, slack_thread_key: string, slack_workspace_domain: string, messages: list<record>, has_unsupported_content: bool, agent_mode: string, is_sandbox: bool, pending_approvals: list<record>> {
+]: nothing -> record<id: string, status: record, title: string, topic: any, user: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, created_at: string, updated_at: string, type: record, is_internal: bool, slack_thread_key: string, slack_workspace_domain: string, messages: list<record>, has_unsupported_content: bool, agent_mode: string, is_sandbox: bool, pending_approvals: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/environments/($project_id)/conversations/($conversation)/")
@@ -22103,7 +22093,7 @@ export def "environments-conversations-cancel patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body: record
-]: any -> record<id: string, status: record, title: string, user: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, created_at: string, updated_at: string, type: record, is_internal: bool, slack_thread_key: string, slack_workspace_domain: string, messages: list<record>, has_unsupported_content: bool, agent_mode: string, is_sandbox: bool, pending_approvals: list<record>> {
+]: any -> record<id: string, status: record, title: string, topic: any, user: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, created_at: string, updated_at: string, type: record, is_internal: bool, slack_thread_key: string, slack_workspace_domain: string, messages: list<record>, has_unsupported_content: bool, agent_mode: string, is_sandbox: bool, pending_approvals: list<record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -22127,7 +22117,7 @@ export def "environments-conversations-queue get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<id: string, status: record, title: string, user: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, created_at: string, updated_at: string, type: record, is_internal: bool, slack_thread_key: string, slack_workspace_domain: string, messages: list<record>, has_unsupported_content: bool, agent_mode: string, is_sandbox: bool, pending_approvals: list<record>> {
+]: nothing -> record<id: string, status: record, title: string, topic: any, user: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, created_at: string, updated_at: string, type: record, is_internal: bool, slack_thread_key: string, slack_workspace_domain: string, messages: list<record>, has_unsupported_content: bool, agent_mode: string, is_sandbox: bool, pending_approvals: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/environments/($project_id)/conversations/($conversation)/queue/")
@@ -22150,7 +22140,7 @@ export def "environments-conversations-queue create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body: record
-]: any -> record<id: string, status: record, title: string, user: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, created_at: string, updated_at: string, type: record, is_internal: bool, slack_thread_key: string, slack_workspace_domain: string, messages: list<record>, has_unsupported_content: bool, agent_mode: string, is_sandbox: bool, pending_approvals: list<record>> {
+]: any -> record<id: string, status: record, title: string, topic: any, user: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, created_at: string, updated_at: string, type: record, is_internal: bool, slack_thread_key: string, slack_workspace_domain: string, messages: list<record>, has_unsupported_content: bool, agent_mode: string, is_sandbox: bool, pending_approvals: list<record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -22176,7 +22166,7 @@ export def "environments-conversations-queue patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body: record
-]: any -> record<id: string, status: record, title: string, user: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, created_at: string, updated_at: string, type: record, is_internal: bool, slack_thread_key: string, slack_workspace_domain: string, messages: list<record>, has_unsupported_content: bool, agent_mode: string, is_sandbox: bool, pending_approvals: list<record>> {
+]: any -> record<id: string, status: record, title: string, topic: any, user: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, created_at: string, updated_at: string, type: record, is_internal: bool, slack_thread_key: string, slack_workspace_domain: string, messages: list<record>, has_unsupported_content: bool, agent_mode: string, is_sandbox: bool, pending_approvals: list<record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -22224,7 +22214,7 @@ export def "environments-conversations-queue-clear create" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --body: record
-]: any -> record<id: string, status: record, title: string, user: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, created_at: string, updated_at: string, type: record, is_internal: bool, slack_thread_key: string, slack_workspace_domain: string, messages: list<record>, has_unsupported_content: bool, agent_mode: string, is_sandbox: bool, pending_approvals: list<record>> {
+]: any -> record<id: string, status: record, title: string, topic: any, user: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, created_at: string, updated_at: string, type: record, is_internal: bool, slack_thread_key: string, slack_workspace_domain: string, messages: list<record>, has_unsupported_content: bool, agent_mode: string, is_sandbox: bool, pending_approvals: list<record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -35114,8 +35104,6 @@ export def "projects-error-tracking-issues get" [
 # PUT /api/projects/{project_id}/error_tracking/issues/{id}/
 #
 # operationId: error_tracking_issues_update
-# --external_issues item shape: {integration_id: int, config: any, issue: string}
-# --cohort shape: {id?: int, name?: string}
 export def "projects-error-tracking-issues update" [
   id: string
   project_id: string
@@ -35126,18 +35114,15 @@ export def "projects-error-tracking-issues update" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string@status-completer-1 # * `archived` - Archived * `active` - Active * `resolved` - Resolved * `pending_release` - Pending release * `suppressed` - Suppressed
-  --name: string # nullable
-  --description: string # nullable
-  first_seen: string # format: date-time
-  assignee: record
-  external_issues: list # item shape: {integration_id: int, config: any, issue: string}
+  --status: any # Issue status to set. Deprecated archived and pending_release values are rejected.  * `active` - active * `resolved` - resolved * `suppressed` - suppressed
+  --name: string # Optional issue display name. (nullable)
+  --description: string # Optional issue description. (nullable)
 ]: any -> record<id: string, status: string, name: string, description: string, first_seen: string, assignee: record<id: any, type: string>, external_issues: table<id: string, integration: record, integration_id: int, config: any, issue: string, external_url: string>, cohort: record<id: int, name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/projects/($project_id)/error_tracking/issues/($id)/")
-  let body = {status: $status, name: $name, description: $description, first_seen: $first_seen, assignee: $assignee, external_issues: $external_issues} | compact
+  let body = {status: $status, name: $name, description: $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -35147,8 +35132,6 @@ export def "projects-error-tracking-issues update" [
 # PATCH /api/projects/{project_id}/error_tracking/issues/{id}/
 #
 # operationId: error_tracking_issues_partial_update
-# --external_issues item shape: {integration_id: int, config: any, issue: string}
-# --cohort shape: {id?: int, name?: string}
 export def "projects-error-tracking-issues patch" [
   id: string
   project_id: string
@@ -35159,18 +35142,15 @@ export def "projects-error-tracking-issues patch" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --status: string@status-completer-1 # * `archived` - Archived * `active` - Active * `resolved` - Resolved * `pending_release` - Pending release * `suppressed` - Suppressed
-  --name: string # nullable
-  --description: string # nullable
-  --first-seen: string # format: date-time
-  --assignee: record
-  --external-issues: list # item shape: {integration_id: int, config: any, issue: string}
+  --status: any # Issue status to set. Deprecated archived and pending_release values are rejected.  * `active` - active * `resolved` - resolved * `suppressed` - suppressed
+  --name: string # Optional issue display name. (nullable)
+  --description: string # Optional issue description. (nullable)
 ]: any -> record<id: string, status: string, name: string, description: string, first_seen: string, assignee: record<id: any, type: string>, external_issues: table<id: string, integration: record, integration_id: int, config: any, issue: string, external_url: string>, cohort: record<id: int, name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/projects/($project_id)/error_tracking/issues/($id)/")
-  let body = {status: $status, name: $name, description: $description, first_seen: $first_seen, assignee: $assignee, external_issues: $external_issues} | compact
+  let body = {status: $status, name: $name, description: $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -52426,11 +52406,13 @@ export def "projects-signals-scout-runs list" [
   --date-to: string # ISO-8601 exclusive upper bound on `created_at`. Pass to walk back past the result cap on subsequent calls (cursor-style: set to the `started_at` of the oldest run from the prior page). (format: date-time)
   --emitted: string@bool-completer # Filter by emit outcome. `true` returns only runs that emitted at least one finding (`emitted_count > 0`); `false` returns only runs that emitted nothing. Omit for both.
   --limit: int # Max rows to return (default 20, hard cap 100).
+  --skill-name: string # Exact-match filter on the scout skill (e.g. `signals-scout-errors`). Narrows the run dump to a single scout — the primary scoping path when a specialist dedupes against its own past runs. Omit to span every scout on the team.
+  --skill-version: int # Exact-match filter on the skill version. Pair with `skill_name` to pin one version; omit for all.
   --text: string # Case-insensitive substring match on the scout's end-of-run `summary`. Omit to skip the filter.
-]: nothing -> table<run_id: string, skill_name: string, skill_version: int, status: string, started_at: string, completed_at: string, task_id: string, task_run_id: string, task_url: string, summary: string, emitted_count: int, emitted_finding_ids: list<string>> {
+]: nothing -> table<run_id: string, skill_name: string, skill_version: int, status: string, started_at: string, completed_at: string, task_id: string, task_run_id: string, task_url: string, summary: string, error: string, failure_reason: string, emitted_count: int, emitted_finding_ids: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "emitted" $emitted "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "date_from" $date_from "scalar") (serialize-qp "date_to" $date_to "scalar") (serialize-qp "emitted" $emitted "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "skill_name" $skill_name "scalar") (serialize-qp "skill_version" $skill_version "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/projects/($project_id)/signals/scout/runs/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -52439,11 +52421,11 @@ export def "projects-signals-scout-runs list" [
 
 # Get a run by ID
 #
-# GET /api/projects/{project_id}/signals/scout/runs/{id}/
+# GET /api/projects/{project_id}/signals/scout/runs/{run_id}/
 # operationId: signals_scout_runs_retrieve
 export def "projects-signals-scout-runs get" [
-  id: string
   project_id: string
+  run_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -52451,10 +52433,10 @@ export def "projects-signals-scout-runs get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<run_id: string, skill_name: string, skill_version: int, status: string, started_at: string, completed_at: string, task_id: string, task_run_id: string, task_url: string, summary: string, emitted_count: int, emitted_finding_ids: list<string>> {
+]: nothing -> record<run_id: string, skill_name: string, skill_version: int, status: string, started_at: string, completed_at: string, task_id: string, task_run_id: string, task_url: string, summary: string, error: string, failure_reason: string, emitted_count: int, emitted_finding_ids: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/projects/($project_id)/signals/scout/runs/($id)/")
+  let full_url = (build-url $base $"/api/projects/($project_id)/signals/scout/runs/($run_id)/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
@@ -52462,11 +52444,11 @@ export def "projects-signals-scout-runs get" [
 
 # List a run's emitted findings
 #
-# GET /api/projects/{project_id}/signals/scout/runs/{id}/emissions/
+# GET /api/projects/{project_id}/signals/scout/runs/{run_id}/emissions/
 # operationId: signals_scout_runs_emissions
 export def "projects-signals-scout-runs-emissions emissions" [
-  id: string
   project_id: string
+  run_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -52477,7 +52459,7 @@ export def "projects-signals-scout-runs-emissions emissions" [
 ]: nothing -> table<id: string, run_id: string, finding_id: string, description: string, weight: float, confidence: float, severity: any, source_id: string, emitted_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/projects/($project_id)/signals/scout/runs/($id)/emissions/")
+  let full_url = (build-url $base $"/api/projects/($project_id)/signals/scout/runs/($run_id)/emissions/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
@@ -52485,12 +52467,12 @@ export def "projects-signals-scout-runs-emissions emissions" [
 
 # Emit a finding for a run
 #
-# POST /api/projects/{project_id}/signals/scout/runs/{id}/emit-signal/
+# POST /api/projects/{project_id}/signals/scout/runs/{run_id}/emit-signal/
 # operationId: signals_scout_emit_signal
 # --evidence item shape: {source_product: string, summary: string, entity_id?: string}
 export def "projects-signals-scout-runs-emit-signal signal" [
-  id: string
   project_id: string
+  run_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -52511,7 +52493,7 @@ export def "projects-signals-scout-runs-emit-signal signal" [
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/projects/($project_id)/signals/scout/runs/($id)/emit-signal/")
+  let full_url = (build-url $base $"/api/projects/($project_id)/signals/scout/runs/($run_id)/emit-signal/")
   let body = {description: $description, confidence: $confidence, evidence: $evidence, hypothesis: $hypothesis, severity: $severity, dedupe_keys: $dedupe_keys, time_range: $time_range, mcp_trace_id: $mcp_trace_id, finding_id: $finding_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -52532,12 +52514,14 @@ export def "projects-signals-scout-scratchpad search" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --content-max-chars: int # Truncate each entry's `content` to the first N characters (a preview). Omit for the full body. Ignored when `keys_only=true`.
+  --keys-only: string@bool-completer # When true, blank each entry's `content` and return only keys + metadata. Use to scan which memories exist without pulling their (potentially large) bodies, then re-query the ones worth a full read. Takes precedence over `content_max_chars`.
   --limit: int # Max rows to return (default 20, hard cap 100).
   --text: string # ILIKE substring match against `content`. Omit to return the most recent entries.
 ]: nothing -> table<key: string, content: string, created_at: string, updated_at: string, created_by_run_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "content_max_chars" $content_max_chars "scalar") (serialize-qp "keys_only" $keys_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "text" $text "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/api/projects/($project_id)/signals/scout/scratchpad/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

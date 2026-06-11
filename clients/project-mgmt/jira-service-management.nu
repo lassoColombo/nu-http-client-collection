@@ -1,4 +1,4 @@
-# Auto-generated client for Service Management Public REST API v1001.0.0-SNAPSHOT-32b43b28d3f0c3ee7f2535b395e90b205ac3bc6f
+# Auto-generated client for Service Management Public REST API v1001.0.0-SNAPSHOT-2bc9656aea7910482196643967ec7052f5440ae8
 # Source: https://developer.atlassian.com/cloud/jira/service-desk/swagger.v3.json
 # Auth: --token flag or $env.SERVICE_MANAGEMENT_PUBLIC_REST_API_TOKEN
 

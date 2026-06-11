@@ -381,7 +381,7 @@ export def "files request" [
   --pagination-token: string # The pagination token returned by the previous list files request.
   --after: string # Only included for compatibility. Use `pagination_token` instead.
   --filter: string # AIP-160 filter expression to narrow down results.  **Filterable fields:**  | Field | Type | Description | |-------|------|-------------| | `name` (or `file_name`) | string | Fuzzy match on filename | | `file_id` | string | Exact match on file ID | | `size_bytes` | integer | File size in bytes | | `content_type` | string | Partial match on MIME type (e.g. `"pdf"` matches `"application/pdf"`) | | `created_at` | timestamp | RFC 3339 timestamp (e.g. `"2024-01-01T00:00:00Z"`) | | `expires_at` | timestamp | RFC 3339 timestamp | | `upload_status` | string | Upload status (`"Complete"`) | | `user_defined_id` | string | Exact match on user-defined ID |  **Operators:** `=`, `!=`, `>`, `>=`, `<`, `<=`  **Logical:** `AND`, `OR`, `NOT`  **Examples:** - `name:"quarterly report"` — fuzzy match on filename - `content_type = "pdf"` — files with PDF content type - `size_bytes > 1000000 AND created_at > "2024-01-01T00:00:00Z"` — files larger than 1 MB created after Jan 1, 2024 - `file_id = "file_abc123"` — exact file ID match
-]: nothing -> record<data: table<bytes: int, created_at: int, expires_at: int, filename: string, id: string, object: string, purpose: string>, pagination_token: string> {
+]: nothing -> record<data: table<bytes: int, created_at: int, expires_at: int, filename: string, id: string, object: string, public_url: string, public_url_expires_at: int, purpose: string>, pagination_token: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "pagination_token" $pagination_token "scalar") (serialize-qp "after" $after "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
@@ -406,7 +406,7 @@ export def "files request-1" [
   --expires-after: int # Optional TTL in seconds (measured from upload time). Must be between 3600 (1 hour) and 2592000 (30 days). If unset the file does not expire.  Accepts either a plain integer or the OpenAI SDK deepObject form (`expires_after[anchor]=created_at` + `expires_after[seconds]=N`) as separate multipart fields. The anchor+seconds form must arrive before the `file` part. (nullable, format: int64)
   file: string # The file to upload. The filename from the multipart `Content-Disposition: filename=` header is recorded as the file's `filename`. (format: binary)
   --purpose: string # Optional purpose label, accepted for OpenAI SDK compatibility. xAI does not enforce or interpret this field. Setting `"assistants"` is the conventional choice. (nullable)
-]: any -> record<bytes: int, created_at: int, expires_at: int, filename: string, id: string, object: string, purpose: string> {
+]: any -> record<bytes: int, created_at: int, expires_at: int, filename: string, id: string, object: string, public_url: string, public_url_expires_at: int, purpose: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -431,7 +431,7 @@ export def "files request-by-file_id" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<bytes: int, created_at: int, expires_at: int, filename: string, id: string, object: string, purpose: string> {
+]: nothing -> record<bytes: int, created_at: int, expires_at: int, filename: string, id: string, object: string, public_url: string, public_url_expires_at: int, purpose: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/files/($file_id)")
@@ -484,6 +484,54 @@ export def "files-content request" [
   let accept_val = "application/octet-stream"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Create a permanent, unauthenticated public URL for an existing file. The underlying file is unaffected and can still be fetched through the authenticated content endpoint. Use this when you want to share a stored asset (image, video, PDF) outside your API-keyed environment. Public URLs can be revoked at any time via `POST /v1/files/{file_id}/public-url/revoke`.
+#
+# POST /v1/files/{file_id}/public-url
+# operationId: handle_create_public_url_request
+export def "files-public-url request" [
+  file_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --expires-after: int # Seconds from now until the public URL expires. Must be between `3600` (1 hour) and `2592000` (30 days). Omit to inherit the file's expiry (if it has one) or to make the URL valid indefinitely. (nullable, format: int64)
+]: any -> record<expires_at: int, public_url: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v1/files/($file_id)/public-url")
+  let body = {expires_after: $expires_after} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+}
+
+# Revoke the active public URL for a file. The underlying file remains available through the authenticated content endpoint. Revoke is idempotent — calling it on a file without an active public URL returns `revoked: false` without an error.
+#
+# POST /v1/files/{file_id}/public-url/revoke
+# operationId: handle_revoke_public_url_request
+export def "files-public-url-revoke request" [
+  file_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> record<id: string, public_url: string, revoked: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/v1/files/($file_id)/public-url/revoke")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
 # List all image generation models available to the authenticating API key with full information. Additional information compared to /v1/models includes modalities, fingerprint and alias(es).
@@ -550,13 +598,14 @@ export def "images-edits request" [
   prompt: string # Prompt for image editing.
   --resolution: any
   --response-format: string # Response format to return the image in. Can be `url` or `b64_json`. If `b64_json` is specified, the image will be returned as a base64-encoded string instead of a url to the generated image file. (nullable, default: url)
+  --storage-options: any
   --user: string # A unique identifier representing your end-user, which can help xAI to monitor and detect abuse. (nullable)
-]: any -> record<data: table<b64_json: string, mime_type: string, url: string>, usage: any> {
+]: any -> record<data: table<b64_json: string, file_output: any, mime_type: string, storage_error: string, url: string>, usage: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/images/edits")
-  let body = {aspect_ratio: $aspect_ratio, image: $image, images: $images, model: $model, n: $n, prompt: $prompt, resolution: $resolution, response_format: $response_format, user: $user} | compact
+  let body = {aspect_ratio: $aspect_ratio, image: $image, images: $images, model: $model, n: $n, prompt: $prompt, resolution: $resolution, response_format: $response_format, storage_options: $storage_options, user: $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -581,13 +630,14 @@ export def "images-generations request" [
   --prompt: string # Prompt for image generation.
   --resolution: any
   --response-format: string # Response format to return the image in. Can be url or b64_json. If b64_json is specified, the image will be returned as a base64-encoded string instead of a url to the generated image file. (nullable, default: url)
+  --storage-options: any
   --user: string # A unique identifier representing your end-user, which can help xAI to monitor and detect abuse. (nullable)
-]: any -> record<data: table<b64_json: string, mime_type: string, url: string>, usage: any> {
+]: any -> record<data: table<b64_json: string, file_output: any, mime_type: string, storage_error: string, url: string>, usage: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/images/generations")
-  let body = {aspect_ratio: $aspect_ratio, model: $model, n: $n, prompt: $prompt, resolution: $resolution, response_format: $response_format, user: $user} | compact
+  let body = {aspect_ratio: $aspect_ratio, model: $model, n: $n, prompt: $prompt, resolution: $resolution, response_format: $response_format, storage_options: $storage_options, user: $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1082,6 +1132,7 @@ export def "videos-edits request" [
   --model: string # Model to be used. (nullable, e.g. grok-imagine-video)
   --output: any
   prompt: string # Prompt for video editing.
+  --storage-options: any
   --user: string # A unique identifier representing your end-user. (nullable)
   video: record # Video input for editing and extension requests. Accepts a public URL, a base64-encoded data URL, or a file_id from the xAI Files API. — shape: {file_id?: string, url?: string}
 ]: any -> record<request_id: string> {
@@ -1089,7 +1140,7 @@ export def "videos-edits request" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/videos/edits")
-  let body = {model: $model, output: $output, prompt: $prompt, user: $user, video: $video} | compact
+  let body = {model: $model, output: $output, prompt: $prompt, storage_options: $storage_options, user: $user, video: $video} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1113,13 +1164,14 @@ export def "videos-extensions request" [
   --model: string # Model to be used. (nullable, e.g. grok-imagine-video)
   --output: any
   prompt: string # Prompt describing what should happen next in the video.
+  --storage-options: any
   video: record # Video input for editing and extension requests. Accepts a public URL, a base64-encoded data URL, or a file_id from the xAI Files API. — shape: {file_id?: string, url?: string}
 ]: any -> record<request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/videos/extensions")
-  let body = {duration: $duration, model: $model, output: $output, prompt: $prompt, video: $video} | compact
+  let body = {duration: $duration, model: $model, output: $output, prompt: $prompt, storage_options: $storage_options, video: $video} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1147,13 +1199,14 @@ export def "videos-generations request" [
   --prompt: string # Prompt for video generation. Required for text-to-video (T2V) and reference-to-video (R2V). Optional for image-to-video (I2V) — when omitted, the model generates a video from the image alone.
   --reference-images: list # Optional reference images for reference-to-video (R2V) generation. When provided generates video using these images as style/content references. — item shape: {file_id?: string, url?: string}
   --resolution: any
+  --storage-options: any
   --user: string # A unique identifier representing your end-user. (nullable)
 ]: any -> record<request_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/videos/generations")
-  let body = {aspect_ratio: $aspect_ratio, duration: $duration, image: $image, model: $model, output: $output, prompt: $prompt, reference_images: $reference_images, resolution: $resolution, user: $user} | compact
+  let body = {aspect_ratio: $aspect_ratio, duration: $duration, image: $image, model: $model, output: $output, prompt: $prompt, reference_images: $reference_images, resolution: $resolution, storage_options: $storage_options, user: $user} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

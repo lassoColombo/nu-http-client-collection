@@ -69,7 +69,7 @@ def auth-scheme-completer [] { ["private-token" "query-private_token"] }
 def visibility-completer [] { ["internal" "private" "public"] }
 def order-by-completer [] { ["id" "name" "path" "similarity"] }
 def sort-completer [] { ["asc" "desc"] }
-def min-access-level-completer [] { ["10" "15" "20" "30" "40" "50"] }
+def min-access-level-completer [] { ["10" "15" "20" "25" "30" "40" "50"] }
 def project-creation-level-completer [] { ["administrator" "developer" "maintainer" "noone" "owner"] }
 def subgroup-creation-level-completer [] { ["maintainer" "owner"] }
 def default-branch-protection-completer [] { ["0" "1" "2" "3" "4"] }
@@ -80,7 +80,7 @@ def tool-approval-for-session-availability-completer [] { ["default_off" "defaul
 def shared-runners-setting-completer [] { ["disabled_and_overridable" "disabled_and_unoverridable" "enabled"] }
 def order-by-completer-1 [] { ["created_at" "id" "last_activity_at" "name" "path" "similarity" "star_count" "updated_at"] }
 def order-by-completer-2 [] { ["created_at" "id" "last_activity_at" "name" "path" "star_count" "updated_at"] }
-def group-access-completer [] { ["10" "15" "20" "30" "40" "50"] }
+def group-access-completer [] { ["10" "15" "20" "25" "30" "40" "50"] }
 def type-completer [] { ["group_type" "instance_type" "project_type"] }
 def status-completer [] { ["active" "never_contacted" "offline" "online" "paused" "stale"] }
 def accept-completer [] { ["application/json" "application/octet-stream"] }
@@ -88,8 +88,8 @@ def order-by-completer-3 [] { ["created_at" "name" "project_path" "type" "versio
 def package-type-completer [] { ["cargo" "composer" "conan" "debian" "generic" "golang" "helm" "maven" "ml_model" "npm" "nuget" "pypi" "rpm" "rubygems" "terraform_module"] }
 def status-completer-1 [] { ["default" "deprecated" "error" "hidden" "pending_destruction" "processing"] }
 def variable-type-completer [] { ["env_var" "file"] }
-def access-level-completer [] { ["10" "15" "20" "30" "40" "5" "50"] }
-def access-level-completer-1 [] { ["10" "15" "20" "30" "40" "50"] }
+def access-level-completer [] { ["10" "15" "20" "25" "30" "40" "5" "50"] }
+def access-level-completer-1 [] { ["10" "15" "20" "25" "30" "40" "50"] }
 def state-completer [] { ["all" "closed" "opened"] }
 def order-by-completer-4 [] { ["created_at" "due_date" "label_priority" "milestone_due" "popularity" "priority" "relative_position" "title" "updated_at" "weight"] }
 def due-date-completer [] { ["" "0" "any" "month" "next_month_and_previous_two_weeks" "overdue" "today" "tomorrow" "week"] }
@@ -200,7 +200,7 @@ def squash-option-completer [] { ["always" "default_off" "default_on" "never"] }
 def requirements-access-level-completer [] { ["disabled" "enabled" "private"] }
 def repository-object-format-completer [] { ["sha1" "sha256"] }
 def ci-pipeline-variables-minimum-override-role-completer [] { ["developer" "maintainer" "no_one_allowed" "owner"] }
-def shared-min-access-level-completer [] { ["10" "15" "20" "30" "40" "50"] }
+def shared-min-access-level-completer [] { ["10" "15" "20" "25" "30" "40" "50"] }
 def task-completer [] { ["eager" "prune"] }
 def push-access-level-completer [] { ["0" "30" "40" "60"] }
 def merge-access-level-completer [] { ["0" "30" "40" "60"] }

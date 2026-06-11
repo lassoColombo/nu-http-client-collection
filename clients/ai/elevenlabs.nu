@@ -8665,7 +8665,7 @@ export def "music-plan plan" [
   --music-length-ms: any # The length of the composition plan to generate in milliseconds. Must be between 3000ms and 600000ms. Optional - if not provided, the model will choose a length based on the prompt.
   --source-composition-plan: any # An optional composition plan to use as a source for the new composition plan.
   --model-id: string@model-id-completer-1 # The model to use for the generation. (default: music_v1)
-]: any -> record<positive_global_styles: list<string>, negative_global_styles: list<string>, sections: table<section_name: string, positive_local_styles: list, negative_local_styles: list, duration_ms: int, lines: list, source_from: any>> {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

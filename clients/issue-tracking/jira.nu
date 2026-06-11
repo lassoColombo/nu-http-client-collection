@@ -1,4 +1,4 @@
-# Auto-generated client for The Jira Cloud platform REST API v1001.0.0-SNAPSHOT-32b43b28d3f0c3ee7f2535b395e90b205ac3bc6f
+# Auto-generated client for The Jira Cloud platform REST API v1001.0.0-SNAPSHOT-2bc9656aea7910482196643967ec7052f5440ae8
 # Source: https://developer.atlassian.com/cloud/jira/platform/swagger-v3.v3.json
 # Auth: --token flag or $env.THE_JIRA_CLOUD_PLATFORM_REST_API_TOKEN
 

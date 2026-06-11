@@ -52,6 +52,18 @@ clients:
     - name: deepinfra
       type: openapi
       source: https://api.deepinfra.com/openapi.json
+    - name: anthropic
+      type: openapi
+      source: https://storage.googleapis.com/stainless-sdk-openapi-specs/anthropic/anthropic-5ce93251152bd7c4c288dacdf5a445383825ba50bc472ff9e9821ee9455e3564.yml
+    - name: groq
+      type: openapi
+      source: https://storage.googleapis.com/stainless-sdk-openapi-specs/groqcloud/groqcloud-0298a69b7d74303a353e8a586d85e5cc769b9560920487fadfe773c0100af249.yml
+    - name: mistral
+      type: openapi
+      source: https://docs.mistral.ai/openapi.yaml
+    - name: jina
+      type: openapi
+      source: https://api.jina.ai/openapi.json
 
   analytics:
     - name: google-analytics
@@ -66,6 +78,15 @@ clients:
     - name: posthog
       type: openapi
       source: https://us.posthog.com/api/schema/
+    - name: google-analytics-reporting
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/analyticsreporting/v4/openapi.json
+    - name: hubspot-analytics
+      type: openapi
+      source: https://api.apis.guru/v2/specs/hubapi.com/analytics/v3/openapi.json
+    - name: youtube-analytics
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/youtubeAnalytics/v2/openapi.json
 
   anime:
     - name: anilist
@@ -93,6 +114,19 @@ clients:
     - name: ghibli
       type: openapi
       source: https://ghibliapi.vercel.app/swagger.yaml
+    - name: mangadex
+      type: openapi
+      source: https://api.mangadex.org/docs/static/api.yaml
+    - name: animethemes
+      type: graphql
+      source: https://graphql.animethemes.moe
+      flags:
+        default-base-url: https://graphql.animethemes.moe
+
+  calendar:
+    - name: google-calendar
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/calendar/v3/openapi.json
 
   cdn:
     - name: cloudflare
@@ -110,6 +144,18 @@ clients:
     - name: azure-cdn-waf
       type: openapi
       source: https://api.apis.guru/v2/specs/azure.com/cdn-cdnwebapplicationfirewall/2019-06-15-preview/swagger.json
+    - name: vercel
+      type: openapi
+      source: https://openapi.vercel.sh/
+    - name: bunny
+      type: openapi
+      source: https://core-api-public-docs.b-cdn.net/docs/v3/public.json
+    - name: gcore-cdn
+      type: openapi
+      source: https://gcore.com/docs/api-reference/services_docs_mintlify/cdn_api.yaml
+    - name: gcore-fastedge
+      type: openapi
+      source: https://gcore.com/docs/api-reference/services_docs_mintlify/fastedge_api.yaml
 
   chat:
     - name: slack
@@ -130,6 +176,20 @@ clients:
     - name: chatwoot
       type: openapi
       source: https://raw.githubusercontent.com/chatwoot/chatwoot/develop/swagger/swagger.json
+    - name: telegram-bot
+      type: openapi
+      source: https://api.apis.guru/v2/specs/telegram.org/5.0.0/openapi.json
+    - name: zulip
+      type: openapi
+      source: https://raw.githubusercontent.com/zulip/zulip/main/zerver/openapi/zulip.yaml
+    - name: twilio-conversations
+      type: openapi
+      source: https://raw.githubusercontent.com/twilio/twilio-oai/main/spec/json/twilio_conversations_v1.json
+
+  ci-cd:
+    - name: circleci
+      type: openapi
+      source: https://api.apis.guru/v2/specs/circleci.com/v1/openapi.json
 
   cloud:
     - name: digitalocean
@@ -150,6 +210,18 @@ clients:
     - name: openshift-accounts
       type: openapi
       source: https://api.openshift.com/api/accounts_mgmt/v1/openapi
+    - name: linode
+      type: openapi
+      source: https://api.apis.guru/v2/specs/linode.com/4.145.0/openapi.json
+    - name: hetzner-cloud
+      type: openapi
+      source: https://api.apis.guru/v2/specs/hetzner.cloud/1.0.0/openapi.json
+    - name: aws-lightsail
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/lightsail/2016-11-28/openapi.json
+    - name: koyeb
+      type: openapi
+      source: https://raw.githubusercontent.com/koyeb/koyeb-api-client-go/master/api/v1/koyeb/api/openapi.yaml
 
   commerce:
     - name: square
@@ -173,6 +245,21 @@ clients:
     - name: shop-app
       type: openapi
       source: https://api.apis.guru/v2/specs/shop.app/v1/openapi.json
+    - name: etsy
+      type: openapi
+      source: https://www.etsy.com/openapi/generated/oas/3.0.0.json
+    - name: google-shopping-content
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/shoppingcontent/v2/openapi.json
+    - name: ebay-commerce-catalog
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ebay.com/commerce-catalog/v1_beta.5.0/openapi.json
+    - name: ebay-commerce-taxonomy
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ebay.com/commerce-taxonomy/v1.0.0/swagger.json
+    - name: shop-pro
+      type: openapi
+      source: https://api.apis.guru/v2/specs/shop-pro.jp/1.0.0/openapi.json
 
   container-orchestration:
     - name: kubernetes
@@ -190,6 +277,12 @@ clients:
     - name: openfaas
       type: openapi
       source: https://raw.githubusercontent.com/openfaas/faas/master/api-docs/spec.openapi.yml
+    - name: argo-rollouts
+      type: openapi
+      source: https://raw.githubusercontent.com/argoproj/argo-rollouts/master/pkg/apiclient/rollout/rollout.swagger.json
+    - name: karmada
+      type: openapi
+      source: https://raw.githubusercontent.com/karmada-io/karmada/master/api/openapi-spec/swagger.json
 
   containers:
     - name: docker
@@ -210,6 +303,25 @@ clients:
     - name: rekor
       type: openapi
       source: https://raw.githubusercontent.com/sigstore/rekor/main/openapi.yaml
+    - name: quay
+      type: openapi
+      source: https://quay.io/api/v1/discovery
+    - name: dockerhub
+      type: openapi
+      source: https://api.apis.guru/v2/specs/docker.com/hub/beta/openapi.json
+    - name: snyk
+      type: openapi
+      source: https://api.apis.guru/v2/specs/snyk.io/1.0.0/openapi.json
+
+  crm:
+    - name: hubspot-crm
+      type: openapi
+      source: https://api.apis.guru/v2/specs/hubapi.com/crm/v3/openapi.json
+
+  data-pipeline:
+    - name: airflow
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apache.org/airflow/2.5.1/openapi.json
 
   dns:
     - name: aws-route53
@@ -238,6 +350,18 @@ clients:
     - name: resend
       type: openapi
       source: https://raw.githubusercontent.com/resend/resend-openapi/main/resend.yaml
+    - name: mailgun
+      type: openapi
+      source: https://documentation.mailgun.com/_spec/docs/mailgun/api-reference/send/mailgun.yaml?download
+    - name: brevo
+      type: openapi
+      source: https://raw.githubusercontent.com/xdev-software/brevo-java-client/develop/openapi/openapi.yml
+    - name: mailersend
+      type: openapi
+      source: https://api.swaggerhub.com/apis/MailerSend/mailersend-api/1.0.0-oas3.1
+    - name: loops
+      type: openapi
+      source: https://app.loops.so/openapi.json
 
   error-tracking:
     - name: sentry
@@ -255,6 +379,12 @@ clients:
       flags:
         default-base-url: https://api.sumologic.com
         token-env-var: SUMOLOGIC_TOKEN
+    - name: bugsnag
+      type: openapi
+      source: https://api.swaggerhub.com/apis/smartbear-public/bugsnag-data-access-api/2/swagger.json
+      flags:
+        default-base-url: https://api.bugsnag.com
+        token-env-var: BUGSNAG_AUTH_TOKEN
 
   feature-flags:
     - name: launchdarkly
@@ -269,6 +399,18 @@ clients:
     - name: unleash
       type: openapi
       source: https://docs.getunleash.io/api/openapi.json
+    - name: statsig
+      type: openapi
+      source: https://docs.statsig.com/openapi.json
+    - name: devcycle
+      type: openapi
+      source: https://api.devcycle.com/openapi.json
+    - name: growthbook
+      type: openapi
+      source: https://raw.githubusercontent.com/growthbook/growthbook/main/packages/back-end/generated/spec.yaml
+    - name: optimizely
+      type: openapi
+      source: https://api.optimizely.com/swagger.json
 
   finance:
     - name: frankfurter
@@ -295,6 +437,27 @@ clients:
       source: https://api.apis.guru/v2/specs/interzoid.com/getcurrencyrate/1.0.0/openapi.yaml
       flags:
         token-env-var: INTERZOID_TOKEN
+    - name: sonar-trading
+      type: openapi
+      source: https://api.apis.guru/v2/specs/sonar.trading/1.0/swagger.json
+    - name: binance-spot
+      type: openapi
+      source: https://raw.githubusercontent.com/binance/binance-api-swagger/master/spot_api.yaml
+      flags:
+        token-env-var: BINANCE_API_KEY
+
+  forms:
+    - name: google-forms
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/forms/v1/openapi.json
+    - name: formapi-io
+      type: openapi
+      source: https://api.apis.guru/v2/specs/formapi.io/v1/openapi.json
+
+  fraud:
+    - name: aws-fraud-detector
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/frauddetector/2019-11-15/openapi.json
 
   gaming:
     - name: pokeapi
@@ -318,6 +481,25 @@ clients:
       source: https://mingweisamuel.github.io/riotapi-schema/openapi-3.0.0.json
       flags:
         token-env-var: RIOT_API_KEY
+    - name: rawg
+      type: openapi
+      source: https://api.apis.guru/v2/specs/rawg.io/v1.0/openapi.json
+      flags:
+        token-env-var: RAWG_API_KEY
+    - name: google-play-games
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/games/v1/openapi.json
+    - name: google-play-games-configuration
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/gamesConfiguration/v1configuration/openapi.json
+    - name: google-play-games-management
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/gamesManagement/v1management/openapi.json
+
+  healthcare:
+    - name: google-healthcare
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/healthcare/v1beta1/openapi.json
 
   identity:
     - name: okta
@@ -332,6 +514,18 @@ clients:
     - name: ory-hydra
       type: openapi
       source: https://raw.githubusercontent.com/ory/hydra/master/spec/api.json
+    - name: ory-keto
+      type: openapi
+      source: https://raw.githubusercontent.com/ory/keto/master/spec/api.json
+    - name: ory-oathkeeper
+      type: openapi
+      source: https://raw.githubusercontent.com/ory/oathkeeper/master/spec/api.json
+    - name: casdoor
+      type: openapi
+      source: https://raw.githubusercontent.com/casdoor/casdoor/master/swagger/swagger.json
+    - name: fusionauth
+      type: openapi
+      source: https://raw.githubusercontent.com/FusionAuth/fusionauth-openapi/main/openapi.yaml
 
   incident:
     - name: pagerduty
@@ -352,6 +546,15 @@ clients:
     - name: uptime-com
       type: openapi
       source: https://uptime.com/api/v1/openapi/
+    - name: statuspage
+      type: openapi
+      source: https://raw.githubusercontent.com/sbecker59/statuspage-api-client-go/main/api/v1/statuspage/api/openapi.yaml
+    - name: instatus
+      type: openapi
+      source: https://raw.githubusercontent.com/instatushq/openapi/main/instatus.yaml
+    - name: better-stack
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/better-stack/main/openapi/better-stack-openapi.yml
 
   issue-tracking:
     - name: jira
@@ -360,6 +563,12 @@ clients:
     - name: zendesk
       type: openapi
       source: https://developer.zendesk.com/zendesk/oas.yaml
+    - name: redmine
+      type: openapi
+      source: https://raw.githubusercontent.com/d-yoshi/redmine-openapi/main/openapi.yaml
+    - name: mantis
+      type: openapi
+      source: https://raw.githubusercontent.com/mantisbt/mantisbt/master/api/rest/swagger.json
 
   maps:
     - name: opencagedata
@@ -374,6 +583,29 @@ clients:
     - name: tomtom-routing
       type: openapi
       source: https://api.apis.guru/v2/specs/tomtom.com/routing/1.0.0/openapi.json
+    - name: tomtom-maps
+      type: openapi
+      source: https://api.apis.guru/v2/specs/tomtom.com/maps/1.0.0/openapi.json
+    - name: aws-location
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/location/2020-11-19/openapi.json
+    - name: geodb
+      type: openapi
+      source: https://api.apis.guru/v2/specs/mashape.com/geodb/1.0.0/swagger.json
+    - name: bc-geocoder
+      type: openapi
+      source: https://api.apis.guru/v2/specs/gov.bc.ca/geocoder/2.0.0/openapi.json
+    - name: ip2location-io
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ip2location.io/1.0/openapi.json
+
+  marketing:
+    - name: braze
+      type: openapi
+      source: https://api.apis.guru/v2/specs/braze.com/1.0.0/openapi.json
+    - name: hubspot-marketing
+      type: openapi
+      source: https://api.apis.guru/v2/specs/hubapi.com/marketing/v3/openapi.json
 
   monitoring:
     - name: grafana
@@ -394,6 +626,12 @@ clients:
     - name: influxdb
       type: openapi
       source: https://raw.githubusercontent.com/influxdata/openapi/master/contracts/cloud.yml
+    - name: google-cloud-monitoring
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/monitoring/v3/openapi.json
+    - name: aws-cloudwatch
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/monitoring/2010-08-01/openapi.json
 
   music:
     - name: spotify
@@ -411,6 +649,15 @@ clients:
     - name: spinitron
       type: openapi
       source: https://api.apis.guru/v2/specs/spinitron.com/1.0.0/openapi.json
+    - name: discogs
+      type: openapi
+      source: https://raw.githubusercontent.com/wyattowalsh/discogs-api-spec/main/discogs.json
+    - name: apple-music
+      type: openapi
+      source: https://raw.githubusercontent.com/schroedan/apple-music-api/main/openapi.yaml
+    - name: bandsintown
+      type: openapi
+      source: https://api.apis.guru/v2/specs/bandsintown.com/3.0.0/swagger.json
 
   news:
     - name: nytimes-top-stories
@@ -428,6 +675,15 @@ clients:
     - name: nytimes-most-popular
       type: openapi
       source: https://api.apis.guru/v2/specs/nytimes.com/most_popular_api/2.0.0/openapi.json
+    - name: nytimes-timeswire
+      type: openapi
+      source: https://api.apis.guru/v2/specs/nytimes.com/timeswire/3.0.0/openapi.json
+    - name: newsdata-io
+      type: openapi
+      source: https://newsdata.io/openapi.json
+    - name: bing-news-search
+      type: openapi
+      source: https://api.apis.guru/v2/specs/microsoft.com/cognitiveservices-NewsSearch/1.0/swagger.json
 
   payments:
     - name: stripe
@@ -467,6 +723,27 @@ clients:
       flags:
         default-base-url: https://production.plaid.com
         token-env-var: PLAID_ACCESS_TOKEN
+    - name: klarna-payments
+      type: openapi
+      source: https://api.apis.guru/v2/specs/klarna.com/payments/1.0.0/openapi.json
+      flags:
+        token-env-var: KLARNA_API_KEY
+    - name: recurly
+      type: openapi
+      source: https://raw.githubusercontent.com/recurly/recurly-client-go/master/openapi/api.yaml
+      flags:
+        default-base-url: https://v3.recurly.com
+        token-env-var: RECURLY_API_KEY
+    - name: adyen-payments
+      type: openapi
+      source: https://raw.githubusercontent.com/Adyen/adyen-openapi/main/yaml/PaymentService-v68.yaml
+      flags:
+        token-env-var: ADYEN_API_KEY
+    - name: adyen-management
+      type: openapi
+      source: https://raw.githubusercontent.com/Adyen/adyen-openapi/main/yaml/ManagementService-v3.yaml
+      flags:
+        token-env-var: ADYEN_API_KEY
 
   project-mgmt:
     - name: asana
@@ -489,6 +766,12 @@ clients:
     # - name: confluence
     #   type: openapi
     #   source: https://developer.atlassian.com/cloud/confluence/swagger.v3.json
+    - name: coda
+      type: openapi
+      source: https://coda.io/apis/v1/openapi.json
+    - name: atlassian-compass
+      type: openapi
+      source: https://developer.atlassian.com/cloud/compass/swagger.v3.json
 
   public-data:
     - name: countries
@@ -516,6 +799,15 @@ clients:
       flags:
         default-base-url: https://api.met.no
         default-headers: {User-Agent: "nu-http-clients (https://github.com/lassoColombo/nu-http-clients)"}
+    - name: nasa-apod
+      type: openapi
+      source: https://api.apis.guru/v2/specs/nasa.gov/apod/1.0.0/openapi.json
+    - name: fec
+      type: openapi
+      source: https://api.apis.guru/v2/specs/fec.gov/1.0/openapi.json
+    - name: crossref
+      type: openapi
+      source: https://api.crossref.org/swagger-docs
 
   sandbox:
     - name: petstore
@@ -539,6 +831,12 @@ clients:
     - name: realworld-conduit
       type: openapi
       source: https://raw.githubusercontent.com/realworld-apps/realworld/main/specs/api/openapi.yml
+    - name: jsonplaceholder
+      type: openapi
+      source: https://raw.githubusercontent.com/sebastienlevert/jsonplaceholder-api/main/openapi.yaml
+    - name: ergast-f1
+      type: openapi
+      source: https://raw.githubusercontent.com/adampax/ergast-f1-openapi-doc/master/ergast-openapi-doc.yaml
 
   sci-fi:
     - name: swapi
@@ -567,6 +865,12 @@ clients:
     - name: starwars-translations
       type: openapi
       source: https://api.apis.guru/v2/specs/funtranslations.com/starwars/2.3/swagger.json
+    - name: futurama
+      type: openapi
+      source: https://futuramaapi.com/openapi.json
+    - name: thronesapi
+      type: openapi
+      source: https://thronesapi.com/swagger/v1/swagger.json
 
   search:
     - name: typesense
@@ -590,6 +894,9 @@ clients:
     - name: weaviate
       type: openapi
       source: https://raw.githubusercontent.com/weaviate/weaviate/main/openapi-specs/schema.json
+    - name: manticore
+      type: openapi
+      source: https://raw.githubusercontent.com/manticoresoftware/manticoresearch-go/master/api/openapi.yaml
 
   social:
     - name: mastodon
@@ -601,6 +908,9 @@ clients:
     - name: misskey
       type: openapi
       source: https://misskey.io/api.json
+    - name: peertube
+      type: openapi
+      source: https://raw.githubusercontent.com/Chocobozzz/PeerTube/develop/support/doc/api/openapi.yaml
 
   storage:
     - name: box
@@ -624,6 +934,18 @@ clients:
     - name: efs
       type: openapi
       source: https://api.apis.guru/v2/specs/amazonaws.com/elasticfilesystem/2015-02-01/openapi.json
+    - name: azure-blob
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/storage-blob/2019-04-01/swagger.json
+    - name: azure-file
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/storage-file/2019-06-01/swagger.json
+    - name: aws-fsx
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/fsx/2018-03-01/openapi.json
+    - name: aws-backup
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/backup/2018-11-15/openapi.json
 
   telephony:
     - name: twilio
@@ -641,6 +963,9 @@ clients:
     - name: messagebird
       type: openapi
       source: https://raw.githubusercontent.com/messagebird/openapi-specs/master/sms/openapi.yaml
+    - name: vonage
+      type: openapi
+      source: https://api.apis.guru/v2/specs/nexmo.com/voice/1.3.10/openapi.json
 
   testing:
     - name: httpbin
@@ -661,6 +986,15 @@ clients:
     - name: fungenerators-random-facts
       type: openapi
       source: https://api.apis.guru/v2/specs/fungenerators.com/random-facts/1.5/openapi.json
+    - name: wiremock-admin
+      type: openapi
+      source: https://api.apis.guru/v2/specs/wiremock.org/admin/2.35.0/openapi.json
+    - name: jokes-one
+      type: openapi
+      source: https://api.apis.guru/v2/specs/jokes.one/1.1/swagger.json
+    - name: quotes-rest
+      type: openapi
+      source: https://api.apis.guru/v2/specs/quotes.rest/3.1/openapi.json
 
   translation:
     - name: deepl
@@ -672,6 +1006,20 @@ clients:
     - name: google-translate
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/translate/v3/openapi.json
+    - name: aws-translate
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/translate/2017-07-01/openapi.json
+    - name: azure-translator
+      type: openapi
+      source: https://raw.githubusercontent.com/Azure/azure-rest-api-specs/main/specification/cognitiveservices/data-plane/TranslatorText/stable/v3.0/TranslatorText.json
+    - name: ebay-commerce-translation
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ebay.com/commerce-translation/1/openapi.json
+
+  vector-database:
+    - name: pinecone
+      type: openapi
+      source: https://api.apis.guru/v2/specs/pinecone.io/20230401.1/openapi.json
 
   version-control:
     - name: github
@@ -692,6 +1040,9 @@ clients:
     - name: forgejo
       type: openapi
       source: https://v11.next.forgejo.org/swagger.v1.json
+    - name: bitbucket-server
+      type: openapi
+      source: https://dac-static.atlassian.com/server/bitbucket/10.3.swagger.v3.json
 
   video:
     - name: vimeo
@@ -706,6 +1057,9 @@ clients:
     - name: twitch
       type: openapi
       source: https://raw.githubusercontent.com/DmitryScaletta/twitch-api-swagger/master/openapi.json
+    - name: bunny-stream
+      type: openapi
+      source: https://video.bunnycdn.com/openapi/bunnynet-video-api.public.json
 
   weather:
     - name: weather-gov
@@ -729,3 +1083,12 @@ clients:
     - name: brightsky
       type: openapi
       source: https://api.brightsky.dev/openapi.json
+    - name: visualcrossing-weather
+      type: openapi
+      source: https://api.apis.guru/v2/specs/visualcrossing.com/weather/4.6/openapi.json
+    - name: weatherbit
+      type: openapi
+      source: https://api.apis.guru/v2/specs/weatherbit.io/2.0.0/swagger.json
+    - name: meteosource
+      type: openapi
+      source: https://api.apis.guru/v2/specs/meteosource.com/v1/openapi.json
