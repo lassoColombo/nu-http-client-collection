@@ -88,6 +88,32 @@ clients:
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/youtubeAnalytics/v2/openapi.json
 
+  advertising:
+    - name: google-ad-exchange-buyer
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/adexchangebuyer/v1.4/openapi.json
+    - name: google-ad-exchange-buyer2
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/adexchangebuyer2/v2beta1/openapi.json
+    - name: google-adsense
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/adsense/v1.4/openapi.json
+    - name: google-adsense-host
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/adsensehost/v4.1/openapi.json
+    - name: google-doubleclick-bid-manager
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/doubleclickbidmanager/v1.1/openapi.json
+    - name: google-doubleclick-search
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/doubleclicksearch/v2/openapi.json
+    - name: google-search-ads-360
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/searchads360/v0/openapi.json
+    - name: nativeads
+      type: openapi
+      source: https://api.apis.guru/v2/specs/nativeads.com/1.0.0/swagger.json
+
   anime:
     - name: anilist
       type: graphql
@@ -700,6 +726,77 @@ clients:
       type: openapi
       source: https://raw.githubusercontent.com/api-evangelist/better-stack/main/openapi/better-stack-openapi.yml
 
+  iot:
+    - name: aws-greengrass
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/greengrass/2017-06-07/openapi.json
+    - name: aws-greengrass-v2
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/greengrassv2/2020-11-30/openapi.json
+    - name: aws-iot
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/iot/2015-05-28/openapi.json
+    - name: aws-iot-data
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/iot-data/2015-05-28/openapi.json
+    - name: aws-iot-jobs-data
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/iot-jobs-data/2017-09-29/openapi.json
+    - name: aws-iot-1click-devices
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/iot1click-devices/2018-05-14/openapi.json
+    - name: aws-iot-1click-projects
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/iot1click-projects/2018-05-14/openapi.json
+    - name: aws-iot-analytics
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/iotanalytics/2017-11-27/openapi.json
+    - name: aws-iot-device-advisor
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/iotdeviceadvisor/2020-09-18/openapi.json
+    - name: aws-iot-events
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/iotevents/2018-07-27/openapi.json
+    - name: aws-iot-events-data
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/iotevents-data/2018-10-23/openapi.json
+    - name: aws-iot-fleethub
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/iotfleethub/2020-11-03/openapi.json
+    - name: aws-iot-secure-tunneling
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/iotsecuretunneling/2018-10-05/openapi.json
+    - name: aws-iot-sitewise
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/iotsitewise/2019-12-02/openapi.json
+    - name: aws-iot-things-graph
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/iotthingsgraph/2018-09-06/openapi.json
+    - name: aws-iot-wireless
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/iotwireless/2020-11-22/openapi.json
+    - name: azure-databox-edge
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/databoxedge/2019-07-01/swagger.json
+    - name: azure-iot-dps
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/deviceprovisioningservices-iotdps/2018-01-22/swagger.json
+    - name: azure-iot-central
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/iotcentral/2018-09-01/swagger.json
+    - name: azure-iot-hub
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/iothub/2019-07-01-preview/swagger.json
+    - name: azure-windows-iot-services
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/windowsiot-WindowsIotServices/2019-06-01/swagger.json
+    - name: firmalyzer-iotvas
+      type: openapi
+      source: https://api.apis.guru/v2/specs/firmalyzer.com/iotvas/1.0/openapi.json
+    - name: google-cloud-iot
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/cloudiot/v1/openapi.json
+
   issue-tracking:
     - name: jira
       type: openapi
@@ -914,11 +1011,6 @@ clients:
     - name: notion
       type: openapi
       source: https://developers.notion.com/openapi.json
-    - name: linear
-      type: graphql
-      source: https://api.linear.app/graphql
-      flags:
-        default-base-url: https://api.linear.app/graphql
     - name: jira-service-management
       type: openapi
       source: https://developer.atlassian.com/cloud/jira/service-desk/swagger.v3.json
@@ -1052,6 +1144,26 @@ clients:
       type: openapi
       source: https://raw.githubusercontent.com/manticoresoftware/manticoresearch-go/master/api/openapi.yaml
 
+  shipping:
+    - name: ebay-logistics
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ebay.com/sell-logistics/v1_beta.0.0/openapi.json
+    - name: here-tracking
+      type: openapi
+      source: https://api.apis.guru/v2/specs/here.com/tracking/2.1.191/openapi.json
+    - name: royalmail-click-and-drop
+      type: openapi
+      source: https://api.apis.guru/v2/specs/royalmail.com/click-and-drop/1.0.0/swagger.json
+    - name: vtex-logistics
+      type: openapi
+      source: https://api.apis.guru/v2/specs/vtex.local/Logistics-API/1.0/openapi.json
+    - name: shipengine
+      type: openapi
+      source: https://raw.githubusercontent.com/ShipEngine/shipengine-openapi/master/openapi.yaml
+    - name: shippo
+      type: openapi
+      source: https://docs.goshippo.com/spec/shippoapi/public-api.yaml
+
   social:
     - name: mastodon
       type: openapi
@@ -1100,6 +1212,23 @@ clients:
     - name: aws-backup
       type: openapi
       source: https://api.apis.guru/v2/specs/amazonaws.com/backup/2018-11-15/openapi.json
+
+  tax:
+    - name: billingo
+      type: openapi
+      source: https://api.apis.guru/v2/specs/billingo.hu/3.0.7/openapi.json
+    - name: taxamo
+      type: openapi
+      source: https://api.apis.guru/v2/specs/taxamo.com/1/swagger.json
+    - name: taxrates-io
+      type: openapi
+      source: https://api.apis.guru/v2/specs/taxrates.io/1.0.0/openapi.json
+    - name: vatapi
+      type: openapi
+      source: https://api.apis.guru/v2/specs/vatapi.com/1/swagger.json
+    - name: hmrc-vat
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/vat-api/1.0/oas/resolved
 
   telephony:
     - name: twilio

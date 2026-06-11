@@ -2,6 +2,19 @@
 
 _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do not edit by hand._
 
+## advertising
+
+| Client                                                                                  | Type    | Source                                                                                  |
+| --------------------------------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------- |
+| [google-ad-exchange-buyer](clients/advertising/google-ad-exchange-buyer.nu)             | openapi | <https://api.apis.guru/v2/specs/googleapis.com/adexchangebuyer/v1.4/openapi.json>       |
+| [google-ad-exchange-buyer2](clients/advertising/google-ad-exchange-buyer2.nu)           | openapi | <https://api.apis.guru/v2/specs/googleapis.com/adexchangebuyer2/v2beta1/openapi.json>   |
+| [google-adsense](clients/advertising/google-adsense.nu)                                 | openapi | <https://api.apis.guru/v2/specs/googleapis.com/adsense/v1.4/openapi.json>               |
+| [google-adsense-host](clients/advertising/google-adsense-host.nu)                       | openapi | <https://api.apis.guru/v2/specs/googleapis.com/adsensehost/v4.1/openapi.json>           |
+| [google-doubleclick-bid-manager](clients/advertising/google-doubleclick-bid-manager.nu) | openapi | <https://api.apis.guru/v2/specs/googleapis.com/doubleclickbidmanager/v1.1/openapi.json> |
+| [google-doubleclick-search](clients/advertising/google-doubleclick-search.nu)           | openapi | <https://api.apis.guru/v2/specs/googleapis.com/doubleclicksearch/v2/openapi.json>       |
+| [google-search-ads-360](clients/advertising/google-search-ads-360.nu)                   | openapi | <https://api.apis.guru/v2/specs/googleapis.com/searchads360/v0/openapi.json>            |
+| [nativeads](clients/advertising/nativeads.nu)                                           | openapi | <https://api.apis.guru/v2/specs/nativeads.com/1.0.0/swagger.json>                       |
+
 ## ai
 
 | Client                                 | Type    | Source                                                                                                                                                |
@@ -157,9 +170,16 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## crm
 
-| Client                                    | Type    | Source                                                          |
-| ----------------------------------------- | ------- | --------------------------------------------------------------- |
-| [hubspot-crm](clients/crm/hubspot-crm.nu) | openapi | <https://api.apis.guru/v2/specs/hubapi.com/crm/v3/openapi.json> |
+| Client                                                    | Type    | Source                                                                        |
+| --------------------------------------------------------- | ------- | ----------------------------------------------------------------------------- |
+| [hubspot-crm](clients/crm/hubspot-crm.nu)                 | openapi | <https://api.apis.guru/v2/specs/hubapi.com/crm/v3/openapi.json>               |
+| [apideck-crm](clients/crm/apideck-crm.nu)                 | openapi | <https://api.apis.guru/v2/specs/apideck.com/crm/9.3.0/openapi.json>           |
+| [data2crm](clients/crm/data2crm.nu)                       | openapi | <https://api.apis.guru/v2/specs/data2crm.com/1/swagger.json>                  |
+| [salesforce-einstein](clients/crm/salesforce-einstein.nu) | openapi | <https://api.apis.guru/v2/specs/salesforce.local/einstein/2.0.1/openapi.json> |
+| [pipedrive](clients/crm/pipedrive.nu)                     | openapi | <https://developers.pipedrive.com/docs/api/v1/openapi.yaml>                   |
+| [attio](clients/crm/attio.nu)                             | openapi | <https://api.attio.com/openapi/api>                                           |
+| [close-com](clients/crm/close-com.nu)                     | openapi | <https://developer.close.com/openapi.json>                                    |
+| [streak](clients/crm/streak.nu)                           | openapi | <https://www.streak.com/api/openapi.json>                                     |
 
 ## data-pipeline
 
@@ -312,6 +332,34 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [instatus](clients/incident/instatus.nu)         | openapi | <https://raw.githubusercontent.com/instatushq/openapi/main/instatus.yaml>                                      |
 | [better-stack](clients/incident/better-stack.nu) | openapi | <https://raw.githubusercontent.com/api-evangelist/better-stack/main/openapi/better-stack-openapi.yml>          |
 
+## iot
+
+| Client                                                                  | Type    | Source                                                                                               |
+| ----------------------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------- |
+| [aws-greengrass](clients/iot/aws-greengrass.nu)                         | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/greengrass/2017-06-07/openapi.json>                    |
+| [aws-greengrass-v2](clients/iot/aws-greengrass-v2.nu)                   | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/greengrassv2/2020-11-30/openapi.json>                  |
+| [aws-iot](clients/iot/aws-iot.nu)                                       | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/iot/2015-05-28/openapi.json>                           |
+| [aws-iot-data](clients/iot/aws-iot-data.nu)                             | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/iot-data/2015-05-28/openapi.json>                      |
+| [aws-iot-jobs-data](clients/iot/aws-iot-jobs-data.nu)                   | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/iot-jobs-data/2017-09-29/openapi.json>                 |
+| [aws-iot-1click-devices](clients/iot/aws-iot-1click-devices.nu)         | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/iot1click-devices/2018-05-14/openapi.json>             |
+| [aws-iot-1click-projects](clients/iot/aws-iot-1click-projects.nu)       | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/iot1click-projects/2018-05-14/openapi.json>            |
+| [aws-iot-analytics](clients/iot/aws-iot-analytics.nu)                   | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/iotanalytics/2017-11-27/openapi.json>                  |
+| [aws-iot-device-advisor](clients/iot/aws-iot-device-advisor.nu)         | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/iotdeviceadvisor/2020-09-18/openapi.json>              |
+| [aws-iot-events](clients/iot/aws-iot-events.nu)                         | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/iotevents/2018-07-27/openapi.json>                     |
+| [aws-iot-events-data](clients/iot/aws-iot-events-data.nu)               | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/iotevents-data/2018-10-23/openapi.json>                |
+| [aws-iot-fleethub](clients/iot/aws-iot-fleethub.nu)                     | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/iotfleethub/2020-11-03/openapi.json>                   |
+| [aws-iot-secure-tunneling](clients/iot/aws-iot-secure-tunneling.nu)     | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/iotsecuretunneling/2018-10-05/openapi.json>            |
+| [aws-iot-sitewise](clients/iot/aws-iot-sitewise.nu)                     | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/iotsitewise/2019-12-02/openapi.json>                   |
+| [aws-iot-things-graph](clients/iot/aws-iot-things-graph.nu)             | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/iotthingsgraph/2018-09-06/openapi.json>                |
+| [aws-iot-wireless](clients/iot/aws-iot-wireless.nu)                     | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/iotwireless/2020-11-22/openapi.json>                   |
+| [azure-databox-edge](clients/iot/azure-databox-edge.nu)                 | openapi | <https://api.apis.guru/v2/specs/azure.com/databoxedge/2019-07-01/swagger.json>                       |
+| [azure-iot-dps](clients/iot/azure-iot-dps.nu)                           | openapi | <https://api.apis.guru/v2/specs/azure.com/deviceprovisioningservices-iotdps/2018-01-22/swagger.json> |
+| [azure-iot-central](clients/iot/azure-iot-central.nu)                   | openapi | <https://api.apis.guru/v2/specs/azure.com/iotcentral/2018-09-01/swagger.json>                        |
+| [azure-iot-hub](clients/iot/azure-iot-hub.nu)                           | openapi | <https://api.apis.guru/v2/specs/azure.com/iothub/2019-07-01-preview/swagger.json>                    |
+| [azure-windows-iot-services](clients/iot/azure-windows-iot-services.nu) | openapi | <https://api.apis.guru/v2/specs/azure.com/windowsiot-WindowsIotServices/2019-06-01/swagger.json>     |
+| [firmalyzer-iotvas](clients/iot/firmalyzer-iotvas.nu)                   | openapi | <https://api.apis.guru/v2/specs/firmalyzer.com/iotvas/1.0/openapi.json>                              |
+| [google-cloud-iot](clients/iot/google-cloud-iot.nu)                     | openapi | <https://api.apis.guru/v2/specs/googleapis.com/cloudiot/v1/openapi.json>                             |
+
 ## issue-tracking
 
 | Client                                       | Type    | Source                                                                             |
@@ -447,7 +495,6 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | Client                                                           | Type    | Source                                                                         |
 | ---------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------ |
 | [swapi](clients/sci-fi/swapi.nu)                                 | graphql | <https://swapi-graphql.netlify.app/graphql>                                    |
-| [rick-and-morty](clients/sci-fi/rick-and-morty.nu)               | graphql | <https://rickandmortyapi.com/graphql>                                          |
 | [dnd5e](clients/sci-fi/dnd5e.nu)                                 | openapi | <https://api.apis.guru/v2/specs/dnd5eapi.co/0.1/openapi.json>                  |
 | [dnd5e-graphql](clients/sci-fi/dnd5e-graphql.nu)                 | graphql | <https://www.dnd5eapi.co/graphql/2014>                                         |
 | [potterdb](clients/sci-fi/potterdb.nu)                           | graphql | <https://api.potterdb.com/graphql>                                             |
@@ -467,6 +514,17 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [qdrant](clients/search/qdrant.nu)               | openapi | <https://raw.githubusercontent.com/qdrant/qdrant/master/docs/redoc/master/openapi.json>                                |
 | [weaviate](clients/search/weaviate.nu)           | openapi | <https://raw.githubusercontent.com/weaviate/weaviate/main/openapi-specs/schema.json>                                   |
 | [manticore](clients/search/manticore.nu)         | openapi | <https://raw.githubusercontent.com/manticoresoftware/manticoresearch-go/master/api/openapi.yaml>                       |
+
+## shipping
+
+| Client                                                                   | Type    | Source                                                                                |
+| ------------------------------------------------------------------------ | ------- | ------------------------------------------------------------------------------------- |
+| [ebay-logistics](clients/shipping/ebay-logistics.nu)                     | openapi | <https://api.apis.guru/v2/specs/ebay.com/sell-logistics/v1_beta.0.0/openapi.json>     |
+| [here-tracking](clients/shipping/here-tracking.nu)                       | openapi | <https://api.apis.guru/v2/specs/here.com/tracking/2.1.191/openapi.json>               |
+| [royalmail-click-and-drop](clients/shipping/royalmail-click-and-drop.nu) | openapi | <https://api.apis.guru/v2/specs/royalmail.com/click-and-drop/1.0.0/swagger.json>      |
+| [vtex-logistics](clients/shipping/vtex-logistics.nu)                     | openapi | <https://api.apis.guru/v2/specs/vtex.local/Logistics-API/1.0/openapi.json>            |
+| [shipengine](clients/shipping/shipengine.nu)                             | openapi | <https://raw.githubusercontent.com/ShipEngine/shipengine-openapi/master/openapi.yaml> |
+| [shippo](clients/shipping/shippo.nu)                                     | openapi | <https://docs.goshippo.com/spec/shippoapi/public-api.yaml>                            |
 
 ## social
 
@@ -492,6 +550,16 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [azure-file](clients/storage/azure-file.nu)           | openapi | <https://api.apis.guru/v2/specs/azure.com/storage-file/2019-06-01/swagger.json>          |
 | [aws-fsx](clients/storage/aws-fsx.nu)                 | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/fsx/2018-03-01/openapi.json>               |
 | [aws-backup](clients/storage/aws-backup.nu)           | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/backup/2018-11-15/openapi.json>            |
+
+## tax
+
+| Client                                    | Type    | Source                                                                                              |
+| ----------------------------------------- | ------- | --------------------------------------------------------------------------------------------------- |
+| [billingo](clients/tax/billingo.nu)       | openapi | <https://api.apis.guru/v2/specs/billingo.hu/3.0.7/openapi.json>                                     |
+| [taxamo](clients/tax/taxamo.nu)           | openapi | <https://api.apis.guru/v2/specs/taxamo.com/1/swagger.json>                                          |
+| [taxrates-io](clients/tax/taxrates-io.nu) | openapi | <https://api.apis.guru/v2/specs/taxrates.io/1.0.0/openapi.json>                                     |
+| [vatapi](clients/tax/vatapi.nu)           | openapi | <https://api.apis.guru/v2/specs/vatapi.com/1/swagger.json>                                          |
+| [hmrc-vat](clients/tax/hmrc-vat.nu)       | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/vat-api/1.0/oas/resolved> |
 
 ## telephony
 
