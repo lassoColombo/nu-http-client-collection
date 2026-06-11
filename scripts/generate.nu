@@ -44,7 +44,7 @@ def main [
     validate-unique-names $all_clients
 
     if $list_only {
-        write-list-file $list_file $all_clients $out_dir
+        write-list-file $list_file (filter-existing $all_clients $out_dir) $out_dir
         print $"Refreshed clients list in ($list_file)."
         return
     }
@@ -73,7 +73,7 @@ def main [
         print $"  - ($s.category)/($s.name) \(exists; use --force to regenerate\)"
     }
 
-    print $"Generating ($selected | length) client\(s\) into ($out_dir)/ in parallel"
+    print $"Generating ($selected | length) client\(s\) into ($out_dir)"
     let results = (
         $selected
         | par-each {|c|
@@ -91,7 +91,7 @@ def main [
     )
     let failures = ($results | where ok == false)
 
-    write-list-file $list_file $all_clients $out_dir
+    write-list-file $list_file (filter-existing $all_clients $out_dir) $out_dir
 
     if not ($failures | is-empty) {
         print -e ""
@@ -184,7 +184,9 @@ def generate-one [
 
 # Render a record of {flag-name: value} pairs as a string of CLI args.
 # Values are encoded with `to nuon` so lists/records/strings round-trip safely.
-# Booleans are emitted as switches (only when true).
+# Booleans are emitted as switches (only when true). Record spread (`...$r`)
+# would be cleaner but Nushell doesn't unpack records into custom-command
+# named args as of 0.113.
 def build-flag-args [flags: record]: nothing -> string {
     $flags
     | transpose key value
@@ -200,8 +202,14 @@ def build-flag-args [flags: record]: nothing -> string {
     | str join " "
 }
 
-# Overwrite `list_path` with a markdown document listing every client in `clients`,
-# one table per category. Fully owned by this script — do not edit by hand.
+# Keep only clients whose generated output file exists on disk. Clients that
+# failed to generate (or were never generated) are excluded from the list file.
+def filter-existing [clients: list, out_dir: path]: nothing -> list {
+    $clients | where {|c| ($out_dir | path join $c.category $"($c.name).nu") | path exists }
+}
+
+# Overwrite `list_path` with a markdown document listing every client in `clients`.
+# Fully owned by this script — do not edit by hand.
 def write-list-file [list_path: path, clients: list, out_dir: path] {
     let count = ($clients | length)
     let header = $"# Available clients\n\n_This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do not edit by hand._\n\nThis collection contains ($count) clients.\n"
@@ -211,18 +219,14 @@ def write-list-file [list_path: path, clients: list, out_dir: path] {
 
 def render-clients-sections [clients: list, out_dir: path]: nothing -> string {
     $clients
-    | group-by category
-    | transpose category entries
-    | sort-by category
-    | each {|grp|
-        let rows = ($grp.entries | each {|c|
-            {
-                Client: $"[($c.name)]\(($out_dir)/($c.category)/($c.name).nu\)"
-                Type: $c.type
-                Source: $"<($c.source)>"
-            }
-        })
-        $"## ($grp.category)\n\n" + ($rows | to md --pretty)
+    | sort-by category name
+    | each {|c|
+        {
+            Category: $c.category
+            Client: $"[($c.name)]\(($out_dir)/($c.category)/($c.name).nu\)"
+            Type: $c.type
+            Source: $"<($c.source)>"
+        }
     }
-    | str join "\n\n"
+    | to md --pretty
 }
