@@ -21,19 +21,22 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## ai
 
-| Client                                 | Type    | Source                                                                                                                                                |
-| -------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [openai](clients/ai/openai.nu)         | openapi | <specs/openai.yaml>                                                                                                                                   |
-| [cohere](clients/ai/cohere.nu)         | openapi | <https://docs.cohere.com/openapi/cohere-api.json>                                                                                                     |
-| [elevenlabs](clients/ai/elevenlabs.nu) | openapi | <https://api.elevenlabs.io/openapi.json>                                                                                                              |
-| [assemblyai](clients/ai/assemblyai.nu) | openapi | <https://www.assemblyai.com/docs/openapi.json>                                                                                                        |
-| [deepgram](clients/ai/deepgram.nu)     | openapi | <https://developers.deepgram.com/reference/openapi.json>                                                                                              |
-| [xai](clients/ai/xai.nu)               | openapi | <https://docs.x.ai/openapi.json>                                                                                                                      |
-| [deepinfra](clients/ai/deepinfra.nu)   | openapi | <https://api.deepinfra.com/openapi.json>                                                                                                              |
-| [anthropic](clients/ai/anthropic.nu)   | openapi | <https://storage.googleapis.com/stainless-sdk-openapi-specs/anthropic/anthropic-5ce93251152bd7c4c288dacdf5a445383825ba50bc472ff9e9821ee9455e3564.yml> |
-| [groq](clients/ai/groq.nu)             | openapi | <https://storage.googleapis.com/stainless-sdk-openapi-specs/groqcloud/groqcloud-0298a69b7d74303a353e8a586d85e5cc769b9560920487fadfe773c0100af249.yml> |
-| [mistral](clients/ai/mistral.nu)       | openapi | <https://docs.mistral.ai/openapi.yaml>                                                                                                                |
-| [jina](clients/ai/jina.nu)             | openapi | <https://api.jina.ai/openapi.json>                                                                                                                    |
+| Client                                     | Type    | Source                                                                                                                                                |
+| ------------------------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [openai](clients/ai/openai.nu)             | openapi | <specs/openai.yaml>                                                                                                                                   |
+| [cohere](clients/ai/cohere.nu)             | openapi | <https://docs.cohere.com/openapi/cohere-api.json>                                                                                                     |
+| [elevenlabs](clients/ai/elevenlabs.nu)     | openapi | <https://api.elevenlabs.io/openapi.json>                                                                                                              |
+| [assemblyai](clients/ai/assemblyai.nu)     | openapi | <https://www.assemblyai.com/docs/openapi.json>                                                                                                        |
+| [deepgram](clients/ai/deepgram.nu)         | openapi | <https://developers.deepgram.com/reference/openapi.json>                                                                                              |
+| [xai](clients/ai/xai.nu)                   | openapi | <https://docs.x.ai/openapi.json>                                                                                                                      |
+| [deepinfra](clients/ai/deepinfra.nu)       | openapi | <https://api.deepinfra.com/openapi.json>                                                                                                              |
+| [anthropic](clients/ai/anthropic.nu)       | openapi | <https://storage.googleapis.com/stainless-sdk-openapi-specs/anthropic/anthropic-5ce93251152bd7c4c288dacdf5a445383825ba50bc472ff9e9821ee9455e3564.yml> |
+| [groq](clients/ai/groq.nu)                 | openapi | <https://storage.googleapis.com/stainless-sdk-openapi-specs/groqcloud/groqcloud-0298a69b7d74303a353e8a586d85e5cc769b9560920487fadfe773c0100af249.yml> |
+| [mistral](clients/ai/mistral.nu)           | openapi | <https://docs.mistral.ai/openapi.yaml>                                                                                                                |
+| [jina](clients/ai/jina.nu)                 | openapi | <https://api.jina.ai/openapi.json>                                                                                                                    |
+| [replicate](clients/ai/replicate.nu)       | openapi | <https://api.replicate.com/openapi.json>                                                                                                              |
+| [together-ai](clients/ai/together-ai.nu)   | openapi | <https://docs.together.ai/openapi.yaml>                                                                                                               |
+| [fireworks-ai](clients/ai/fireworks-ai.nu) | openapi | <https://docs.fireworks.ai/merged.openapi.yaml>                                                                                                       |
 
 ## analytics
 
@@ -78,17 +81,30 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## billing
 
-| Client                                                                                            | Type    | Source                                                                                       |
-| ------------------------------------------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------- |
-| [zuora](clients/billing/zuora.nu)                                                                 | openapi | <https://api.apis.guru/v2/specs/zuora.com/2021-08-20/openapi.json>                           |
-| [rebilly](clients/billing/rebilly.nu)                                                             | openapi | <https://api.apis.guru/v2/specs/rebilly.com/2.1/openapi.json>                                |
-| [paddle](clients/billing/paddle.nu)                                                               | openapi | <https://raw.githubusercontent.com/PaddleHQ/paddle-openapi/main/v1/openapi.yaml>             |
-| [lago](clients/billing/lago.nu)                                                                   | openapi | <https://raw.githubusercontent.com/getlago/lago-openapi/main/openapi.yaml>                   |
-| [azure-billing](clients/billing/azure-billing.nu)                                                 | openapi | <https://api.apis.guru/v2/specs/azure.com/billing/2019-10-01-preview/swagger.json>           |
-| [google-cloudbilling](clients/billing/google-cloudbilling.nu)                                     | openapi | <https://api.apis.guru/v2/specs/googleapis.com/cloudbilling/v1beta/openapi.json>             |
-| [google-billingbudgets](clients/billing/google-billingbudgets.nu)                                 | openapi | <https://api.apis.guru/v2/specs/googleapis.com/billingbudgets/v1beta1/openapi.json>          |
-| [google-payments-reseller-subscription](clients/billing/google-payments-reseller-subscription.nu) | openapi | <https://api.apis.guru/v2/specs/googleapis.com/paymentsresellersubscription/v1/openapi.json> |
-| [billbee](clients/billing/billbee.nu)                                                             | openapi | <https://api.apis.guru/v2/specs/billbee.io/v1/openapi.json>                                  |
+| Client                                                                                            | Type    | Source                                                                                           |
+| ------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------ |
+| [zuora](clients/billing/zuora.nu)                                                                 | openapi | <https://api.apis.guru/v2/specs/zuora.com/2021-08-20/openapi.json>                               |
+| [rebilly](clients/billing/rebilly.nu)                                                             | openapi | <https://api.apis.guru/v2/specs/rebilly.com/2.1/openapi.json>                                    |
+| [paddle](clients/billing/paddle.nu)                                                               | openapi | <https://raw.githubusercontent.com/PaddleHQ/paddle-openapi/main/v1/openapi.yaml>                 |
+| [lago](clients/billing/lago.nu)                                                                   | openapi | <https://raw.githubusercontent.com/getlago/lago-openapi/main/openapi.yaml>                       |
+| [azure-billing](clients/billing/azure-billing.nu)                                                 | openapi | <https://api.apis.guru/v2/specs/azure.com/billing/2019-10-01-preview/swagger.json>               |
+| [google-cloudbilling](clients/billing/google-cloudbilling.nu)                                     | openapi | <https://api.apis.guru/v2/specs/googleapis.com/cloudbilling/v1beta/openapi.json>                 |
+| [google-billingbudgets](clients/billing/google-billingbudgets.nu)                                 | openapi | <https://api.apis.guru/v2/specs/googleapis.com/billingbudgets/v1beta1/openapi.json>              |
+| [google-payments-reseller-subscription](clients/billing/google-payments-reseller-subscription.nu) | openapi | <https://api.apis.guru/v2/specs/googleapis.com/paymentsresellersubscription/v1/openapi.json>     |
+| [billbee](clients/billing/billbee.nu)                                                             | openapi | <https://api.apis.guru/v2/specs/billbee.io/v1/openapi.json>                                      |
+| [chargebee](clients/billing/chargebee.nu)                                                         | openapi | <https://raw.githubusercontent.com/chargebee/openapi/main/spec/chargebee_api_v2_pc_v2_spec.json> |
+
+## blockchain
+
+| Client                                           | Type    | Source                                                                                    |
+| ------------------------------------------------ | ------- | ----------------------------------------------------------------------------------------- |
+| [alchemy-nft](clients/blockchain/alchemy-nft.nu) | openapi | <https://raw.githubusercontent.com/alchemyplatform/docs-openapi-specs/main/nft/nfts.yaml> |
+
+## browser-automation
+
+| Client                                                   | Type    | Source                                                         |
+| -------------------------------------------------------- | ------- | -------------------------------------------------------------- |
+| [browserless](clients/browser-automation/browserless.nu) | openapi | <https://docs.browserless.io/redocusaurus/plugin-redoc-0.yaml> |
 
 ## calendar
 
@@ -190,6 +206,12 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [aws-lightsail](clients/cloud/aws-lightsail.nu)           | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/lightsail/2016-11-28/openapi.json>                        |
 | [koyeb](clients/cloud/koyeb.nu)                           | openapi | <https://raw.githubusercontent.com/koyeb/koyeb-api-client-go/master/api/v1/koyeb/api/openapi.yaml>      |
 
+## collaboration
+
+| Client                                | Type    | Source                                                                                    |
+| ------------------------------------- | ------- | ----------------------------------------------------------------------------------------- |
+| [miro](clients/collaboration/miro.nu) | openapi | <https://raw.githubusercontent.com/miroapp/api-clients/main/packages/generator/spec.json> |
+
 ## commerce
 
 | Client                                                                 | Type    | Source                                                                               |
@@ -289,6 +311,18 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [google-workflows](clients/data-pipeline/google-workflows.nu)                   | openapi | <https://api.apis.guru/v2/specs/googleapis.com/workflows/v1/openapi.json>                                               |
 | [google-workflowexecutions](clients/data-pipeline/google-workflowexecutions.nu) | openapi | <https://api.apis.guru/v2/specs/googleapis.com/workflowexecutions/v1/openapi.json>                                      |
 | [aws-datapipeline](clients/data-pipeline/aws-datapipeline.nu)                   | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/datapipeline/2012-10-29/openapi.json>                                     |
+
+## data-warehouse
+
+| Client                                                           | Type    | Source                                                                                                    |
+| ---------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------- |
+| [snowflake-account](clients/data-warehouse/snowflake-account.nu) | openapi | <https://raw.githubusercontent.com/snowflakedb/snowflake-rest-api-specs/main/specifications/account.yaml> |
+
+## database
+
+| Client                           | Type    | Source                                      |
+| -------------------------------- | ------- | ------------------------------------------- |
+| [neon](clients/database/neon.nu) | openapi | <https://neon.com/api_spec/release/v2.json> |
 
 ## dns
 
@@ -475,6 +509,7 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 | Client                                                               | Type    | Source                                                                                                                           |
 | -------------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| [auth0](clients/identity/auth0.nu)                                   | openapi | <https://auth0.com/docs/api/management/openapi.json>                                                                             |
 | [okta](clients/identity/okta.nu)                                     | openapi | <https://api.apis.guru/v2/specs/okta.local/1.0.0/openapi.json>                                                                   |
 | [keycloak](clients/identity/keycloak.nu)                             | openapi | <https://api.apis.guru/v2/specs/keycloak.local/1/openapi.json>                                                                   |
 | [ory-kratos](clients/identity/ory-kratos.nu)                         | openapi | <https://raw.githubusercontent.com/ory/kratos/master/spec/api.json>                                                              |
@@ -680,6 +715,12 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [sportsdata-nba-news](clients/news/sportsdata-nba-news.nu)       | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/nba-v3-rotoballer-premium-news/1.0/openapi.json>      |
 | [sportsdata-mlb-news](clients/news/sportsdata-mlb-news.nu)       | openapi | <https://api.apis.guru/v2/specs/sportsdata.io/mlb-v3-rotoballer-premium-news/1.0/openapi.json>      |
 
+## password-manager
+
+| Client                                                                 | Type    | Source                                                                            |
+| ---------------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------- |
+| [onepassword-connect](clients/password-manager/onepassword-connect.nu) | openapi | <https://raw.githubusercontent.com/1Password/connect/main/docs/openapi/spec.yaml> |
+
 ## payments
 
 | Client                                                   | Type    | Source                                                                                                          |
@@ -719,7 +760,6 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [basecamp](clients/project-mgmt/basecamp.nu)                               | openapi | <https://raw.githubusercontent.com/basecamp/basecamp-sdk/main/openapi.json>                                 |
 | [openproject](clients/project-mgmt/openproject.nu)                         | openapi | <https://community.openproject.org/api/v3/spec.json>                                                        |
 | [wrike](clients/project-mgmt/wrike.nu)                                     | openapi | <https://developers.wrike.com/openapi/wrike_api_v4_ver154.yaml>                                             |
-| [toggl-track](clients/project-mgmt/toggl-track.nu)                         | openapi | <https://engineering.toggl.com/assets/files/api-d56ecbd7b19d9020283019e0581d80ca.json>                      |
 
 ## public-data
 
@@ -994,6 +1034,12 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [jokes-one](clients/testing/jokes-one.nu)                                     | openapi | <https://api.apis.guru/v2/specs/jokes.one/1.1/swagger.json>                       |
 | [quotes-rest](clients/testing/quotes-rest.nu)                                 | openapi | <https://api.apis.guru/v2/specs/quotes.rest/3.1/openapi.json>                     |
 
+## time-tracking
+
+| Client                                              | Type    | Source                                                                                 |
+| --------------------------------------------------- | ------- | -------------------------------------------------------------------------------------- |
+| [toggl-track](clients/time-tracking/toggl-track.nu) | openapi | <https://engineering.toggl.com/assets/files/api-d56ecbd7b19d9020283019e0581d80ca.json> |
+
 ## torrent
 
 | Client                                        | Type    | Source                                                                                                             |
@@ -1095,3 +1141,15 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 | [visualcrossing-weather](clients/weather/visualcrossing-weather.nu)   | openapi | <https://api.apis.guru/v2/specs/visualcrossing.com/weather/4.6/openapi.json>                  |
 | [weatherbit](clients/weather/weatherbit.nu)                           | openapi | <https://api.apis.guru/v2/specs/weatherbit.io/2.0.0/swagger.json>                             |
 | [meteosource](clients/weather/meteosource.nu)                         | openapi | <https://api.apis.guru/v2/specs/meteosource.com/v1/openapi.json>                              |
+
+## web-hosting
+
+| Client                                  | Type    | Source                                                         |
+| --------------------------------------- | ------- | -------------------------------------------------------------- |
+| [render](clients/web-hosting/render.nu) | openapi | <https://api-docs.render.com/openapi/render-public-api-1.json> |
+
+## workflow-automation
+
+| Client                                    | Type    | Source                                   |
+| ----------------------------------------- | ------- | ---------------------------------------- |
+| [n8n](clients/workflow-automation/n8n.nu) | openapi | <https://docs.n8n.io/api/v1/openapi.yml> |
