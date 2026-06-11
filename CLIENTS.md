@@ -247,7 +247,7 @@ This collection contains 892 clients.
 | [nomad](clients/container-orchestration/nomad.nu)                                             | openapi | <https://raw.githubusercontent.com/hashicorp/nomad-openapi/main/v1/openapi.yaml>                             |
 | [argocd](clients/container-orchestration/argocd.nu)                                           | openapi | <https://raw.githubusercontent.com/argoproj/argo-cd/master/assets/swagger.json>                              |
 | [argo-workflows](clients/container-orchestration/argo-workflows.nu)                           | openapi | <https://raw.githubusercontent.com/argoproj/argo-workflows/main/api/openapi-spec/swagger.json>               |
-| [openfaas](clients/container-orchestration/openfaas.nu)                                       | openapi | <https://raw.githubusercontent.com/openfaas/faas/master/api-docs/spec.openapi.yml>                           |
+| [openfaas](clients/container-orchestration/openfaas.nu)                                       | openapi | <specs/openfaas.yaml>                                                                                        |
 | [argo-rollouts](clients/container-orchestration/argo-rollouts.nu)                             | openapi | <https://raw.githubusercontent.com/argoproj/argo-rollouts/master/pkg/apiclient/rollout/rollout.swagger.json> |
 | [karmada](clients/container-orchestration/karmada.nu)                                         | openapi | <https://raw.githubusercontent.com/karmada-io/karmada/master/api/openapi-spec/swagger.json>                  |
 | [aws-lambda](clients/container-orchestration/aws-lambda.nu)                                   | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/lambda/2015-03-31/openapi.json>                                |
@@ -684,26 +684,26 @@ This collection contains 892 clients.
 
 ## monitoring
 
-| Client                                                                           | Type    | Source                                                                                                          |
-| -------------------------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------- |
-| [grafana](clients/monitoring/grafana.nu)                                         | openapi | <https://raw.githubusercontent.com/grafana/grafana/main/public/api-merged.json>                                 |
-| [datadog](clients/monitoring/datadog.nu)                                         | openapi | <https://raw.githubusercontent.com/DataDog/datadog-api-client-python/master/.generator/schemas/v2/openapi.yaml> |
-| [checkly](clients/monitoring/checkly.nu)                                         | openapi | <https://api.checklyhq.com/openapi.json>                                                                        |
-| [kibana](clients/monitoring/kibana.nu)                                           | openapi | <https://raw.githubusercontent.com/elastic/kibana/main/oas_docs/output/kibana.serverless.yaml>                  |
-| [netdata](clients/monitoring/netdata.nu)                                         | openapi | <https://raw.githubusercontent.com/netdata/netdata/master/src/web/api/netdata-swagger.yaml>                     |
-| [influxdb](clients/monitoring/influxdb.nu)                                       | openapi | <https://raw.githubusercontent.com/influxdata/openapi/master/contracts/cloud.yml>                               |
-| [google-cloud-monitoring](clients/monitoring/google-cloud-monitoring.nu)         | openapi | <https://api.apis.guru/v2/specs/googleapis.com/monitoring/v3/openapi.json>                                      |
-| [aws-cloudwatch](clients/monitoring/aws-cloudwatch.nu)                           | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/monitoring/2010-08-01/openapi.json>                               |
-| [logfire](clients/monitoring/logfire.nu)                                         | openapi | <https://logfire-api.pydantic.dev/openapi.json>                                                                 |
-| [dash0](clients/monitoring/dash0.nu)                                             | openapi | <https://api.eu-west-1.aws.dash0.com/openapi.json>                                                              |
-| [solarwinds-observability](clients/monitoring/solarwinds-observability.nu)       | openapi | <https://api.na-01.cloud.solarwinds.com/v1/openapi.json>                                                        |
-| [twilio-monitor](clients/monitoring/twilio-monitor.nu)                           | openapi | <https://api.apis.guru/v2/specs/twilio.com/twilio_monitor_v1/1.42.0/openapi.json>                               |
-| [azure-monitor-metrics](clients/monitoring/azure-monitor-metrics.nu)             | openapi | <https://api.apis.guru/v2/specs/azure.com/monitor-metrics_API/2018-01-01/swagger.json>                          |
-| [azure-monitor-action-groups](clients/monitoring/azure-monitor-action-groups.nu) | openapi | <https://api.apis.guru/v2/specs/azure.com/monitor-actionGroups_API/2019-06-01/swagger.json>                     |
-| [azure-monitor-autoscale](clients/monitoring/azure-monitor-autoscale.nu)         | openapi | <https://api.apis.guru/v2/specs/azure.com/monitor-autoscale_API/2015-04-01/swagger.json>                        |
-| [azure-monitor-activity-logs](clients/monitoring/azure-monitor-activity-logs.nu) | openapi | <https://api.apis.guru/v2/specs/azure.com/monitor-activityLogs_API/2015-04-01/swagger.json>                     |
-| [azure-monitor-metric-alert](clients/monitoring/azure-monitor-metric-alert.nu)   | openapi | <https://api.apis.guru/v2/specs/azure.com/monitor-metricAlert_API/2018-03-01/swagger.json>                      |
-| [azure-monitor-log-profiles](clients/monitoring/azure-monitor-log-profiles.nu)   | openapi | <https://api.apis.guru/v2/specs/azure.com/monitor-logProfiles_API/2016-03-01/swagger.json>                      |
+| Client                                                                           | Type    | Source                                                                                         |
+| -------------------------------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------- |
+| [grafana](clients/monitoring/grafana.nu)                                         | openapi | <https://raw.githubusercontent.com/grafana/grafana/main/public/api-merged.json>                |
+| [datadog](clients/monitoring/datadog.nu)                                         | openapi | <specs/datadog.yaml>                                                                           |
+| [checkly](clients/monitoring/checkly.nu)                                         | openapi | <https://api.checklyhq.com/openapi.json>                                                       |
+| [kibana](clients/monitoring/kibana.nu)                                           | openapi | <https://raw.githubusercontent.com/elastic/kibana/main/oas_docs/output/kibana.serverless.yaml> |
+| [netdata](clients/monitoring/netdata.nu)                                         | openapi | <https://raw.githubusercontent.com/netdata/netdata/master/src/web/api/netdata-swagger.yaml>    |
+| [influxdb](clients/monitoring/influxdb.nu)                                       | openapi | <https://raw.githubusercontent.com/influxdata/openapi/master/contracts/cloud.yml>              |
+| [google-cloud-monitoring](clients/monitoring/google-cloud-monitoring.nu)         | openapi | <https://api.apis.guru/v2/specs/googleapis.com/monitoring/v3/openapi.json>                     |
+| [aws-cloudwatch](clients/monitoring/aws-cloudwatch.nu)                           | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/monitoring/2010-08-01/openapi.json>              |
+| [logfire](clients/monitoring/logfire.nu)                                         | openapi | <https://logfire-api.pydantic.dev/openapi.json>                                                |
+| [dash0](clients/monitoring/dash0.nu)                                             | openapi | <https://api.eu-west-1.aws.dash0.com/openapi.json>                                             |
+| [solarwinds-observability](clients/monitoring/solarwinds-observability.nu)       | openapi | <https://api.na-01.cloud.solarwinds.com/v1/openapi.json>                                       |
+| [twilio-monitor](clients/monitoring/twilio-monitor.nu)                           | openapi | <https://api.apis.guru/v2/specs/twilio.com/twilio_monitor_v1/1.42.0/openapi.json>              |
+| [azure-monitor-metrics](clients/monitoring/azure-monitor-metrics.nu)             | openapi | <https://api.apis.guru/v2/specs/azure.com/monitor-metrics_API/2018-01-01/swagger.json>         |
+| [azure-monitor-action-groups](clients/monitoring/azure-monitor-action-groups.nu) | openapi | <https://api.apis.guru/v2/specs/azure.com/monitor-actionGroups_API/2019-06-01/swagger.json>    |
+| [azure-monitor-autoscale](clients/monitoring/azure-monitor-autoscale.nu)         | openapi | <https://api.apis.guru/v2/specs/azure.com/monitor-autoscale_API/2015-04-01/swagger.json>       |
+| [azure-monitor-activity-logs](clients/monitoring/azure-monitor-activity-logs.nu) | openapi | <https://api.apis.guru/v2/specs/azure.com/monitor-activityLogs_API/2015-04-01/swagger.json>    |
+| [azure-monitor-metric-alert](clients/monitoring/azure-monitor-metric-alert.nu)   | openapi | <https://api.apis.guru/v2/specs/azure.com/monitor-metricAlert_API/2018-03-01/swagger.json>     |
+| [azure-monitor-log-profiles](clients/monitoring/azure-monitor-log-profiles.nu)   | openapi | <https://api.apis.guru/v2/specs/azure.com/monitor-logProfiles_API/2016-03-01/swagger.json>     |
 
 ## music
 

@@ -544,7 +544,11 @@ clients:
       source: https://raw.githubusercontent.com/argoproj/argo-workflows/main/api/openapi-spec/swagger.json
     - name: openfaas
       type: openapi
-      source: https://raw.githubusercontent.com/openfaas/faas/master/api-docs/spec.openapi.yml
+      # Locally-patched copy of https://raw.githubusercontent.com/openfaas/faas/master/api-docs/spec.openapi.yml
+      # — upstream embeds an unsigned 64-bit `groupKey` literal (18195285354214864953)
+      # that overflows i64 and trips nushell's `from yaml`. Local copy quotes it as
+      # a string. Refresh manually when upstream changes.
+      source: specs/openfaas.yaml
     - name: argo-rollouts
       type: openapi
       source: https://raw.githubusercontent.com/argoproj/argo-rollouts/master/pkg/apiclient/rollout/rollout.swagger.json
@@ -1643,7 +1647,11 @@ clients:
       source: https://raw.githubusercontent.com/grafana/grafana/main/public/api-merged.json
     - name: datadog
       type: openapi
-      source: https://raw.githubusercontent.com/DataDog/datadog-api-client-python/master/.generator/schemas/v2/openapi.yaml
+      # Locally-patched copy of https://raw.githubusercontent.com/DataDog/datadog-api-client-python/master/.generator/schemas/v2/openapi.yaml
+      # — upstream has example values (9876543210987654321, 12345678901234567890)
+      # that overflow i64 and trip nushell's `from yaml`. Local copy replaces them
+      # with 1234567890123456789 (still 19 digits, within i64). Refresh manually.
+      source: specs/datadog.yaml
     - name: checkly
       type: openapi
       source: https://api.checklyhq.com/openapi.json
