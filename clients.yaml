@@ -1820,9 +1820,6 @@ clients:
     - name: wrike
       type: openapi
       source: https://developers.wrike.com/openapi/wrike_api_v4_ver154.yaml
-    - name: toggl-track
-      type: openapi
-      source: https://engineering.toggl.com/assets/files/api-d56ecbd7b19d9020283019e0581d80ca.json
 
   public-data:
     - name: countries
