@@ -1347,7 +1347,7 @@ export def "self-service-settings updateSettingsFlow" [
   --lookup-secret-reveal: string@bool-completer # If set to true will reveal the lookup secrets
   --passkey-remove: string # Remove a WebAuthn Security Key  This must contain the ID of the WebAuthN connection.
   --passkey-settings-register: string # Register a WebAuthn Security Key  It is expected that the JSON returned by the WebAuthn registration process is included here.
-]: any -> record<active: string, continue_with: list<record>, expires_at: string, id: string, identity: record<created_at: string, credentials: record, external_id: string, id: string, metadata_admin: any, metadata_public: any, organization_id: string, recovery_addresses: list<record>, region: string, schema_id: string, schema_url: string, state: string, state_changed_at: string, traits: any, updated_at: string, verifiable_addresses: list<record>>, issued_at: string, request_url: string, return_to: string, state: any, transient_payload: record, type: string, ui: record<action: string, messages: list<record>, method: string, nodes: list<record>>> {
+]: any -> record<active: string, continue_with: list<record>, expires_at: string, id: string, identity: record<created_at: string, credentials: record, external_id: string, id: string, metadata_admin: any, metadata_public: any, organization_id: string, recovery_addresses: list<record>, region: string, schema_id: string, schema_url: string, state: string, state_changed_at: string, traits: any, updated_at: string, verifiable_addresses: list<record>>, issued_at: string, organization_id: string, request_url: string, return_to: string, state: any, transient_payload: record, type: string, ui: record<action: string, messages: list<record>, method: string, nodes: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1374,11 +1374,13 @@ export def "self-service-settings createNativeSettingsFlow" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
+  --organization: string # An optional organization ID that scopes the settings flow to providers of that organization. This parameter is only effective in the Ory Network.
   --X-Session-Token: string # The Session Token of the Identity performing the settings flow.
-]: nothing -> record<active: string, continue_with: list<record>, expires_at: string, id: string, identity: record<created_at: string, credentials: record, external_id: string, id: string, metadata_admin: any, metadata_public: any, organization_id: string, recovery_addresses: list<record>, region: string, schema_id: string, schema_url: string, state: string, state_changed_at: string, traits: any, updated_at: string, verifiable_addresses: list<record>>, issued_at: string, request_url: string, return_to: string, state: any, transient_payload: record, type: string, ui: record<action: string, messages: list<record>, method: string, nodes: list<record>>> {
+]: nothing -> record<active: string, continue_with: list<record>, expires_at: string, id: string, identity: record<created_at: string, credentials: record, external_id: string, id: string, metadata_admin: any, metadata_public: any, organization_id: string, recovery_addresses: list<record>, region: string, schema_id: string, schema_url: string, state: string, state_changed_at: string, traits: any, updated_at: string, verifiable_addresses: list<record>>, issued_at: string, organization_id: string, request_url: string, return_to: string, state: any, transient_payload: record, type: string, ui: record<action: string, messages: list<record>, method: string, nodes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base "/self-service/settings/api")
+  let qp = [(serialize-qp "organization" $organization "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/self-service/settings/api" $qp)
   let extra_headers = {"X-Session-Token": $X_Session_Token} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
@@ -1399,11 +1401,12 @@ export def "self-service-settings-browser createBrowserSettingsFlow" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --return-to: string # The URL to return the browser to after the flow was completed.
+  --organization: string # An optional organization ID that scopes the settings flow to providers of that organization. This parameter is only effective in the Ory Network.
   --Cookie: string # HTTP Cookies  When using the SDK in a browser app, on the server side you must include the HTTP Cookie Header sent by the client to your server here. This ensures that CSRF and session cookies are respected.
-]: nothing -> record<active: string, continue_with: list<record>, expires_at: string, id: string, identity: record<created_at: string, credentials: record, external_id: string, id: string, metadata_admin: any, metadata_public: any, organization_id: string, recovery_addresses: list<record>, region: string, schema_id: string, schema_url: string, state: string, state_changed_at: string, traits: any, updated_at: string, verifiable_addresses: list<record>>, issued_at: string, request_url: string, return_to: string, state: any, transient_payload: record, type: string, ui: record<action: string, messages: list<record>, method: string, nodes: list<record>>> {
+]: nothing -> record<active: string, continue_with: list<record>, expires_at: string, id: string, identity: record<created_at: string, credentials: record, external_id: string, id: string, metadata_admin: any, metadata_public: any, organization_id: string, recovery_addresses: list<record>, region: string, schema_id: string, schema_url: string, state: string, state_changed_at: string, traits: any, updated_at: string, verifiable_addresses: list<record>>, issued_at: string, organization_id: string, request_url: string, return_to: string, state: any, transient_payload: record, type: string, ui: record<action: string, messages: list<record>, method: string, nodes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "return_to" $return_to "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "return_to" $return_to "scalar") (serialize-qp "organization" $organization "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/self-service/settings/browser" $qp)
   let extra_headers = {"Cookie": $Cookie} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
@@ -1427,7 +1430,7 @@ export def "self-service-settings-flows get" [
   --id: string # ID is the Settings Flow ID  The value for this parameter comes from `flow` URL Query parameter sent to your application (e.g. `/settings?flow=abcde`).
   --X-Session-Token: string # The Session Token  When using the SDK in an app without a browser, please include the session token here.
   --Cookie: string # HTTP Cookies  When using the SDK in a browser app, on the server side you must include the HTTP Cookie Header sent by the client to your server here. This ensures that CSRF and session cookies are respected.
-]: nothing -> record<active: string, continue_with: list<record>, expires_at: string, id: string, identity: record<created_at: string, credentials: record, external_id: string, id: string, metadata_admin: any, metadata_public: any, organization_id: string, recovery_addresses: list<record>, region: string, schema_id: string, schema_url: string, state: string, state_changed_at: string, traits: any, updated_at: string, verifiable_addresses: list<record>>, issued_at: string, request_url: string, return_to: string, state: any, transient_payload: record, type: string, ui: record<action: string, messages: list<record>, method: string, nodes: list<record>>> {
+]: nothing -> record<active: string, continue_with: list<record>, expires_at: string, id: string, identity: record<created_at: string, credentials: record, external_id: string, id: string, metadata_admin: any, metadata_public: any, organization_id: string, recovery_addresses: list<record>, region: string, schema_id: string, schema_url: string, state: string, state_changed_at: string, traits: any, updated_at: string, verifiable_addresses: list<record>>, issued_at: string, organization_id: string, request_url: string, return_to: string, state: any, transient_payload: record, type: string, ui: record<action: string, messages: list<record>, method: string, nodes: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"

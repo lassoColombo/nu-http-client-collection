@@ -76015,7 +76015,7 @@ export def "zones-custom-hostnames custom-hostname-for-a-zone-list-custom-hostna
   --wildcard: string@bool-completer # e.g. false
   --custom-origin-server: string # e.g. origin2.example.com
   --ssl: int@ssl-completer # default: 0
-]: nothing -> record<result: table<hostname: string, id: string, ssl: record>> {
+]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: list<string>, success: bool, result: table<hostname: string, id: string, ssl: record>, result_info: record<count: float, page: float, per_page: float, total_count: float, total_pages: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hostname" $hostname "scalar") (serialize-qp "hostname.contain" $hostnamecontain "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "ssl_status" $ssl_status "scalar") (serialize-qp "hostname_status" $hostname_status "scalar") (serialize-qp "certificate_authority" $certificate_authority "scalar") (serialize-qp "wildcard" $wildcard "scalar") (serialize-qp "custom_origin_server" $custom_origin_server "scalar") (serialize-qp "ssl" $ssl "scalar")] | flatten | str join "&"
@@ -76042,7 +76042,7 @@ export def "zones-custom-hostnames custom-hostname-for-a-zone-create-custom-host
   --custom-metadata: record # Unique key/value metadata for this hostname. These are per-hostname (customer) settings.
   hostname: string # The custom hostname that will point to your hostname via CNAME. (e.g. app.example.com)
   --ssl: record # SSL properties used when creating the custom hostname. — shape: {bundle_method?: "ubiquitous"|"optimal"|"force", certificate_authority?: "digicert"|"google"|"lets_encrypt"|"ssl_com", cloudflare_branding?: bool, custom_cert_bundle?: list, custom_certificate?: string, custom_csr_id?: string, custom_key?: string, method?: "http"|"txt"|"email", settings?: record, type?: "dv", wildcard?: bool}
-]: any -> record<result: record> {
+]: any -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: list<string>, success: bool, result: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -76127,6 +76127,28 @@ export def "zones-custom-hostnames-fallback-origin custom-hostname-fallback-orig
   do-request "put" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
 }
 
+# Get Custom Hostname Quota
+#
+# GET /zones/{zone_id}/custom_hostnames/quota
+# operationId: custom-hostname-for-a-zone-get-custom-hostname-quota
+export def "zones-custom-hostnames-quota custom-hostname-for-a-zone-get-custom-hostname-quota" [
+  zone_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: list<string>, success: bool, result: record<allocated: int, exceeded: bool, hard_cap: int, used: int>> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/zones/($zone_id)/custom_hostnames/quota")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
 # Delete Custom Hostname (and any issued SSL certificates)
 #
 # DELETE /zones/{zone_id}/custom_hostnames/{custom_hostname_id}
@@ -76167,7 +76189,7 @@ export def "zones-custom-hostnames custom-hostname-for-a-zone-custom-hostname-de
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<result: record> {
+]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: list<string>, success: bool, result: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/zones/($zone_id)/custom_hostnames/($custom_hostname_id)")
@@ -76195,7 +76217,7 @@ export def "zones-custom-hostnames custom-hostname-for-a-zone-edit-custom-hostna
   --custom-origin-server: string # a valid hostname that’s been added to your DNS zone as an A, AAAA, or CNAME record. (e.g. origin2.example.com)
   --custom-origin-sni: string # A hostname that will be sent to your custom origin server as SNI for TLS handshake. This can be a valid subdomain of the zone or custom origin server name or the string ':request_host_header:' which will cause the host header in the request to be used as SNI. Not configurable with default/fallback origin server. (e.g. sni.example.com)
   --ssl: record # SSL properties used when creating the custom hostname. — shape: {bundle_method?: "ubiquitous"|"optimal"|"force", certificate_authority?: "digicert"|"google"|"lets_encrypt"|"ssl_com", cloudflare_branding?: bool, custom_cert_bundle?: list, custom_certificate?: string, custom_csr_id?: string, custom_key?: string, method?: "http"|"txt"|"email", settings?: record, type?: "dv", wildcard?: bool}
-]: any -> record<result: record> {
+]: any -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: list<string>, success: bool, result: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -76253,7 +76275,7 @@ export def "zones-custom-hostnames-certificate-pack-certificates custom-hostname
   --allow-errors(-e) # Return full response without error handling
   custom_certificate: string # If a custom uploaded certificate is used. (e.g. -----BEGIN CERTIFICATE----- MIIDdjCCAl6gAwIBAgIJAPnMg0Fs+/B0MA0GCSqGSIb3DQEBCwUAMFsx... -----END CERTIFICATE----- )
   custom_key: string # The key for a custom uploaded certificate. (e.g. -----BEGIN PRIVATE KEY----- MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC/SCB5... -----END PRIVATE KEY----- )
-]: any -> record<result: record> {
+]: any -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: list<string>, success: bool, result: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

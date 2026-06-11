@@ -125,15 +125,37 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## ci-cd
 
-| Client                                                    | Type    | Source                                                                              |
-| --------------------------------------------------------- | ------- | ----------------------------------------------------------------------------------- |
-| [circleci](clients/ci-cd/circleci.nu)                     | openapi | <https://api.apis.guru/v2/specs/circleci.com/v1/openapi.json>                       |
-| [aws-codebuild](clients/ci-cd/aws-codebuild.nu)           | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/codebuild/2016-10-06/openapi.json>    |
-| [aws-codedeploy](clients/ci-cd/aws-codedeploy.nu)         | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/codedeploy/2014-10-06/openapi.json>   |
-| [aws-codepipeline](clients/ci-cd/aws-codepipeline.nu)     | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/codepipeline/2015-07-09/openapi.json> |
-| [google-cloudbuild](clients/ci-cd/google-cloudbuild.nu)   | openapi | <https://api.apis.guru/v2/specs/googleapis.com/cloudbuild/v1/openapi.json>          |
-| [google-clouddeploy](clients/ci-cd/google-clouddeploy.nu) | openapi | <https://api.apis.guru/v2/specs/googleapis.com/clouddeploy/v1/openapi.json>         |
-| [octopus-deploy](clients/ci-cd/octopus-deploy.nu)         | openapi | <https://demo.octopus.app/api/swagger.json>                                         |
+| Client                                                                      | Type    | Source                                                                                                                     |
+| --------------------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------- |
+| [circleci](clients/ci-cd/circleci.nu)                                       | openapi | <https://api.apis.guru/v2/specs/circleci.com/v1/openapi.json>                                                              |
+| [aws-codebuild](clients/ci-cd/aws-codebuild.nu)                             | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/codebuild/2016-10-06/openapi.json>                                           |
+| [aws-codedeploy](clients/ci-cd/aws-codedeploy.nu)                           | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/codedeploy/2014-10-06/openapi.json>                                          |
+| [aws-codepipeline](clients/ci-cd/aws-codepipeline.nu)                       | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/codepipeline/2015-07-09/openapi.json>                                        |
+| [google-cloudbuild](clients/ci-cd/google-cloudbuild.nu)                     | openapi | <https://api.apis.guru/v2/specs/googleapis.com/cloudbuild/v1/openapi.json>                                                 |
+| [google-clouddeploy](clients/ci-cd/google-clouddeploy.nu)                   | openapi | <https://api.apis.guru/v2/specs/googleapis.com/clouddeploy/v1/openapi.json>                                                |
+| [octopus-deploy](clients/ci-cd/octopus-deploy.nu)                           | openapi | <https://demo.octopus.app/api/swagger.json>                                                                                |
+| [snyk-rest](clients/ci-cd/snyk-rest.nu)                                     | openapi | <https://api.snyk.io/rest/openapi/2025-01-09>                                                                              |
+| [codecov](clients/ci-cd/codecov.nu)                                         | openapi | <https://api.codecov.io/api/v2/schema/>                                                                                    |
+| [codacy](clients/ci-cd/codacy.nu)                                           | openapi | <https://api.codacy.com/api/api-docs/swagger.yaml>                                                                         |
+| [appveyor](clients/ci-cd/appveyor.nu)                                       | openapi | <https://api.apis.guru/v2/specs/appveyor.com/1.0.0/swagger.json>                                                           |
+| [cloudsmith](clients/ci-cd/cloudsmith.nu)                                   | openapi | <https://api.cloudsmith.io/openapi>                                                                                        |
+| [kubeflow-pipelines](clients/ci-cd/kubeflow-pipelines.nu)                   | openapi | <https://raw.githubusercontent.com/kubeflow/pipelines/master/backend/api/v2beta1/swagger/kfp_api_single_file.swagger.json> |
+| [aws-imagebuilder](clients/ci-cd/aws-imagebuilder.nu)                       | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/imagebuilder/2019-12-02/openapi.json>                                        |
+| [aws-serverlessrepo](clients/ci-cd/aws-serverlessrepo.nu)                   | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/serverlessrepo/2017-09-08/openapi.json>                                      |
+| [google-artifactregistry](clients/ci-cd/google-artifactregistry.nu)         | openapi | <https://api.apis.guru/v2/specs/googleapis.com/artifactregistry/v1/openapi.json>                                           |
+| [google-deploymentmanager](clients/ci-cd/google-deploymentmanager.nu)       | openapi | <https://api.apis.guru/v2/specs/googleapis.com/deploymentmanager/v2/openapi.json>                                          |
+| [google-remotebuildexecution](clients/ci-cd/google-remotebuildexecution.nu) | openapi | <https://api.apis.guru/v2/specs/googleapis.com/remotebuildexecution/v1alpha/openapi.json>                                  |
+| [google-apigeeregistry](clients/ci-cd/google-apigeeregistry.nu)             | openapi | <https://api.apis.guru/v2/specs/googleapis.com/apigeeregistry/v1/openapi.json>                                             |
+| [google-cloudrun](clients/ci-cd/google-cloudrun.nu)                         | openapi | <https://api.apis.guru/v2/specs/googleapis.com/run/v2/openapi.json>                                                        |
+| [google-binaryauthorization](clients/ci-cd/google-binaryauthorization.nu)   | openapi | <https://api.apis.guru/v2/specs/googleapis.com/binaryauthorization/v1/openapi.json>                                        |
+| [google-containeranalysis](clients/ci-cd/google-containeranalysis.nu)       | openapi | <https://api.apis.guru/v2/specs/googleapis.com/containeranalysis/v1/openapi.json>                                          |
+| [google-ondemandscanning](clients/ci-cd/google-ondemandscanning.nu)         | openapi | <https://api.apis.guru/v2/specs/googleapis.com/ondemandscanning/v1/openapi.json>                                           |
+| [azure-acr-build](clients/ci-cd/azure-acr-build.nu)                         | openapi | <https://api.apis.guru/v2/specs/azure.com/containerregistry-containerregistry_build/2019-06-01-preview/swagger.json>       |
+| [azure-deploymentmanager](clients/ci-cd/azure-deploymentmanager.nu)         | openapi | <https://api.apis.guru/v2/specs/azure.com/deploymentmanager/2019-11-01-preview/swagger.json>                               |
+| [azure-imagebuilder](clients/ci-cd/azure-imagebuilder.nu)                   | openapi | <https://api.apis.guru/v2/specs/azure.com/imagebuilder/2019-05-01-preview/swagger.json>                                    |
+| [azure-pipelinetemplates](clients/ci-cd/azure-pipelinetemplates.nu)         | openapi | <https://api.apis.guru/v2/specs/azure.com/visualstudio-PipelineTemplates/2018-08-01-preview/swagger.json>                  |
+| [azure-automation-job](clients/ci-cd/azure-automation-job.nu)               | openapi | <https://api.apis.guru/v2/specs/azure.com/automation-job/2017-05-15-preview/swagger.json>                                  |
+| [azure-automation-runbook](clients/ci-cd/azure-automation-runbook.nu)       | openapi | <https://api.apis.guru/v2/specs/azure.com/automation-runbook/2018-06-30/swagger.json>                                      |
 
 ## cloud
 
@@ -169,15 +191,37 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## container-orchestration
 
-| Client                                                              | Type    | Source                                                                                                       |
-| ------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------ |
-| [kubernetes](clients/container-orchestration/kubernetes.nu)         | openapi | <https://raw.githubusercontent.com/kubernetes/kubernetes/master/api/openapi-spec/swagger.json>               |
-| [nomad](clients/container-orchestration/nomad.nu)                   | openapi | <https://raw.githubusercontent.com/hashicorp/nomad-openapi/main/v1/openapi.yaml>                             |
-| [argocd](clients/container-orchestration/argocd.nu)                 | openapi | <https://raw.githubusercontent.com/argoproj/argo-cd/master/assets/swagger.json>                              |
-| [argo-workflows](clients/container-orchestration/argo-workflows.nu) | openapi | <https://raw.githubusercontent.com/argoproj/argo-workflows/main/api/openapi-spec/swagger.json>               |
-| [openfaas](clients/container-orchestration/openfaas.nu)             | openapi | <https://raw.githubusercontent.com/openfaas/faas/master/api-docs/spec.openapi.yml>                           |
-| [argo-rollouts](clients/container-orchestration/argo-rollouts.nu)   | openapi | <https://raw.githubusercontent.com/argoproj/argo-rollouts/master/pkg/apiclient/rollout/rollout.swagger.json> |
-| [karmada](clients/container-orchestration/karmada.nu)               | openapi | <https://raw.githubusercontent.com/karmada-io/karmada/master/api/openapi-spec/swagger.json>                  |
+| Client                                                                                        | Type    | Source                                                                                                       |
+| --------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------ |
+| [kubernetes](clients/container-orchestration/kubernetes.nu)                                   | openapi | <https://raw.githubusercontent.com/kubernetes/kubernetes/master/api/openapi-spec/swagger.json>               |
+| [nomad](clients/container-orchestration/nomad.nu)                                             | openapi | <https://raw.githubusercontent.com/hashicorp/nomad-openapi/main/v1/openapi.yaml>                             |
+| [argocd](clients/container-orchestration/argocd.nu)                                           | openapi | <https://raw.githubusercontent.com/argoproj/argo-cd/master/assets/swagger.json>                              |
+| [argo-workflows](clients/container-orchestration/argo-workflows.nu)                           | openapi | <https://raw.githubusercontent.com/argoproj/argo-workflows/main/api/openapi-spec/swagger.json>               |
+| [openfaas](clients/container-orchestration/openfaas.nu)                                       | openapi | <https://raw.githubusercontent.com/openfaas/faas/master/api-docs/spec.openapi.yml>                           |
+| [argo-rollouts](clients/container-orchestration/argo-rollouts.nu)                             | openapi | <https://raw.githubusercontent.com/argoproj/argo-rollouts/master/pkg/apiclient/rollout/rollout.swagger.json> |
+| [karmada](clients/container-orchestration/karmada.nu)                                         | openapi | <https://raw.githubusercontent.com/karmada-io/karmada/master/api/openapi-spec/swagger.json>                  |
+| [aws-lambda](clients/container-orchestration/aws-lambda.nu)                                   | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/lambda/2015-03-31/openapi.json>                                |
+| [aws-eks](clients/container-orchestration/aws-eks.nu)                                         | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/eks/2017-11-01/openapi.json>                                   |
+| [aws-ecs](clients/container-orchestration/aws-ecs.nu)                                         | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/ecs/2014-11-13/openapi.json>                                   |
+| [aws-batch](clients/container-orchestration/aws-batch.nu)                                     | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/batch/2016-08-10/openapi.json>                                 |
+| [aws-apprunner](clients/container-orchestration/aws-apprunner.nu)                             | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/apprunner/2020-05-15/openapi.json>                             |
+| [aws-step-functions](clients/container-orchestration/aws-step-functions.nu)                   | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/states/2016-11-23/openapi.json>                                |
+| [aws-swf](clients/container-orchestration/aws-swf.nu)                                         | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/swf/2012-01-25/openapi.json>                                   |
+| [aws-application-autoscaling](clients/container-orchestration/aws-application-autoscaling.nu) | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/application-autoscaling/2016-02-06/openapi.json>               |
+| [aws-elastic-beanstalk](clients/container-orchestration/aws-elastic-beanstalk.nu)             | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/elasticbeanstalk/2010-12-01/openapi.json>                      |
+| [aws-opsworks](clients/container-orchestration/aws-opsworks.nu)                               | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/opsworks/2013-02-18/openapi.json>                              |
+| [aws-cloud-map](clients/container-orchestration/aws-cloud-map.nu)                             | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/servicediscovery/2017-03-14/openapi.json>                      |
+| [google-cloud-functions](clients/container-orchestration/google-cloud-functions.nu)           | openapi | <https://api.apis.guru/v2/specs/googleapis.com/cloudfunctions/v2/openapi.json>                               |
+| [google-cloud-scheduler](clients/container-orchestration/google-cloud-scheduler.nu)           | openapi | <https://api.apis.guru/v2/specs/googleapis.com/cloudscheduler/v1beta1/openapi.json>                          |
+| [google-cloud-batch](clients/container-orchestration/google-cloud-batch.nu)                   | openapi | <https://api.apis.guru/v2/specs/googleapis.com/batch/v1/openapi.json>                                        |
+| [google-gke](clients/container-orchestration/google-gke.nu)                                   | openapi | <https://api.apis.guru/v2/specs/googleapis.com/container/v1beta1/openapi.json>                               |
+| [google-cloud-run](clients/container-orchestration/google-cloud-run.nu)                       | openapi | <https://api.apis.guru/v2/specs/googleapis.com/run/v2/openapi.json>                                          |
+| [azure-aks](clients/container-orchestration/azure-aks.nu)                                     | openapi | <https://api.apis.guru/v2/specs/azure.com/containerservice-managedClusters/2019-08-01/swagger.json>          |
+| [azure-container-instances](clients/container-orchestration/azure-container-instances.nu)     | openapi | <https://api.apis.guru/v2/specs/azure.com/containerinstance-containerInstance/2018-10-01/swagger.json>       |
+| [azure-service-fabric](clients/container-orchestration/azure-service-fabric.nu)               | openapi | <https://api.apis.guru/v2/specs/azure.com/servicefabric/6.5.0.36/swagger.json>                               |
+| [azure-service-fabric-mesh](clients/container-orchestration/azure-service-fabric-mesh.nu)     | openapi | <https://api.apis.guru/v2/specs/azure.com/servicefabricmesh/2018-09-01-preview/swagger.json>                 |
+| [azure-batch](clients/container-orchestration/azure-batch.nu)                                 | openapi | <https://api.apis.guru/v2/specs/azure.com/batch-BatchService/2019-08-01.10.0/swagger.json>                   |
+| [cilium](clients/container-orchestration/cilium.nu)                                           | openapi | <https://raw.githubusercontent.com/cilium/cilium/main/api/v1/openapi.yaml>                                   |
 
 ## containers
 
@@ -306,26 +350,61 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## forms
 
-| Client                                          | Type    | Source                                                                                                                                           |
-| ----------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [google-forms](clients/forms/google-forms.nu)   | openapi | <https://api.apis.guru/v2/specs/googleapis.com/forms/v1/openapi.json>                                                                            |
-| [formapi-io](clients/forms/formapi-io.nu)       | openapi | <https://api.apis.guru/v2/specs/formapi.io/v1/openapi.json>                                                                                      |
-| [qualtrics](clients/forms/qualtrics.nu)         | openapi | <https://api.apis.guru/v2/specs/qualtrics.com/0.2/openapi.json>                                                                                  |
-| [va-gov-forms](clients/forms/va-gov-forms.nu)   | openapi | <https://api.apis.guru/v2/specs/va.gov/forms/0.0.0/openapi.json>                                                                                 |
-| [hubspot-forms](clients/forms/hubspot-forms.nu) | openapi | <https://raw.githubusercontent.com/HubSpot/HubSpot-public-api-spec-collection/main/PublicApiSpecs/Marketing/Forms/Rollouts/144909/v3/forms.json> |
-| [tally](clients/forms/tally.nu)                 | openapi | <https://api.tally.so/openapi.json>                                                                                                              |
+| Client                                                                    | Type    | Source                                                                                                                                           |
+| ------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [google-forms](clients/forms/google-forms.nu)                             | openapi | <https://api.apis.guru/v2/specs/googleapis.com/forms/v1/openapi.json>                                                                            |
+| [formapi-io](clients/forms/formapi-io.nu)                                 | openapi | <https://api.apis.guru/v2/specs/formapi.io/v1/openapi.json>                                                                                      |
+| [qualtrics](clients/forms/qualtrics.nu)                                   | openapi | <https://api.apis.guru/v2/specs/qualtrics.com/0.2/openapi.json>                                                                                  |
+| [va-gov-forms](clients/forms/va-gov-forms.nu)                             | openapi | <https://api.apis.guru/v2/specs/va.gov/forms/0.0.0/openapi.json>                                                                                 |
+| [hubspot-forms](clients/forms/hubspot-forms.nu)                           | openapi | <https://raw.githubusercontent.com/HubSpot/HubSpot-public-api-spec-collection/main/PublicApiSpecs/Marketing/Forms/Rollouts/144909/v3/forms.json> |
+| [tally](clients/forms/tally.nu)                                           | openapi | <https://api.tally.so/openapi.json>                                                                                                              |
+| [surveysparrow](clients/forms/surveysparrow.nu)                           | openapi | <https://api.surveysparrow.com/swagger.json>                                                                                                     |
+| [docuseal](clients/forms/docuseal.nu)                                     | openapi | <https://console.docuseal.com/openapi.json>                                                                                                      |
+| [pandadoc](clients/forms/pandadoc.nu)                                     | openapi | <https://raw.githubusercontent.com/PandaDoc/pandadoc-openapi-specification/main/openapi.yaml>                                                    |
+| [dropbox-sign](clients/forms/dropbox-sign.nu)                             | openapi | <https://raw.githubusercontent.com/hellosign/hellosign-openapi/main/openapi.yaml>                                                                |
+| [boldsign](clients/forms/boldsign.nu)                                     | openapi | <https://api.boldsign.com/swagger/v1/swagger.json>                                                                                               |
+| [docusign-click](clients/forms/docusign-click.nu)                         | openapi | <https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/click.rest.swagger-v2.json>                                            |
+| [docusign-rooms](clients/forms/docusign-rooms.nu)                         | openapi | <https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/rooms.rest.swagger-v2.json>                                            |
+| [docusign-admin](clients/forms/docusign-admin.nu)                         | openapi | <https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/admin.rest.swagger-v2.1.json>                                          |
+| [docusign-webforms](clients/forms/docusign-webforms.nu)                   | openapi | <https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/webforms.rest.swagger-v1.1.0.json>                                     |
+| [docusign-maestro](clients/forms/docusign-maestro.nu)                     | openapi | <https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/maestro.rest.swagger-v1.0.0.json>                                      |
+| [docusign-monitor](clients/forms/docusign-monitor.nu)                     | openapi | <https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/monitor.rest.swagger-v2.0.json>                                        |
+| [docusign-navigator](clients/forms/docusign-navigator.nu)                 | openapi | <https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/navigator.rest.swagger.json>                                           |
+| [docusign-workspaces](clients/forms/docusign-workspaces.nu)               | openapi | <https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/workspaces.rest.swagger.json>                                          |
+| [docusign-connected-fields](clients/forms/docusign-connected-fields.nu)   | openapi | <https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/connected-fields.rest.swagger.json>                                    |
+| [docusign-agreement-manager](clients/forms/docusign-agreement-manager.nu) | openapi | <https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/agreementmanager.rest.swagger-1.0.0.json>                              |
+| [docusign-workflow-builder](clients/forms/docusign-workflow-builder.nu)   | openapi | <https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/workflowbuilder.rest.swagger-1.0.0.json>                               |
+| [azure-form-recognizer](clients/forms/azure-form-recognizer.nu)           | openapi | <https://api.apis.guru/v2/specs/azure.com/cognitiveservices-FormRecognizer/2.0-preview/swagger.yaml>                                             |
+| [va-gov-confirmation](clients/forms/va-gov-confirmation.nu)               | openapi | <https://api.apis.guru/v2/specs/va.gov/confirmation/0.0.1/openapi.yaml>                                                                          |
+| [va-gov-benefits](clients/forms/va-gov-benefits.nu)                       | openapi | <https://api.apis.guru/v2/specs/va.gov/benefits/1.0.0/openapi.yaml>                                                                              |
 
 ## fraud
 
-| Client                                                                          | Type    | Source                                                                                                         |
-| ------------------------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------- |
-| [aws-fraud-detector](clients/fraud/aws-fraud-detector.nu)                       | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/frauddetector/2019-11-15/openapi.json>                           |
-| [fraudlabspro-fraud-detection](clients/fraud/fraudlabspro-fraud-detection.nu)   | openapi | <https://api.apis.guru/v2/specs/fraudlabspro.com/fraud-detection/1.1/openapi.json>                             |
-| [fraudlabspro-sms-verification](clients/fraud/fraudlabspro-sms-verification.nu) | openapi | <https://api.apis.guru/v2/specs/fraudlabspro.com/sms-verification/1.0/openapi.json>                            |
-| [google-webrisk](clients/fraud/google-webrisk.nu)                               | openapi | <https://api.apis.guru/v2/specs/googleapis.com/webrisk/v1/openapi.json>                                        |
-| [vonage-verify](clients/fraud/vonage-verify.nu)                                 | openapi | <https://api.apis.guru/v2/specs/nexmo.com/verify/1.2.4/openapi.json>                                           |
-| [twilio-verify](clients/fraud/twilio-verify.nu)                                 | openapi | <https://api.apis.guru/v2/specs/twilio.com/twilio_verify_v2/1.42.0/openapi.json>                               |
-| [onfido](clients/fraud/onfido.nu)                                               | openapi | <https://raw.githubusercontent.com/onfido/onfido-openapi-spec/master/generated/artifacts/openapi/openapi.json> |
+| Client                                                                                | Type    | Source                                                                                                         |
+| ------------------------------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------- |
+| [aws-fraud-detector](clients/fraud/aws-fraud-detector.nu)                             | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/frauddetector/2019-11-15/openapi.json>                           |
+| [fraudlabspro-fraud-detection](clients/fraud/fraudlabspro-fraud-detection.nu)         | openapi | <https://api.apis.guru/v2/specs/fraudlabspro.com/fraud-detection/1.1/openapi.json>                             |
+| [fraudlabspro-sms-verification](clients/fraud/fraudlabspro-sms-verification.nu)       | openapi | <https://api.apis.guru/v2/specs/fraudlabspro.com/sms-verification/1.0/openapi.json>                            |
+| [google-webrisk](clients/fraud/google-webrisk.nu)                                     | openapi | <https://api.apis.guru/v2/specs/googleapis.com/webrisk/v1/openapi.json>                                        |
+| [vonage-verify](clients/fraud/vonage-verify.nu)                                       | openapi | <https://api.apis.guru/v2/specs/nexmo.com/verify/1.2.4/openapi.json>                                           |
+| [twilio-verify](clients/fraud/twilio-verify.nu)                                       | openapi | <https://api.apis.guru/v2/specs/twilio.com/twilio_verify_v2/1.42.0/openapi.json>                               |
+| [onfido](clients/fraud/onfido.nu)                                                     | openapi | <https://raw.githubusercontent.com/onfido/onfido-openapi-spec/master/generated/artifacts/openapi/openapi.json> |
+| [authentiq](clients/fraud/authentiq.nu)                                               | openapi | <https://api.apis.guru/v2/specs/authentiq.io/1.0/openapi.json>                                                 |
+| [authentiq-app](clients/fraud/authentiq-app.nu)                                       | openapi | <https://api.apis.guru/v2/specs/6-dot-authentiqio.appspot.com/6/openapi.json>                                  |
+| [circl-hashlookup](clients/fraud/circl-hashlookup.nu)                                 | openapi | <https://api.apis.guru/v2/specs/circl.lu/hashlookup/1.2/openapi.json>                                          |
+| [google-cloud-identity](clients/fraud/google-cloud-identity.nu)                       | openapi | <https://api.apis.guru/v2/specs/googleapis.com/cloudidentity/v1beta1/openapi.json>                             |
+| [google-identity-toolkit](clients/fraud/google-identity-toolkit.nu)                   | openapi | <https://api.apis.guru/v2/specs/googleapis.com/identitytoolkit/v2/openapi.json>                                |
+| [google-safe-browsing](clients/fraud/google-safe-browsing.nu)                         | openapi | <https://api.apis.guru/v2/specs/googleapis.com/safebrowsing/v4/openapi.json>                                   |
+| [google-site-verification](clients/fraud/google-site-verification.nu)                 | openapi | <https://api.apis.guru/v2/specs/googleapis.com/siteVerification/v1/openapi.json>                               |
+| [google-mybusiness-verifications](clients/fraud/google-mybusiness-verifications.nu)   | openapi | <https://api.apis.guru/v2/specs/googleapis.com/mybusinessverifications/v1/openapi.json>                        |
+| [ipqualityscore](clients/fraud/ipqualityscore.nu)                                     | openapi | <https://api.apis.guru/v2/specs/ipqualityscore.com/1.0.0/openapi.json>                                         |
+| [vonage-number-insight](clients/fraud/vonage-number-insight.nu)                       | openapi | <https://api.apis.guru/v2/specs/nexmo.com/number-insight/1.2.1/openapi.json>                                   |
+| [godaddy-abuse](clients/fraud/godaddy-abuse.nu)                                       | openapi | <https://api.apis.guru/v2/specs/ote-godaddy.com/abuse/1.0.0/openapi.json>                                      |
+| [threatjammer](clients/fraud/threatjammer.nu)                                         | openapi | <https://api.apis.guru/v2/specs/threatjammer.com/1.2.20/openapi.json>                                          |
+| [twilio-lookups-v1](clients/fraud/twilio-lookups-v1.nu)                               | openapi | <https://api.apis.guru/v2/specs/twilio.com/twilio_lookups_v1/1.42.0/openapi.json>                              |
+| [twilio-trusthub](clients/fraud/twilio-trusthub.nu)                                   | openapi | <https://api.apis.guru/v2/specs/twilio.com/twilio_trusthub_v1/1.42.0/openapi.json>                             |
+| [adyen-bin-lookup](clients/fraud/adyen-bin-lookup.nu)                                 | openapi | <https://api.apis.guru/v2/specs/adyen.com/BinLookupService/54/openapi.json>                                    |
+| [azure-advanced-threat-protection](clients/fraud/azure-advanced-threat-protection.nu) | openapi | <https://api.apis.guru/v2/specs/azure.com/security-advancedThreatProtectionSettings/2019-01-01/swagger.json>   |
 
 ## gaming
 
@@ -439,12 +518,21 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## issue-tracking
 
-| Client                                       | Type    | Source                                                                             |
-| -------------------------------------------- | ------- | ---------------------------------------------------------------------------------- |
-| [jira](clients/issue-tracking/jira.nu)       | openapi | <https://developer.atlassian.com/cloud/jira/platform/swagger-v3.v3.json>           |
-| [zendesk](clients/issue-tracking/zendesk.nu) | openapi | <https://developer.zendesk.com/zendesk/oas.yaml>                                   |
-| [redmine](clients/issue-tracking/redmine.nu) | openapi | <https://raw.githubusercontent.com/d-yoshi/redmine-openapi/main/openapi.yaml>      |
-| [mantis](clients/issue-tracking/mantis.nu)   | openapi | <https://raw.githubusercontent.com/mantisbt/mantisbt/master/api/rest/swagger.json> |
+| Client                                                                         | Type    | Source                                                                                                               |
+| ------------------------------------------------------------------------------ | ------- | -------------------------------------------------------------------------------------------------------------------- |
+| [jira](clients/issue-tracking/jira.nu)                                         | openapi | <https://developer.atlassian.com/cloud/jira/platform/swagger-v3.v3.json>                                             |
+| [zendesk](clients/issue-tracking/zendesk.nu)                                   | openapi | <https://developer.zendesk.com/zendesk/oas.yaml>                                                                     |
+| [redmine](clients/issue-tracking/redmine.nu)                                   | openapi | <https://raw.githubusercontent.com/d-yoshi/redmine-openapi/main/openapi.yaml>                                        |
+| [mantis](clients/issue-tracking/mantis.nu)                                     | openapi | <https://raw.githubusercontent.com/mantisbt/mantisbt/master/api/rest/swagger.json>                                   |
+| [clickup](clients/issue-tracking/clickup.nu)                                   | openapi | <https://api.apis.guru/v2/specs/clickup.com/1.0.0/openapi.json>                                                      |
+| [shortcut](clients/issue-tracking/shortcut.nu)                                 | openapi | <https://api.apis.guru/v2/specs/clubhouseapi.com/1/openapi.json>                                                     |
+| [front](clients/issue-tracking/front.nu)                                       | openapi | <https://raw.githubusercontent.com/frontapp/front-api-specs/main/core-api/core-api.json>                             |
+| [apideck-customer-support](clients/issue-tracking/apideck-customer-support.nu) | openapi | <https://api.apis.guru/v2/specs/apideck.com/customer-support/9.3.0/openapi.json>                                     |
+| [github-rest](clients/issue-tracking/github-rest.nu)                           | openapi | <https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json> |
+| [tuleap](clients/issue-tracking/tuleap.nu)                                     | openapi | <https://tuleap.net/api/explorer/swagger.json>                                                                       |
+| [jira-service-desk](clients/issue-tracking/jira-service-desk.nu)               | openapi | <https://developer.atlassian.com/cloud/jira/service-desk/swagger.v3.json>                                            |
+| [jira-software](clients/issue-tracking/jira-software.nu)                       | openapi | <https://developer.atlassian.com/cloud/jira/software/swagger.v3.json>                                                |
+| [azure-devops](clients/issue-tracking/azure-devops.nu)                         | openapi | <https://api.apis.guru/v2/specs/azure.com/devops/2019-07-01-preview/swagger.json>                                    |
 
 ## maps
 
@@ -462,15 +550,38 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## marketing
 
-| Client                                                          | Type    | Source                                                                          |
-| --------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------- |
-| [braze](clients/marketing/braze.nu)                             | openapi | <https://api.apis.guru/v2/specs/braze.com/1.0.0/openapi.json>                   |
-| [hubspot-marketing](clients/marketing/hubspot-marketing.nu)     | openapi | <https://api.apis.guru/v2/specs/hubapi.com/marketing/v3/openapi.json>           |
-| [klaviyo](clients/marketing/klaviyo.nu)                         | openapi | <https://raw.githubusercontent.com/klaviyo/openapi/main/openapi/stable.json>    |
-| [mailchimp-marketing](clients/marketing/mailchimp-marketing.nu) | openapi | <https://api.mailchimp.com/schema/3.0/Swagger.json?expand>                      |
-| [iterable](clients/marketing/iterable.nu)                       | openapi | <https://api.iterable.com/api-docs>                                             |
-| [onesignal](clients/marketing/onesignal.nu)                     | openapi | <https://documentation.onesignal.com/openapi.json>                              |
-| [aws-pinpoint](clients/marketing/aws-pinpoint.nu)               | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/pinpoint/2016-12-01/openapi.json> |
+| Client                                                                                                | Type    | Source                                                                                                       |
+| ----------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------ |
+| [braze](clients/marketing/braze.nu)                                                                   | openapi | <https://api.apis.guru/v2/specs/braze.com/1.0.0/openapi.json>                                                |
+| [hubspot-marketing](clients/marketing/hubspot-marketing.nu)                                           | openapi | <https://api.apis.guru/v2/specs/hubapi.com/marketing/v3/openapi.json>                                        |
+| [klaviyo](clients/marketing/klaviyo.nu)                                                               | openapi | <https://raw.githubusercontent.com/klaviyo/openapi/main/openapi/stable.json>                                 |
+| [mailchimp-marketing](clients/marketing/mailchimp-marketing.nu)                                       | openapi | <https://api.mailchimp.com/schema/3.0/Swagger.json?expand>                                                   |
+| [iterable](clients/marketing/iterable.nu)                                                             | openapi | <https://api.iterable.com/api-docs>                                                                          |
+| [onesignal](clients/marketing/onesignal.nu)                                                           | openapi | <https://documentation.onesignal.com/openapi.json>                                                           |
+| [aws-pinpoint](clients/marketing/aws-pinpoint.nu)                                                     | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/pinpoint/2016-12-01/openapi.json>                              |
+| [novu](clients/marketing/novu.nu)                                                                     | openapi | <https://api.novu.co/openapi.json>                                                                           |
+| [knock](clients/marketing/knock.nu)                                                                   | openapi | <https://api.knock.app/v1/openapi>                                                                           |
+| [buffer](clients/marketing/buffer.nu)                                                                 | openapi | <https://api.apis.guru/v2/specs/bufferapp.com/1/swagger.json>                                                |
+| [ebay-sell-marketing](clients/marketing/ebay-sell-marketing.nu)                                       | openapi | <https://api.apis.guru/v2/specs/ebay.com/sell-marketing/v1.14.0/openapi.json>                                |
+| [ebay-buy-marketing](clients/marketing/ebay-buy-marketing.nu)                                         | openapi | <https://api.apis.guru/v2/specs/ebay.com/buy-marketing/v1_beta.2.0/openapi.json>                             |
+| [apideck-sms](clients/marketing/apideck-sms.nu)                                                       | openapi | <https://api.apis.guru/v2/specs/apideck.com/sms/9.3.0/openapi.json>                                          |
+| [aws-pinpoint-email](clients/marketing/aws-pinpoint-email.nu)                                         | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/pinpoint-email/2018-07-26/openapi.json>                        |
+| [aws-pinpoint-sms-voice](clients/marketing/aws-pinpoint-sms-voice.nu)                                 | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/sms-voice/2018-09-05/openapi.json>                             |
+| [aws-customer-profiles](clients/marketing/aws-customer-profiles.nu)                                   | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/customer-profiles/2020-08-15/openapi.json>                     |
+| [azure-notification-hubs](clients/marketing/azure-notification-hubs.nu)                               | openapi | <https://api.apis.guru/v2/specs/azure.com/notificationhubs/2017-04-01/swagger.json>                          |
+| [azure-engagement-fabric](clients/marketing/azure-engagement-fabric.nu)                               | openapi | <https://api.apis.guru/v2/specs/azure.com/engagementfabric-EngagementFabric/2018-09-01-preview/swagger.json> |
+| [azure-mobile-engagement](clients/marketing/azure-mobile-engagement.nu)                               | openapi | <https://api.apis.guru/v2/specs/azure.com/mobileengagement-mobile-engagement/2014-12-01/swagger.json>        |
+| [azure-customer-insights](clients/marketing/azure-customer-insights.nu)                               | openapi | <https://api.apis.guru/v2/specs/azure.com/customer-insights/2017-04-26/swagger.json>                         |
+| [mastercard-loyalty](clients/marketing/mastercard-loyalty.nu)                                         | openapi | <https://api.apis.guru/v2/specs/mastercard.com/PersonalizedLoyaltyOffers/1.3/swagger.json>                   |
+| [google-business-profile-performance](clients/marketing/google-business-profile-performance.nu)       | openapi | <https://api.apis.guru/v2/specs/googleapis.com/businessprofileperformance/v1/openapi.json>                   |
+| [google-mybusiness-notifications](clients/marketing/google-mybusiness-notifications.nu)               | openapi | <https://api.apis.guru/v2/specs/googleapis.com/mybusinessnotifications/v1/openapi.json>                      |
+| [google-mybusiness-account-management](clients/marketing/google-mybusiness-account-management.nu)     | openapi | <https://api.apis.guru/v2/specs/googleapis.com/mybusinessaccountmanagement/v1/openapi.json>                  |
+| [google-mybusiness-business-information](clients/marketing/google-mybusiness-business-information.nu) | openapi | <https://api.apis.guru/v2/specs/googleapis.com/mybusinessbusinessinformation/v1/openapi.json>                |
+| [google-mybusiness-qanda](clients/marketing/google-mybusiness-qanda.nu)                               | openapi | <https://api.apis.guru/v2/specs/googleapis.com/mybusinessqanda/v1/openapi.json>                              |
+| [google-mybusiness-place-actions](clients/marketing/google-mybusiness-place-actions.nu)               | openapi | <https://api.apis.guru/v2/specs/googleapis.com/mybusinessplaceactions/v1/openapi.json>                       |
+| [vtex-profile-system](clients/marketing/vtex-profile-system.nu)                                       | openapi | <https://api.apis.guru/v2/specs/vtex.local/Profile-System/1.0/openapi.json>                                  |
+| [vtex-promotions](clients/marketing/vtex-promotions.nu)                                               | openapi | <https://api.apis.guru/v2/specs/vtex.local/Promotions-/1.0/openapi.json>                                     |
+| [vtex-reviews-ratings](clients/marketing/vtex-reviews-ratings.nu)                                     | openapi | <https://api.apis.guru/v2/specs/vtex.local/Reviews-and-Ratings-API/1.0/openapi.json>                         |
 
 ## monitoring
 
@@ -619,15 +730,35 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## sci-fi
 
-| Client                                                           | Type    | Source                                                                         |
-| ---------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------ |
-| [swapi](clients/sci-fi/swapi.nu)                                 | graphql | <https://swapi-graphql.netlify.app/graphql>                                    |
-| [dnd5e](clients/sci-fi/dnd5e.nu)                                 | openapi | <https://api.apis.guru/v2/specs/dnd5eapi.co/0.1/openapi.json>                  |
-| [dnd5e-graphql](clients/sci-fi/dnd5e-graphql.nu)                 | graphql | <https://www.dnd5eapi.co/graphql/2014>                                         |
-| [potterdb](clients/sci-fi/potterdb.nu)                           | graphql | <https://api.potterdb.com/graphql>                                             |
-| [starwars-translations](clients/sci-fi/starwars-translations.nu) | openapi | <https://api.apis.guru/v2/specs/funtranslations.com/starwars/2.3/swagger.json> |
-| [futurama](clients/sci-fi/futurama.nu)                           | openapi | <https://futuramaapi.com/openapi.json>                                         |
-| [thronesapi](clients/sci-fi/thronesapi.nu)                       | openapi | <https://thronesapi.com/swagger/v1/swagger.json>                               |
+| Client                                                             | Type    | Source                                                                                                                                            |
+| ------------------------------------------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [swapi](clients/sci-fi/swapi.nu)                                   | graphql | <https://swapi-graphql.netlify.app/graphql>                                                                                                       |
+| [dnd5e](clients/sci-fi/dnd5e.nu)                                   | openapi | <https://api.apis.guru/v2/specs/dnd5eapi.co/0.1/openapi.json>                                                                                     |
+| [dnd5e-graphql](clients/sci-fi/dnd5e-graphql.nu)                   | graphql | <https://www.dnd5eapi.co/graphql/2014>                                                                                                            |
+| [potterdb](clients/sci-fi/potterdb.nu)                             | graphql | <https://api.potterdb.com/graphql>                                                                                                                |
+| [starwars-translations](clients/sci-fi/starwars-translations.nu)   | openapi | <https://api.apis.guru/v2/specs/funtranslations.com/starwars/2.3/swagger.json>                                                                    |
+| [futurama](clients/sci-fi/futurama.nu)                             | openapi | <https://futuramaapi.com/openapi.json>                                                                                                            |
+| [thronesapi](clients/sci-fi/thronesapi.nu)                         | openapi | <https://thronesapi.com/swagger/v1/swagger.json>                                                                                                  |
+| [wizard-world](clients/sci-fi/wizard-world.nu)                     | openapi | <https://wizard-world-api.herokuapp.com/swagger/v1/swagger.json>                                                                                  |
+| [lovecraft](clients/sci-fi/lovecraft.nu)                           | openapi | <https://api.apis.guru/v2/specs/randomlovecraft.com/1.0/openapi.json>                                                                             |
+| [xkcd](clients/sci-fi/xkcd.nu)                                     | openapi | <https://api.apis.guru/v2/specs/xkcd.com/1.0.0/openapi.json>                                                                                      |
+| [fortnite-skynewz](clients/sci-fi/fortnite-skynewz.nu)             | openapi | <https://api.apis.guru/v2/specs/skynewz-api-fortnite.herokuapp.com/3.1.5/swagger.json>                                                            |
+| [marvel](clients/sci-fi/marvel.nu)                                 | openapi | <https://gist.githubusercontent.com/wing328/30692487826e07962ae487dbb63a2fa1/raw/03e47f54adbef78800e128bb6b5e4c2aa9683972/marvel.openapi.v2.json> |
+| [openlibrary](clients/sci-fi/openlibrary.nu)                       | openapi | <https://openlibrary.org/static/openapi.json>                                                                                                     |
+| [stapi](clients/sci-fi/stapi.nu)                                   | openapi | <https://stapi.co/api/v1/rest/common/download/stapi.yaml>                                                                                         |
+| [tibiadata](clients/sci-fi/tibiadata.nu)                           | openapi | <https://docs.tibiadata.com/swagger.json>                                                                                                         |
+| [streaming-availability](clients/sci-fi/streaming-availability.nu) | openapi | <https://raw.githubusercontent.com/movieofthenight/streaming-availability-api/main/openapi.yaml>                                                  |
+| [tmdb](clients/sci-fi/tmdb.nu)                                     | openapi | <https://raw.githubusercontent.com/ckatle/oas-tmdb/master/openapi.yml>                                                                            |
+| [scryfall](clients/sci-fi/scryfall.nu)                             | openapi | <https://raw.githubusercontent.com/jdharmon/scryfallapi/master/swagger.yaml>                                                                      |
+| [xivapi](clients/sci-fi/xivapi.nu)                                 | openapi | <https://v2.xivapi.com/api/openapi.json>                                                                                                          |
+| [etmdb](clients/sci-fi/etmdb.nu)                                   | openapi | <https://api.apis.guru/v2/specs/etmdb.com/1.0.0/openapi.json>                                                                                     |
+| [hydramovies](clients/sci-fi/hydramovies.nu)                       | openapi | <https://api.apis.guru/v2/specs/hydramovies.com/1.1/swagger.json>                                                                                 |
+| [nyt-books](clients/sci-fi/nyt-books.nu)                           | openapi | <https://api.apis.guru/v2/specs/nytimes.com/books_api/3.0.0/openapi.json>                                                                         |
+| [nyt-movie-reviews](clients/sci-fi/nyt-movie-reviews.nu)           | openapi | <https://api.apis.guru/v2/specs/nytimes.com/movie_reviews/2.0.0/openapi.json>                                                                     |
+| [thetvdb](clients/sci-fi/thetvdb.nu)                               | openapi | <https://api.apis.guru/v2/specs/thetvdb.com/3.0.0/swagger.json>                                                                                   |
+| [trakt-tv](clients/sci-fi/trakt-tv.nu)                             | openapi | <https://api.apis.guru/v2/specs/trakt.tv/1.0.0/openapi.json>                                                                                      |
+| [tvmaze](clients/sci-fi/tvmaze.nu)                                 | openapi | <https://api.apis.guru/v2/specs/tvmaze.com/1.0/openapi.json>                                                                                      |
+| [overfast](clients/sci-fi/overfast.nu)                             | openapi | <https://overfast-api.tekrop.fr/openapi.json>                                                                                                     |
 
 ## search
 
@@ -644,14 +775,52 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## shipping
 
-| Client                                                                   | Type    | Source                                                                                |
-| ------------------------------------------------------------------------ | ------- | ------------------------------------------------------------------------------------- |
-| [ebay-logistics](clients/shipping/ebay-logistics.nu)                     | openapi | <https://api.apis.guru/v2/specs/ebay.com/sell-logistics/v1_beta.0.0/openapi.json>     |
-| [here-tracking](clients/shipping/here-tracking.nu)                       | openapi | <https://api.apis.guru/v2/specs/here.com/tracking/2.1.191/openapi.json>               |
-| [royalmail-click-and-drop](clients/shipping/royalmail-click-and-drop.nu) | openapi | <https://api.apis.guru/v2/specs/royalmail.com/click-and-drop/1.0.0/swagger.json>      |
-| [vtex-logistics](clients/shipping/vtex-logistics.nu)                     | openapi | <https://api.apis.guru/v2/specs/vtex.local/Logistics-API/1.0/openapi.json>            |
-| [shipengine](clients/shipping/shipengine.nu)                             | openapi | <https://raw.githubusercontent.com/ShipEngine/shipengine-openapi/master/openapi.yaml> |
-| [shippo](clients/shipping/shippo.nu)                                     | openapi | <https://docs.goshippo.com/spec/shippoapi/public-api.yaml>                            |
+| Client                                                                             | Type    | Source                                                                                                                                            |
+| ---------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [ebay-logistics](clients/shipping/ebay-logistics.nu)                               | openapi | <https://api.apis.guru/v2/specs/ebay.com/sell-logistics/v1_beta.0.0/openapi.json>                                                                 |
+| [here-tracking](clients/shipping/here-tracking.nu)                                 | openapi | <https://api.apis.guru/v2/specs/here.com/tracking/2.1.191/openapi.json>                                                                           |
+| [royalmail-click-and-drop](clients/shipping/royalmail-click-and-drop.nu)           | openapi | <https://api.apis.guru/v2/specs/royalmail.com/click-and-drop/1.0.0/swagger.json>                                                                  |
+| [vtex-logistics](clients/shipping/vtex-logistics.nu)                               | openapi | <https://api.apis.guru/v2/specs/vtex.local/Logistics-API/1.0/openapi.json>                                                                        |
+| [shipengine](clients/shipping/shipengine.nu)                                       | openapi | <https://raw.githubusercontent.com/ShipEngine/shipengine-openapi/master/openapi.yaml>                                                             |
+| [shippo](clients/shipping/shippo.nu)                                               | openapi | <https://docs.goshippo.com/spec/shippoapi/public-api.yaml>                                                                                        |
+| [shipstation](clients/shipping/shipstation.nu)                                     | openapi | <https://api.apis.guru/v2/specs/shipstation.com/1.0.0/openapi.json>                                                                               |
+| [ideal-postcodes](clients/shipping/ideal-postcodes.nu)                             | openapi | <https://api.apis.guru/v2/specs/ideal-postcodes.co.uk/3.7.0/openapi.json>                                                                         |
+| [ups-shipping](clients/shipping/ups-shipping.nu)                                   | openapi | <https://raw.githubusercontent.com/UPS-API/api-documentation/main/Shipping.yaml>                                                                  |
+| [ups-rating](clients/shipping/ups-rating.nu)                                       | openapi | <https://raw.githubusercontent.com/UPS-API/api-documentation/main/Rating.yaml>                                                                    |
+| [ups-pickup](clients/shipping/ups-pickup.nu)                                       | openapi | <https://raw.githubusercontent.com/UPS-API/api-documentation/main/Pickup.yaml>                                                                    |
+| [ups-tracking](clients/shipping/ups-tracking.nu)                                   | openapi | <https://raw.githubusercontent.com/UPS-API/api-documentation/main/Tracking.yaml>                                                                  |
+| [ups-locator](clients/shipping/ups-locator.nu)                                     | openapi | <https://raw.githubusercontent.com/UPS-API/api-documentation/main/Locator.yaml>                                                                   |
+| [ups-address-validation](clients/shipping/ups-address-validation.nu)               | openapi | <https://raw.githubusercontent.com/UPS-API/api-documentation/main/AddressValidation.yaml>                                                         |
+| [ups-paperless](clients/shipping/ups-paperless.nu)                                 | openapi | <https://raw.githubusercontent.com/UPS-API/api-documentation/main/Paperless.yaml>                                                                 |
+| [ups-prenotification](clients/shipping/ups-prenotification.nu)                     | openapi | <https://raw.githubusercontent.com/UPS-API/api-documentation/main/PreNotification.yaml>                                                           |
+| [aftership-tracking](clients/shipping/aftership-tracking.nu)                       | openapi | <https://stoplight.io/api/v1/projects/automizely/docs-api-aftership-com/nodes/reference/api.json?branch=production/2026-01&deref=optimizedBundle> |
+| [karrio](clients/shipping/karrio.nu)                                               | openapi | <https://raw.githubusercontent.com/karrioapi/karrio/main/schemas/openapi.yml>                                                                     |
+| [shipbob](clients/shipping/shipbob.nu)                                             | openapi | <https://raw.githubusercontent.com/api-evangelist/shipbob/main/openapi/shipbob-openapi.json>                                                      |
+| [track-pod](clients/shipping/track-pod.nu)                                         | openapi | <https://raw.githubusercontent.com/api-evangelist/track-pod/main/openapi/track-pod-openapi.yml>                                                   |
+| [ship24](clients/shipping/ship24.nu)                                               | openapi | <https://raw.githubusercontent.com/api-evangelist/ship24/main/openapi/ship24-tracking-api-openapi.yml>                                            |
+| [loadsmart-shipperguide](clients/shipping/loadsmart-shipperguide.nu)               | openapi | <https://raw.githubusercontent.com/api-evangelist/loadsmart/main/openapi/loadsmart-shipperguide-openapi.yml>                                      |
+| [loadsmart-opendock](clients/shipping/loadsmart-opendock.nu)                       | openapi | <https://raw.githubusercontent.com/api-evangelist/loadsmart/main/openapi/loadsmart-opendock-openapi.yml>                                          |
+| [easypost](clients/shipping/easypost.nu)                                           | openapi | <https://raw.githubusercontent.com/api-evangelist/easypost/main/openapi/easypost-openapi.yml>                                                     |
+| [easyship](clients/shipping/easyship.nu)                                           | openapi | <https://raw.githubusercontent.com/api-evangelist/easyship/main/openapi/easyship-openapi.yml>                                                     |
+| [fedex](clients/shipping/fedex.nu)                                                 | openapi | <https://raw.githubusercontent.com/api-evangelist/fedex/main/openapi/fedex-openapi.yml>                                                           |
+| [dhl](clients/shipping/dhl.nu)                                                     | openapi | <https://raw.githubusercontent.com/api-evangelist/dhl/main/openapi/dhl-openapi.yml>                                                               |
+| [parcellab](clients/shipping/parcellab.nu)                                         | openapi | <https://raw.githubusercontent.com/api-evangelist/parcellab/main/openapi/parcellab-openapi.yml>                                                   |
+| [project44-tracking](clients/shipping/project44-tracking.nu)                       | openapi | <https://raw.githubusercontent.com/api-evangelist/project44/main/openapi/project44-tracking-openapi.yml>                                          |
+| [arcbest](clients/shipping/arcbest.nu)                                             | openapi | <https://raw.githubusercontent.com/api-evangelist/arcbest/main/openapi/arcbest-api.yaml>                                                          |
+| [routific](clients/shipping/routific.nu)                                           | openapi | <https://raw.githubusercontent.com/api-evangelist/routific/main/openapi/routific-route-optimization-api-openapi.yml>                              |
+| [marinetraffic](clients/shipping/marinetraffic.nu)                                 | openapi | <https://raw.githubusercontent.com/api-evangelist/marinetraffic/main/openapi/marinetraffic-ais-openapi.yml>                                       |
+| [vizion](clients/shipping/vizion.nu)                                               | openapi | <https://raw.githubusercontent.com/api-evangelist/vizion/main/openapi/vizion-container-tracking-openapi.yml>                                      |
+| [shippingeasy](clients/shipping/shippingeasy.nu)                                   | openapi | <https://raw.githubusercontent.com/api-evangelist/shippingeasy/main/openapi/shippingeasy-customer-api-openapi.yml>                                |
+| [flexport](clients/shipping/flexport.nu)                                           | openapi | <https://raw.githubusercontent.com/api-evangelist/flexport/main/openapi/flexport-openapi.yml>                                                     |
+| [forto](clients/shipping/forto.nu)                                                 | openapi | <https://raw.githubusercontent.com/api-evangelist/forto/main/openapi/forto-openapi.yml>                                                           |
+| [clickpost](clients/shipping/clickpost.nu)                                         | openapi | <https://raw.githubusercontent.com/api-evangelist/clickpost/main/openapi/clickpost-openapi.yml>                                                   |
+| [pitney-bowes](clients/shipping/pitney-bowes.nu)                                   | openapi | <https://raw.githubusercontent.com/api-evangelist/pitney-bowes/main/openapi/pitney-bowes-openapi.yml>                                             |
+| [uber-direct](clients/shipping/uber-direct.nu)                                     | openapi | <https://raw.githubusercontent.com/api-evangelist/uber-direct/main/openapi/uber-direct-openapi.yml>                                               |
+| [onfleet-tasks](clients/shipping/onfleet-tasks.nu)                                 | openapi | <https://raw.githubusercontent.com/api-evangelist/onfleet/main/openapi/onfleet-tasks-api-openapi.yml>                                             |
+| [sendle-orders](clients/shipping/sendle-orders.nu)                                 | openapi | <https://raw.githubusercontent.com/api-evangelist/sendle/main/openapi/sendle-orders-api-openapi.yml>                                              |
+| [maersk-track-and-trace](clients/shipping/maersk-track-and-trace.nu)               | openapi | <https://raw.githubusercontent.com/api-evangelist/maersk-line/main/openapi/maersk-track-and-trace-api-openapi.yml>                                |
+| [old-dominion-freight-tracking](clients/shipping/old-dominion-freight-tracking.nu) | openapi | <https://raw.githubusercontent.com/api-evangelist/old-dominion-freight-line/main/openapi/old-dominion-freight-line-tracking-api-openapi.yml>      |
+| [norfolk-southern-shipment](clients/shipping/norfolk-southern-shipment.nu)         | openapi | <https://raw.githubusercontent.com/api-evangelist/norfolk-southern/main/openapi/norfolk-southern-shipment-status-api.yml>                         |
 
 ## social
 
@@ -686,13 +855,47 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## tax
 
-| Client                                    | Type    | Source                                                                                              |
-| ----------------------------------------- | ------- | --------------------------------------------------------------------------------------------------- |
-| [billingo](clients/tax/billingo.nu)       | openapi | <https://api.apis.guru/v2/specs/billingo.hu/3.0.7/openapi.json>                                     |
-| [taxamo](clients/tax/taxamo.nu)           | openapi | <https://api.apis.guru/v2/specs/taxamo.com/1/swagger.json>                                          |
-| [taxrates-io](clients/tax/taxrates-io.nu) | openapi | <https://api.apis.guru/v2/specs/taxrates.io/1.0.0/openapi.json>                                     |
-| [vatapi](clients/tax/vatapi.nu)           | openapi | <https://api.apis.guru/v2/specs/vatapi.com/1/swagger.json>                                          |
-| [hmrc-vat](clients/tax/hmrc-vat.nu)       | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/vat-api/1.0/oas/resolved> |
+| Client                                                                                                  | Type    | Source                                                                                                                                |
+| ------------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| [billingo](clients/tax/billingo.nu)                                                                     | openapi | <https://api.apis.guru/v2/specs/billingo.hu/3.0.7/openapi.json>                                                                       |
+| [taxamo](clients/tax/taxamo.nu)                                                                         | openapi | <https://api.apis.guru/v2/specs/taxamo.com/1/swagger.json>                                                                            |
+| [taxrates-io](clients/tax/taxrates-io.nu)                                                               | openapi | <https://api.apis.guru/v2/specs/taxrates.io/1.0.0/openapi.json>                                                                       |
+| [vatapi](clients/tax/vatapi.nu)                                                                         | openapi | <https://api.apis.guru/v2/specs/vatapi.com/1/swagger.json>                                                                            |
+| [hmrc-vat](clients/tax/hmrc-vat.nu)                                                                     | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/vat-api/1.0/oas/resolved>                                   |
+| [hmrc-self-assessment-accounts](clients/tax/hmrc-self-assessment-accounts.nu)                           | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/self-assessment-accounts-api/4.0/oas/resolved>              |
+| [hmrc-individuals-charges](clients/tax/hmrc-individuals-charges.nu)                                     | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-charges-api/3.0/oas/resolved>                   |
+| [hmrc-individuals-disclosures](clients/tax/hmrc-individuals-disclosures.nu)                             | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-disclosures-api/2.0/oas/resolved>               |
+| [hmrc-individuals-reliefs](clients/tax/hmrc-individuals-reliefs.nu)                                     | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-reliefs-api/3.0/oas/resolved>                   |
+| [hmrc-individuals-expenses](clients/tax/hmrc-individuals-expenses.nu)                                   | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-expenses-api/3.0/oas/resolved>                  |
+| [hmrc-individuals-dividends-income](clients/tax/hmrc-individuals-dividends-income.nu)                   | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-dividends-income-api/2.0/oas/resolved>          |
+| [hmrc-individuals-savings-income](clients/tax/hmrc-individuals-savings-income.nu)                       | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-savings-income-api/2.0/oas/resolved>            |
+| [hmrc-individuals-state-benefits](clients/tax/hmrc-individuals-state-benefits.nu)                       | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-state-benefits-api/2.0/oas/resolved>            |
+| [hmrc-individuals-employments-income](clients/tax/hmrc-individuals-employments-income.nu)               | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-employments-income-api/2.0/oas/resolved>        |
+| [hmrc-individuals-foreign-income](clients/tax/hmrc-individuals-foreign-income.nu)                       | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-foreign-income-api/2.0/oas/resolved>            |
+| [hmrc-individuals-other-income](clients/tax/hmrc-individuals-other-income.nu)                           | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-other-income-api/2.0/oas/resolved>              |
+| [hmrc-individuals-pensions-income](clients/tax/hmrc-individuals-pensions-income.nu)                     | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-pensions-income-api/2.0/oas/resolved>           |
+| [hmrc-individuals-insurance-policies-income](clients/tax/hmrc-individuals-insurance-policies-income.nu) | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-insurance-policies-income-api/2.0/oas/resolved> |
+| [hmrc-individuals-capital-gains-income](clients/tax/hmrc-individuals-capital-gains-income.nu)           | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-capital-gains-income-api/3.0/oas/resolved>      |
+| [hmrc-individuals-partner-income](clients/tax/hmrc-individuals-partner-income.nu)                       | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-partner-income-api/1.0/oas/resolved>            |
+| [hmrc-individuals-tax-liability-adjustments](clients/tax/hmrc-individuals-tax-liability-adjustments.nu) | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-tax-liability-adjustments-api/1.0/oas/resolved> |
+| [hmrc-property-business](clients/tax/hmrc-property-business.nu)                                         | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/property-business-api/6.0/oas/resolved>                     |
+| [hmrc-self-employment-business](clients/tax/hmrc-self-employment-business.nu)                           | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/self-employment-business-api/5.0/oas/resolved>              |
+| [hmrc-obligations](clients/tax/hmrc-obligations.nu)                                                     | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/obligations-api/3.0/oas/resolved>                           |
+| [hmrc-business-details](clients/tax/hmrc-business-details.nu)                                           | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/business-details-api/2.0/oas/resolved>                      |
+| [hmrc-cis-deductions](clients/tax/hmrc-cis-deductions.nu)                                               | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/cis-deductions-api/3.0/oas/resolved>                        |
+| [hmrc-self-assessment-biss](clients/tax/hmrc-self-assessment-biss.nu)                                   | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/self-assessment-biss-api/3.0/oas/resolved>                  |
+| [hmrc-self-assessment-bsas](clients/tax/hmrc-self-assessment-bsas.nu)                                   | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/self-assessment-bsas-api/7.0/oas/resolved>                  |
+| [hmrc-self-assessment-individual-details](clients/tax/hmrc-self-assessment-individual-details.nu)       | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/self-assessment-individual-details-api/2.0/oas/resolved>    |
+| [hmrc-self-assessment-liability](clients/tax/hmrc-self-assessment-liability.nu)                         | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/self-assessment-liability-api/1.0/oas/resolved>             |
+| [hmrc-other-deductions](clients/tax/hmrc-other-deductions.nu)                                           | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/other-deductions-api/2.0/oas/resolved>                      |
+| [hmrc-marriage-allowance](clients/tax/hmrc-marriage-allowance.nu)                                       | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/marriage-allowance/2.0/oas/resolved>                        |
+| [hmrc-lisa](clients/tax/hmrc-lisa.nu)                                                                   | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/lisa-api/2.0/oas/resolved>                                  |
+| [hmrc-business-rates](clients/tax/hmrc-business-rates.nu)                                               | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/business-rates-api/2.0/oas/resolved>                        |
+| [hmrc-check-eori-number](clients/tax/hmrc-check-eori-number.nu)                                         | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/check-eori-number-api/1.0/oas/resolved>                     |
+| [hmrc-pillar2-submission](clients/tax/hmrc-pillar2-submission.nu)                                       | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/pillar2-submission-api/1.0/oas/resolved>                    |
+| [hmrc-individual-benefits](clients/tax/hmrc-individual-benefits.nu)                                     | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individual-benefits/2.0/oas/resolved>                       |
+| [hmrc-agent-authorisation](clients/tax/hmrc-agent-authorisation.nu)                                     | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/agent-authorisation-api/2.0/oas/resolved>                   |
+| [hmrc-individual-calculations](clients/tax/hmrc-individual-calculations.nu)                             | openapi | <https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individual-calculations-api/8.0/oas/resolved>               |
 
 ## telephony
 
@@ -764,15 +967,29 @@ _This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do no
 
 ## version-control
 
-| Client                                                          | Type    | Source                                                                                                               |
-| --------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------- |
-| [github](clients/version-control/github.nu)                     | openapi | <https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json> |
-| [gitlab](clients/version-control/gitlab.nu)                     | openapi | <https://docs.gitlab.com/api/openapi/openapi_v2.yaml>                                                                |
-| [bitbucket](clients/version-control/bitbucket.nu)               | openapi | <https://api.bitbucket.org/swagger.json>                                                                             |
-| [gitea](clients/version-control/gitea.nu)                       | openapi | <https://gitea.com/swagger.v1.json>                                                                                  |
-| [codeberg](clients/version-control/codeberg.nu)                 | openapi | <https://codeberg.org/swagger.v1.json>                                                                               |
-| [forgejo](clients/version-control/forgejo.nu)                   | openapi | <https://v11.next.forgejo.org/swagger.v1.json>                                                                       |
-| [bitbucket-server](clients/version-control/bitbucket-server.nu) | openapi | <https://dac-static.atlassian.com/server/bitbucket/10.3.swagger.v3.json>                                             |
+| Client                                                                              | Type    | Source                                                                                                               |
+| ----------------------------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------- |
+| [github](clients/version-control/github.nu)                                         | openapi | <https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json> |
+| [gitlab](clients/version-control/gitlab.nu)                                         | openapi | <https://docs.gitlab.com/api/openapi/openapi_v2.yaml>                                                                |
+| [bitbucket](clients/version-control/bitbucket.nu)                                   | openapi | <https://api.bitbucket.org/swagger.json>                                                                             |
+| [gitea](clients/version-control/gitea.nu)                                           | openapi | <https://gitea.com/swagger.v1.json>                                                                                  |
+| [codeberg](clients/version-control/codeberg.nu)                                     | openapi | <https://codeberg.org/swagger.v1.json>                                                                               |
+| [forgejo](clients/version-control/forgejo.nu)                                       | openapi | <https://v11.next.forgejo.org/swagger.v1.json>                                                                       |
+| [bitbucket-server](clients/version-control/bitbucket-server.nu)                     | openapi | <https://dac-static.atlassian.com/server/bitbucket/10.3.swagger.v3.json>                                             |
+| [aws-codecommit](clients/version-control/aws-codecommit.nu)                         | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/codecommit/2015-04-13/openapi.json>                                    |
+| [aws-codeartifact](clients/version-control/aws-codeartifact.nu)                     | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/codeartifact/2018-09-22/openapi.json>                                  |
+| [aws-codestar](clients/version-control/aws-codestar.nu)                             | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/codestar/2017-04-19/openapi.json>                                      |
+| [aws-codestar-connections](clients/version-control/aws-codestar-connections.nu)     | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/codestar-connections/2019-12-01/openapi.json>                          |
+| [aws-codestar-notifications](clients/version-control/aws-codestar-notifications.nu) | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/codestar-notifications/2019-10-15/openapi.json>                        |
+| [aws-codeguru-reviewer](clients/version-control/aws-codeguru-reviewer.nu)           | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/codeguru-reviewer/2019-09-19/openapi.json>                             |
+| [aws-signer](clients/version-control/aws-signer.nu)                                 | openapi | <https://api.apis.guru/v2/specs/amazonaws.com/signer/2017-08-25/openapi.json>                                        |
+| [github-enterprise-server](clients/version-control/github-enterprise-server.nu)     | openapi | <https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/ghes-3.11/ghes-3.11.json>           |
+| [mergify](clients/version-control/mergify.nu)                                       | openapi | <https://api.mergify.com/v1/openapi.json>                                                                            |
+| [gitguardian](clients/version-control/gitguardian.nu)                               | openapi | <https://api.gitguardian.com/v1/openapi.json>                                                                        |
+| [sigstore-rekor](clients/version-control/sigstore-rekor.nu)                         | openapi | <https://raw.githubusercontent.com/sigstore/rekor/main/openapi.yaml>                                                 |
+| [opendev](clients/version-control/opendev.nu)                                       | openapi | <https://opendev.org/swagger.v1.json>                                                                                |
+| [gitea-osmocom](clients/version-control/gitea-osmocom.nu)                           | openapi | <https://gitea.osmocom.org/swagger.v1.json>                                                                          |
+| [sourcegraph](clients/version-control/sourcegraph.nu)                               | graphql | <https://sourcegraph.com/.api/graphql>                                                                               |
 
 ## video
 

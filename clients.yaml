@@ -318,6 +318,72 @@ clients:
       type: openapi
       source: https://demo.octopus.app/api/swagger.json
 
+    - name: snyk-rest
+      type: openapi
+      source: https://api.snyk.io/rest/openapi/2025-01-09
+    - name: codecov
+      type: openapi
+      source: https://api.codecov.io/api/v2/schema/
+    - name: codacy
+      type: openapi
+      source: https://api.codacy.com/api/api-docs/swagger.yaml
+    - name: appveyor
+      type: openapi
+      source: https://api.apis.guru/v2/specs/appveyor.com/1.0.0/swagger.json
+    - name: cloudsmith
+      type: openapi
+      source: https://api.cloudsmith.io/openapi
+    - name: kubeflow-pipelines
+      type: openapi
+      source: https://raw.githubusercontent.com/kubeflow/pipelines/master/backend/api/v2beta1/swagger/kfp_api_single_file.swagger.json
+    - name: aws-imagebuilder
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/imagebuilder/2019-12-02/openapi.json
+    - name: aws-serverlessrepo
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/serverlessrepo/2017-09-08/openapi.json
+    - name: google-artifactregistry
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/artifactregistry/v1/openapi.json
+    - name: google-deploymentmanager
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/deploymentmanager/v2/openapi.json
+    - name: google-remotebuildexecution
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/remotebuildexecution/v1alpha/openapi.json
+    - name: google-apigeeregistry
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/apigeeregistry/v1/openapi.json
+    - name: google-cloudrun
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/run/v2/openapi.json
+    - name: google-binaryauthorization
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/binaryauthorization/v1/openapi.json
+    - name: google-containeranalysis
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/containeranalysis/v1/openapi.json
+    - name: google-ondemandscanning
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/ondemandscanning/v1/openapi.json
+    - name: azure-acr-build
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/containerregistry-containerregistry_build/2019-06-01-preview/swagger.json
+    - name: azure-deploymentmanager
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/deploymentmanager/2019-11-01-preview/swagger.json
+    - name: azure-imagebuilder
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/imagebuilder/2019-05-01-preview/swagger.json
+    - name: azure-pipelinetemplates
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/visualstudio-PipelineTemplates/2018-08-01-preview/swagger.json
+    - name: azure-automation-job
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/automation-job/2017-05-15-preview/swagger.json
+    - name: azure-automation-runbook
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/automation-runbook/2018-06-30/swagger.json
   cloud:
     - name: digitalocean
       type: openapi
@@ -411,6 +477,72 @@ clients:
       type: openapi
       source: https://raw.githubusercontent.com/karmada-io/karmada/master/api/openapi-spec/swagger.json
 
+    - name: aws-lambda
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/lambda/2015-03-31/openapi.json
+    - name: aws-eks
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/eks/2017-11-01/openapi.json
+    - name: aws-ecs
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/ecs/2014-11-13/openapi.json
+    - name: aws-batch
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/batch/2016-08-10/openapi.json
+    - name: aws-apprunner
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/apprunner/2020-05-15/openapi.json
+    - name: aws-step-functions
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/states/2016-11-23/openapi.json
+    - name: aws-swf
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/swf/2012-01-25/openapi.json
+    - name: aws-application-autoscaling
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/application-autoscaling/2016-02-06/openapi.json
+    - name: aws-elastic-beanstalk
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/elasticbeanstalk/2010-12-01/openapi.json
+    - name: aws-opsworks
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/opsworks/2013-02-18/openapi.json
+    - name: aws-cloud-map
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/servicediscovery/2017-03-14/openapi.json
+    - name: google-cloud-functions
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/cloudfunctions/v2/openapi.json
+    - name: google-cloud-scheduler
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/cloudscheduler/v1beta1/openapi.json
+    - name: google-cloud-batch
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/batch/v1/openapi.json
+    - name: google-gke
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/container/v1beta1/openapi.json
+    - name: google-cloud-run
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/run/v2/openapi.json
+    - name: azure-aks
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/containerservice-managedClusters/2019-08-01/swagger.json
+    - name: azure-container-instances
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/containerinstance-containerInstance/2018-10-01/swagger.json
+    - name: azure-service-fabric
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/servicefabric/6.5.0.36/swagger.json
+    - name: azure-service-fabric-mesh
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/servicefabricmesh/2018-09-01-preview/swagger.json
+    - name: azure-batch
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/batch-BatchService/2019-08-01.10.0/swagger.json
+    - name: cilium
+      type: openapi
+      source: https://raw.githubusercontent.com/cilium/cilium/main/api/v1/openapi.yaml
   containers:
     - name: docker
       type: openapi
@@ -733,6 +865,63 @@ clients:
       type: openapi
       source: https://api.tally.so/openapi.json
 
+    - name: surveysparrow
+      type: openapi
+      source: https://api.surveysparrow.com/swagger.json
+    - name: docuseal
+      type: openapi
+      source: https://console.docuseal.com/openapi.json
+    - name: pandadoc
+      type: openapi
+      source: https://raw.githubusercontent.com/PandaDoc/pandadoc-openapi-specification/main/openapi.yaml
+    - name: dropbox-sign
+      type: openapi
+      source: https://raw.githubusercontent.com/hellosign/hellosign-openapi/main/openapi.yaml
+    - name: boldsign
+      type: openapi
+      source: https://api.boldsign.com/swagger/v1/swagger.json
+    - name: docusign-click
+      type: openapi
+      source: https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/click.rest.swagger-v2.json
+    - name: docusign-rooms
+      type: openapi
+      source: https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/rooms.rest.swagger-v2.json
+    - name: docusign-admin
+      type: openapi
+      source: https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/admin.rest.swagger-v2.1.json
+    - name: docusign-webforms
+      type: openapi
+      source: https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/webforms.rest.swagger-v1.1.0.json
+    - name: docusign-maestro
+      type: openapi
+      source: https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/maestro.rest.swagger-v1.0.0.json
+    - name: docusign-monitor
+      type: openapi
+      source: https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/monitor.rest.swagger-v2.0.json
+    - name: docusign-navigator
+      type: openapi
+      source: https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/navigator.rest.swagger.json
+    - name: docusign-workspaces
+      type: openapi
+      source: https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/workspaces.rest.swagger.json
+    - name: docusign-connected-fields
+      type: openapi
+      source: https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/connected-fields.rest.swagger.json
+    - name: docusign-agreement-manager
+      type: openapi
+      source: https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/agreementmanager.rest.swagger-1.0.0.json
+    - name: docusign-workflow-builder
+      type: openapi
+      source: https://raw.githubusercontent.com/docusign/OpenAPI-Specifications/master/workflowbuilder.rest.swagger-1.0.0.json
+    - name: azure-form-recognizer
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/cognitiveservices-FormRecognizer/2.0-preview/swagger.yaml
+    - name: va-gov-confirmation
+      type: openapi
+      source: https://api.apis.guru/v2/specs/va.gov/confirmation/0.0.1/openapi.yaml
+    - name: va-gov-benefits
+      type: openapi
+      source: https://api.apis.guru/v2/specs/va.gov/benefits/1.0.0/openapi.yaml
   fraud:
     - name: aws-fraud-detector
       type: openapi
@@ -756,6 +945,54 @@ clients:
       type: openapi
       source: https://raw.githubusercontent.com/onfido/onfido-openapi-spec/master/generated/artifacts/openapi/openapi.json
 
+    - name: authentiq
+      type: openapi
+      source: https://api.apis.guru/v2/specs/authentiq.io/1.0/openapi.json
+    - name: authentiq-app
+      type: openapi
+      source: https://api.apis.guru/v2/specs/6-dot-authentiqio.appspot.com/6/openapi.json
+    - name: circl-hashlookup
+      type: openapi
+      source: https://api.apis.guru/v2/specs/circl.lu/hashlookup/1.2/openapi.json
+    - name: google-cloud-identity
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/cloudidentity/v1beta1/openapi.json
+    - name: google-identity-toolkit
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/identitytoolkit/v2/openapi.json
+    - name: google-safe-browsing
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/safebrowsing/v4/openapi.json
+    - name: google-site-verification
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/siteVerification/v1/openapi.json
+    - name: google-mybusiness-verifications
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/mybusinessverifications/v1/openapi.json
+    - name: ipqualityscore
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ipqualityscore.com/1.0.0/openapi.json
+    - name: vonage-number-insight
+      type: openapi
+      source: https://api.apis.guru/v2/specs/nexmo.com/number-insight/1.2.1/openapi.json
+    - name: godaddy-abuse
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ote-godaddy.com/abuse/1.0.0/openapi.json
+    - name: threatjammer
+      type: openapi
+      source: https://api.apis.guru/v2/specs/threatjammer.com/1.2.20/openapi.json
+    - name: twilio-lookups-v1
+      type: openapi
+      source: https://api.apis.guru/v2/specs/twilio.com/twilio_lookups_v1/1.42.0/openapi.json
+    - name: twilio-trusthub
+      type: openapi
+      source: https://api.apis.guru/v2/specs/twilio.com/twilio_trusthub_v1/1.42.0/openapi.json
+    - name: adyen-bin-lookup
+      type: openapi
+      source: https://api.apis.guru/v2/specs/adyen.com/BinLookupService/54/openapi.json
+    - name: azure-advanced-threat-protection
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/security-advancedThreatProtectionSettings/2019-01-01/swagger.json
   gaming:
     - name: pokeapi
       type: graphql
@@ -1043,6 +1280,33 @@ clients:
       type: openapi
       source: https://raw.githubusercontent.com/mantisbt/mantisbt/master/api/rest/swagger.json
 
+    - name: clickup
+      type: openapi
+      source: https://api.apis.guru/v2/specs/clickup.com/1.0.0/openapi.json
+    - name: shortcut
+      type: openapi
+      source: https://api.apis.guru/v2/specs/clubhouseapi.com/1/openapi.json
+    - name: front
+      type: openapi
+      source: https://raw.githubusercontent.com/frontapp/front-api-specs/main/core-api/core-api.json
+    - name: apideck-customer-support
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apideck.com/customer-support/9.3.0/openapi.json
+    - name: github-rest
+      type: openapi
+      source: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json
+    - name: tuleap
+      type: openapi
+      source: https://tuleap.net/api/explorer/swagger.json
+    - name: jira-service-desk
+      type: openapi
+      source: https://developer.atlassian.com/cloud/jira/service-desk/swagger.v3.json
+    - name: jira-software
+      type: openapi
+      source: https://developer.atlassian.com/cloud/jira/software/swagger.v3.json
+    - name: azure-devops
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/devops/2019-07-01-preview/swagger.json
   maps:
     - name: opencagedata
       type: openapi
@@ -1095,6 +1359,75 @@ clients:
       type: openapi
       source: https://api.apis.guru/v2/specs/amazonaws.com/pinpoint/2016-12-01/openapi.json
 
+    - name: novu
+      type: openapi
+      source: https://api.novu.co/openapi.json
+    - name: knock
+      type: openapi
+      source: https://api.knock.app/v1/openapi
+    - name: buffer
+      type: openapi
+      source: https://api.apis.guru/v2/specs/bufferapp.com/1/swagger.json
+    - name: ebay-sell-marketing
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ebay.com/sell-marketing/v1.14.0/openapi.json
+    - name: ebay-buy-marketing
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ebay.com/buy-marketing/v1_beta.2.0/openapi.json
+    - name: apideck-sms
+      type: openapi
+      source: https://api.apis.guru/v2/specs/apideck.com/sms/9.3.0/openapi.json
+    - name: aws-pinpoint-email
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/pinpoint-email/2018-07-26/openapi.json
+    - name: aws-pinpoint-sms-voice
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/sms-voice/2018-09-05/openapi.json
+    - name: aws-customer-profiles
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/customer-profiles/2020-08-15/openapi.json
+    - name: azure-notification-hubs
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/notificationhubs/2017-04-01/swagger.json
+    - name: azure-engagement-fabric
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/engagementfabric-EngagementFabric/2018-09-01-preview/swagger.json
+    - name: azure-mobile-engagement
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/mobileengagement-mobile-engagement/2014-12-01/swagger.json
+    - name: azure-customer-insights
+      type: openapi
+      source: https://api.apis.guru/v2/specs/azure.com/customer-insights/2017-04-26/swagger.json
+    - name: mastercard-loyalty
+      type: openapi
+      source: https://api.apis.guru/v2/specs/mastercard.com/PersonalizedLoyaltyOffers/1.3/swagger.json
+    - name: google-business-profile-performance
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/businessprofileperformance/v1/openapi.json
+    - name: google-mybusiness-notifications
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/mybusinessnotifications/v1/openapi.json
+    - name: google-mybusiness-account-management
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/mybusinessaccountmanagement/v1/openapi.json
+    - name: google-mybusiness-business-information
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/mybusinessbusinessinformation/v1/openapi.json
+    - name: google-mybusiness-qanda
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/mybusinessqanda/v1/openapi.json
+    - name: google-mybusiness-place-actions
+      type: openapi
+      source: https://api.apis.guru/v2/specs/googleapis.com/mybusinessplaceactions/v1/openapi.json
+    - name: vtex-profile-system
+      type: openapi
+      source: https://api.apis.guru/v2/specs/vtex.local/Profile-System/1.0/openapi.json
+    - name: vtex-promotions
+      type: openapi
+      source: https://api.apis.guru/v2/specs/vtex.local/Promotions-/1.0/openapi.json
+    - name: vtex-reviews-ratings
+      type: openapi
+      source: https://api.apis.guru/v2/specs/vtex.local/Reviews-and-Ratings-API/1.0/openapi.json
   monitoring:
     - name: grafana
       type: openapi
@@ -1509,6 +1842,66 @@ clients:
       type: openapi
       source: https://thronesapi.com/swagger/v1/swagger.json
 
+    - name: wizard-world
+      type: openapi
+      source: https://wizard-world-api.herokuapp.com/swagger/v1/swagger.json
+    - name: lovecraft
+      type: openapi
+      source: https://api.apis.guru/v2/specs/randomlovecraft.com/1.0/openapi.json
+    - name: xkcd
+      type: openapi
+      source: https://api.apis.guru/v2/specs/xkcd.com/1.0.0/openapi.json
+    - name: fortnite-skynewz
+      type: openapi
+      source: https://api.apis.guru/v2/specs/skynewz-api-fortnite.herokuapp.com/3.1.5/swagger.json
+    - name: marvel
+      type: openapi
+      source: https://gist.githubusercontent.com/wing328/30692487826e07962ae487dbb63a2fa1/raw/03e47f54adbef78800e128bb6b5e4c2aa9683972/marvel.openapi.v2.json
+    - name: openlibrary
+      type: openapi
+      source: https://openlibrary.org/static/openapi.json
+    - name: stapi
+      type: openapi
+      source: https://stapi.co/api/v1/rest/common/download/stapi.yaml
+    - name: tibiadata
+      type: openapi
+      source: https://docs.tibiadata.com/swagger.json
+    - name: streaming-availability
+      type: openapi
+      source: https://raw.githubusercontent.com/movieofthenight/streaming-availability-api/main/openapi.yaml
+    - name: tmdb
+      type: openapi
+      source: https://raw.githubusercontent.com/ckatle/oas-tmdb/master/openapi.yml
+    - name: scryfall
+      type: openapi
+      source: https://raw.githubusercontent.com/jdharmon/scryfallapi/master/swagger.yaml
+    - name: xivapi
+      type: openapi
+      source: https://v2.xivapi.com/api/openapi.json
+    - name: etmdb
+      type: openapi
+      source: https://api.apis.guru/v2/specs/etmdb.com/1.0.0/openapi.json
+    - name: hydramovies
+      type: openapi
+      source: https://api.apis.guru/v2/specs/hydramovies.com/1.1/swagger.json
+    - name: nyt-books
+      type: openapi
+      source: https://api.apis.guru/v2/specs/nytimes.com/books_api/3.0.0/openapi.json
+    - name: nyt-movie-reviews
+      type: openapi
+      source: https://api.apis.guru/v2/specs/nytimes.com/movie_reviews/2.0.0/openapi.json
+    - name: thetvdb
+      type: openapi
+      source: https://api.apis.guru/v2/specs/thetvdb.com/3.0.0/swagger.json
+    - name: trakt-tv
+      type: openapi
+      source: https://api.apis.guru/v2/specs/trakt.tv/1.0.0/openapi.json
+    - name: tvmaze
+      type: openapi
+      source: https://api.apis.guru/v2/specs/tvmaze.com/1.0/openapi.json
+    - name: overfast
+      type: openapi
+      source: https://overfast-api.tekrop.fr/openapi.json
   search:
     - name: typesense
       type: openapi
@@ -1555,6 +1948,120 @@ clients:
       type: openapi
       source: https://docs.goshippo.com/spec/shippoapi/public-api.yaml
 
+    - name: shipstation
+      type: openapi
+      source: https://api.apis.guru/v2/specs/shipstation.com/1.0.0/openapi.json
+    - name: ideal-postcodes
+      type: openapi
+      source: https://api.apis.guru/v2/specs/ideal-postcodes.co.uk/3.7.0/openapi.json
+    - name: ups-shipping
+      type: openapi
+      source: https://raw.githubusercontent.com/UPS-API/api-documentation/main/Shipping.yaml
+    - name: ups-rating
+      type: openapi
+      source: https://raw.githubusercontent.com/UPS-API/api-documentation/main/Rating.yaml
+    - name: ups-pickup
+      type: openapi
+      source: https://raw.githubusercontent.com/UPS-API/api-documentation/main/Pickup.yaml
+    - name: ups-tracking
+      type: openapi
+      source: https://raw.githubusercontent.com/UPS-API/api-documentation/main/Tracking.yaml
+    - name: ups-locator
+      type: openapi
+      source: https://raw.githubusercontent.com/UPS-API/api-documentation/main/Locator.yaml
+    - name: ups-address-validation
+      type: openapi
+      source: https://raw.githubusercontent.com/UPS-API/api-documentation/main/AddressValidation.yaml
+    - name: ups-paperless
+      type: openapi
+      source: https://raw.githubusercontent.com/UPS-API/api-documentation/main/Paperless.yaml
+    - name: ups-prenotification
+      type: openapi
+      source: https://raw.githubusercontent.com/UPS-API/api-documentation/main/PreNotification.yaml
+    - name: aftership-tracking
+      type: openapi
+      source: https://stoplight.io/api/v1/projects/automizely/docs-api-aftership-com/nodes/reference/api.json?branch=production/2026-01&deref=optimizedBundle
+    - name: karrio
+      type: openapi
+      source: https://raw.githubusercontent.com/karrioapi/karrio/main/schemas/openapi.yml
+    - name: shipbob
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/shipbob/main/openapi/shipbob-openapi.json
+    - name: track-pod
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/track-pod/main/openapi/track-pod-openapi.yml
+    - name: ship24
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/ship24/main/openapi/ship24-tracking-api-openapi.yml
+    - name: loadsmart-shipperguide
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/loadsmart/main/openapi/loadsmart-shipperguide-openapi.yml
+    - name: loadsmart-opendock
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/loadsmart/main/openapi/loadsmart-opendock-openapi.yml
+    - name: easypost
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/easypost/main/openapi/easypost-openapi.yml
+    - name: easyship
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/easyship/main/openapi/easyship-openapi.yml
+    - name: fedex
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/fedex/main/openapi/fedex-openapi.yml
+    - name: dhl
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/dhl/main/openapi/dhl-openapi.yml
+    - name: parcellab
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/parcellab/main/openapi/parcellab-openapi.yml
+    - name: project44-tracking
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/project44/main/openapi/project44-tracking-openapi.yml
+    - name: arcbest
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/arcbest/main/openapi/arcbest-api.yaml
+    - name: routific
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/routific/main/openapi/routific-route-optimization-api-openapi.yml
+    - name: marinetraffic
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/marinetraffic/main/openapi/marinetraffic-ais-openapi.yml
+    - name: vizion
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/vizion/main/openapi/vizion-container-tracking-openapi.yml
+    - name: shippingeasy
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/shippingeasy/main/openapi/shippingeasy-customer-api-openapi.yml
+    - name: flexport
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/flexport/main/openapi/flexport-openapi.yml
+    - name: forto
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/forto/main/openapi/forto-openapi.yml
+    - name: clickpost
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/clickpost/main/openapi/clickpost-openapi.yml
+    - name: pitney-bowes
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/pitney-bowes/main/openapi/pitney-bowes-openapi.yml
+    - name: uber-direct
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/uber-direct/main/openapi/uber-direct-openapi.yml
+    - name: onfleet-tasks
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/onfleet/main/openapi/onfleet-tasks-api-openapi.yml
+    - name: sendle-orders
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/sendle/main/openapi/sendle-orders-api-openapi.yml
+    - name: maersk-track-and-trace
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/maersk-line/main/openapi/maersk-track-and-trace-api-openapi.yml
+    - name: old-dominion-freight-tracking
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/old-dominion-freight-line/main/openapi/old-dominion-freight-line-tracking-api-openapi.yml
+    - name: norfolk-southern-shipment
+      type: openapi
+      source: https://raw.githubusercontent.com/api-evangelist/norfolk-southern/main/openapi/norfolk-southern-shipment-status-api.yml
   social:
     - name: mastodon
       type: openapi
@@ -1639,6 +2146,108 @@ clients:
       type: openapi
       source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/vat-api/1.0/oas/resolved
 
+    - name: hmrc-self-assessment-accounts
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/self-assessment-accounts-api/4.0/oas/resolved
+    - name: hmrc-individuals-charges
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-charges-api/3.0/oas/resolved
+    - name: hmrc-individuals-disclosures
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-disclosures-api/2.0/oas/resolved
+    - name: hmrc-individuals-reliefs
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-reliefs-api/3.0/oas/resolved
+    - name: hmrc-individuals-expenses
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-expenses-api/3.0/oas/resolved
+    - name: hmrc-individuals-dividends-income
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-dividends-income-api/2.0/oas/resolved
+    - name: hmrc-individuals-savings-income
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-savings-income-api/2.0/oas/resolved
+    - name: hmrc-individuals-state-benefits
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-state-benefits-api/2.0/oas/resolved
+    - name: hmrc-individuals-employments-income
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-employments-income-api/2.0/oas/resolved
+    - name: hmrc-individuals-foreign-income
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-foreign-income-api/2.0/oas/resolved
+    - name: hmrc-individuals-other-income
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-other-income-api/2.0/oas/resolved
+    - name: hmrc-individuals-pensions-income
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-pensions-income-api/2.0/oas/resolved
+    - name: hmrc-individuals-insurance-policies-income
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-insurance-policies-income-api/2.0/oas/resolved
+    - name: hmrc-individuals-capital-gains-income
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-capital-gains-income-api/3.0/oas/resolved
+    - name: hmrc-individuals-partner-income
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-partner-income-api/1.0/oas/resolved
+    - name: hmrc-individuals-tax-liability-adjustments
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individuals-tax-liability-adjustments-api/1.0/oas/resolved
+    - name: hmrc-property-business
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/property-business-api/6.0/oas/resolved
+    - name: hmrc-self-employment-business
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/self-employment-business-api/5.0/oas/resolved
+    - name: hmrc-obligations
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/obligations-api/3.0/oas/resolved
+    - name: hmrc-business-details
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/business-details-api/2.0/oas/resolved
+    - name: hmrc-cis-deductions
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/cis-deductions-api/3.0/oas/resolved
+    - name: hmrc-self-assessment-biss
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/self-assessment-biss-api/3.0/oas/resolved
+    - name: hmrc-self-assessment-bsas
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/self-assessment-bsas-api/7.0/oas/resolved
+    - name: hmrc-self-assessment-individual-details
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/self-assessment-individual-details-api/2.0/oas/resolved
+    - name: hmrc-self-assessment-liability
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/self-assessment-liability-api/1.0/oas/resolved
+    - name: hmrc-other-deductions
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/other-deductions-api/2.0/oas/resolved
+    - name: hmrc-marriage-allowance
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/marriage-allowance/2.0/oas/resolved
+    - name: hmrc-lisa
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/lisa-api/2.0/oas/resolved
+    - name: hmrc-business-rates
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/business-rates-api/2.0/oas/resolved
+    - name: hmrc-check-eori-number
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/check-eori-number-api/1.0/oas/resolved
+    - name: hmrc-pillar2-submission
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/pillar2-submission-api/1.0/oas/resolved
+    - name: hmrc-individual-benefits
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individual-benefits/2.0/oas/resolved
+    - name: hmrc-agent-authorisation
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/agent-authorisation-api/2.0/oas/resolved
+    - name: hmrc-individual-calculations
+      type: openapi
+      source: https://developer.service.hmrc.gov.uk/api-documentation/docs/api/service/individual-calculations-api/8.0/oas/resolved
   telephony:
     - name: twilio
       type: openapi
@@ -1814,6 +2423,50 @@ clients:
       type: openapi
       source: https://dac-static.atlassian.com/server/bitbucket/10.3.swagger.v3.json
 
+    - name: aws-codecommit
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/codecommit/2015-04-13/openapi.json
+    - name: aws-codeartifact
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/codeartifact/2018-09-22/openapi.json
+    - name: aws-codestar
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/codestar/2017-04-19/openapi.json
+    - name: aws-codestar-connections
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/codestar-connections/2019-12-01/openapi.json
+    - name: aws-codestar-notifications
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/codestar-notifications/2019-10-15/openapi.json
+    - name: aws-codeguru-reviewer
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/codeguru-reviewer/2019-09-19/openapi.json
+    - name: aws-signer
+      type: openapi
+      source: https://api.apis.guru/v2/specs/amazonaws.com/signer/2017-08-25/openapi.json
+    - name: github-enterprise-server
+      type: openapi
+      source: https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/ghes-3.11/ghes-3.11.json
+    - name: mergify
+      type: openapi
+      source: https://api.mergify.com/v1/openapi.json
+    - name: gitguardian
+      type: openapi
+      source: https://api.gitguardian.com/v1/openapi.json
+    - name: sigstore-rekor
+      type: openapi
+      source: https://raw.githubusercontent.com/sigstore/rekor/main/openapi.yaml
+    - name: opendev
+      type: openapi
+      source: https://opendev.org/swagger.v1.json
+    - name: gitea-osmocom
+      type: openapi
+      source: https://gitea.osmocom.org/swagger.v1.json
+    - name: sourcegraph
+      type: graphql
+      source: https://sourcegraph.com/.api/graphql
+      flags:
+        default-base-url: https://sourcegraph.com/.api/graphql
   video:
     - name: vimeo
       type: openapi

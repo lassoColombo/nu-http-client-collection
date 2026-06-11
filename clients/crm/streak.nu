@@ -240,7 +240,7 @@ export def "comments post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  message: string # New comment text.
+  --message: string # New comment text. Omit this field to keep the existing comment text unchanged. (nullable)
   --mentions: list # New mention ranges for the comment text. Omit this field to keep existing mentions unchanged. (nullable) — item shape: {userKey: string, offset?: int, length?: int}
 ]: any -> record<key: string, commentKey: string, boxKey: string, pipelineKey: string, creatorKey: string, newsfeedEntryKey: string, timestamp: int, message: string, mentions: table<userKey: string, offset: int, length: int>, parent: string, children: list<any>, reactionSummary: table<emoji: string, count: int, users: list>, lastSavedTimestamp: int> {
   let input = $in
