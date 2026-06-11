@@ -1,4 +1,4 @@
-# Auto-generated client for Gcore OpenAPI – FastEdge API v2026-06-11T05:30:51.199827+00:00
+# Auto-generated client for Gcore OpenAPI – FastEdge API v2026-06-11T13:09:32.237855+00:00
 # Source: https://gcore.com/docs/api-reference/services_docs_mintlify/fastedge_api.yaml
 # Auth: --token flag or $env.GCORE_OPENAPI_FASTEDGE_API_TOKEN
 

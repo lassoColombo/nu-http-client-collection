@@ -81150,8 +81150,8 @@ export def "zones-managed-headers updateManagedTransforms" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  managed_request_headers: list # The list of Managed Request Transforms. — item shape: {enabled: bool, id: any}
-  managed_response_headers: list # The list of Managed Response Transforms. — item shape: {enabled: bool, id: any}
+  --managed-request-headers: list # The list of Managed Request Transforms. — item shape: {enabled: bool, id: any}
+  --managed-response-headers: list # The list of Managed Response Transforms. — item shape: {enabled: bool, id: any}
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

@@ -3568,8 +3568,8 @@ export def "errors-sessions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --action: string
-  --startDate: int # default: 1780569651990
-  --endDate: int # default: 1781174451990
+  --startDate: int # default: 1780569648874
+  --endDate: int # default: 1781174448874
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3978,8 +3978,8 @@ export def "trails post" [
   --allow-errors(-e) # Return full response without error handling
   --limit: int # default: 200
   --page: int # default: 1
-  --startDate: int # default: 1780569623916
-  --endDate: int # default: 1781260823916
+  --startDate: int # default: 1780569622058
+  --endDate: int # default: 1781260822058
   --userId: any
   --body-query: any
   --action: any

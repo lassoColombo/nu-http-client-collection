@@ -1,0 +1,911 @@
+# Auto-generated client for Twilio - Supersim v1.0.0
+# Source: https://raw.githubusercontent.com/twilio/twilio-oai/main/spec/json/twilio_supersim_v1.json
+# Auth: --token flag or $env.TWILIO_SUPERSIM_TOKEN
+
+const BASE_URL = "https://supersim.twilio.com"
+const DEFAULT_AUTH = "basic"
+
+# Build auth: returns {headers: record, query: string}
+def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o TWILIO_SUPERSIM_TOKEN | default "" }
+  let scheme = ($auth_scheme | default "bearer")
+  if ($scheme == "none") or ($token_val | is-empty) { return {headers: {}, query: ""} }
+  match $scheme {
+    "basic" => { {headers: {Authorization: $"Basic ($token_val)"}, query: ""} }
+    "none" => { {headers: {}, query: ""} }
+    _ => { {headers: {Authorization: $"Bearer ($token_val)"}, query: ""} }
+  }
+}
+
+# Serialize a single query parameter based on collection style
+def serialize-qp [name: string, value: any, style: string]: nothing -> list<string> {
+  if ($value == null) { return [] }
+  let is_list = ($value | describe | str starts-with "list")
+  if ($value | describe | str starts-with "record") { return ($value | transpose k v | each { $"($name)[($in.k)]=($in.v)" }) }
+  if not $is_list { return [$"($name)=($value)"] }
+  match $style {
+    "multi" => { $value | each {|v| $"($name)=($v)" } }
+    "csv" => { let joined = ($value | each { $in | into string } | str join ","); [$"($name)=($joined)"] }
+    "ssv" => { let joined = ($value | each { $in | into string } | str join "%20"); [$"($name)=($joined)"] }
+    "tsv" => { let joined = ($value | each { $in | into string } | str join "\t"); [$"($name)=($joined)"] }
+    "pipes" => { let joined = ($value | each { $in | into string } | str join "|"); [$"($name)=($joined)"] }
+    "deepObject" => { $value | each {|v| $"($name)[]=($v)" } }
+    _ => { $value | each {|v| $"($name)=($v)" } }
+  }
+}
+
+# Build URL from base, path, and optional query string
+def build-url [base: string, path: string, query?: string]: nothing -> string {
+  let parsed = ($base | url parse | reject params)
+  let full_path = if ($path | is-empty) { $parsed.path } else { [$parsed.path $path] | str join "/" | str replace --all --regex '/+' '/' }
+  let result = ($parsed | upsert path $full_path)
+  if ($query != null) and ($query | is-not-empty) { $result | upsert query $query | url join } else { $result | url join }
+}
+
+# Execute HTTP request with method dispatch
+def do-request [method: string, url: string, auth: record, insecure: bool, raw: bool, max_time?: duration, allow_errors?: bool, content_type?: string, body?: any]: nothing -> any {
+  let req_url = if ($auth.query | is-not-empty) { if ($url | str contains "?") { $"($url)&($auth.query)" } else { $"($url)?($auth.query)" } } else { $url }
+  let timeout = ($max_time | default 30min)
+  let ct = ($content_type | default "application/json")
+  let resp = match $method {
+    "get" => { http get --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url }
+    "head" => { http head --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "options" => { http options --headers $auth.headers --max-time $timeout --insecure=$insecure $req_url }
+    "post" => { http post --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "put" => { http put --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "patch" => { http patch --headers $auth.headers --content-type $ct --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url ($body | default {}) }
+    "delete" => { if ($body | is-empty) { http delete --headers $auth.headers --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } else { http delete --headers $auth.headers --content-type $ct --data $body --full --allow-errors --max-time $timeout --insecure=$insecure --raw=$raw $req_url } }
+  }
+  if ($method in ["head" "options"]) { return $resp }
+  if $allow_errors { $resp } else if $resp.status == 204 { null } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else { $resp.body }
+}
+
+def bool-completer [] { ["'true'" "'false'"] }
+def base-url-completer [] { ["https://supersim.twilio.com"] }
+def auth-scheme-completer [] { ["basic"] }
+
+# Completers for enum parameters
+def CallbackMethod-completer [] { ["GET" "POST"] }
+def IpCommandsMethod-completer [] { ["GET" "POST"] }
+def SmsCommandsMethod-completer [] { ["GET" "POST"] }
+def PayloadType-completer [] { ["binary" "text"] }
+def Status-completer [] { ["active" "inactive" "ready"] }
+
+# List all available API commands with their parameters
+export def commands []: nothing -> table {
+  let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "accept" "help"]
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "sims-billing-periods ListBillingPeriod" } } | get name | first)
+  let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
+  let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
+  scope commands | where decl_id in $cmd_ids | each {|cmd|
+    let sig = $cmd.signatures | values | first
+    let params = $sig
+      | where parameter_type not-in ["input" "output"]
+      | where parameter_name not-in $builtin_flags
+      | select parameter_name parameter_type syntax_shape is_optional description
+    let return_type = ($sig | where parameter_type == "output" | get -o syntax_shape | first | default "any")
+    {
+      name: ($cmd.name | str replace $"($mod_name) " "")
+      description: $cmd.description
+      extra_description: $cmd.extra_description
+      return_type: $return_type
+      params: $params
+    }
+  }
+}
+
+# Retrieve a list of Billing Periods for a Super SIM.
+#
+# GET /v1/Sims/{SimSid}/BillingPeriods
+# operationId: ListBillingPeriod
+export def "sims-billing-periods ListBillingPeriod" [
+  SimSid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
+  --Page: int # The page index. This value is simply for client state.
+  --PageToken: string # The page token. This is provided by the API.
+]: nothing -> record<billing_periods: table<sid: string, account_sid: string, sim_sid: string, start_time: string, end_time: string, period_type: string, date_created: string, date_updated: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/Sims/($SimSid)/BillingPeriods" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Order an eSIM Profile.
+#
+# POST /v1/ESimProfiles
+# operationId: CreateEsimProfile
+export def "e-sim-profiles CreateEsimProfile" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --CallbackUrl: string # The URL we should call using the `callback_method` when the status of the eSIM Profile changes. At this stage of the eSIM Profile pilot, the a request to the URL will only be called when the ESimProfile resource changes from `reserving` to `available`.
+  --CallbackMethod: string@CallbackMethod-completer # The HTTP method we should use to call `callback_url`. Can be: `GET` or `POST` and the default is POST. (format: http-method)
+  --GenerateMatchingId: string@bool-completer # When set to `true`, a value for `Eid` does not need to be provided. Instead, when the eSIM profile is reserved, a matching ID will be generated and returned via the `matching_id` property. This identifies the specific eSIM profile that can be used by any capable device to claim and download the profile.
+  --Eid: string # Identifier of the eUICC that will claim the eSIM Profile.
+]: any -> record<sid: string, account_sid: string, iccid: string, sim_sid: string, status: string, eid: string, smdp_plus_address: string, matching_id: string, activation_code: string, error_code: string, error_message: string, date_created: string, date_updated: string, url: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let full_url = (build-url $base "/v1/ESimProfiles")
+  let body = {CallbackUrl: $CallbackUrl, CallbackMethod: $CallbackMethod, GenerateMatchingId: $GenerateMatchingId, Eid: $Eid} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
+
+# Retrieve a list of eSIM Profiles.
+#
+# GET /v1/ESimProfiles
+# operationId: ListEsimProfile
+export def "e-sim-profiles ListEsimProfile" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --Eid: string # List the eSIM Profiles that have been associated with an EId.
+  --SimSid: string # Find the eSIM Profile resource related to a [Sim](https://www.twilio.com/docs/iot/supersim/api/sim-resource) resource by providing the SIM SID. Will always return an array with either 1 or 0 records.
+  --Status: string # List the eSIM Profiles that are in a given status.
+  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
+  --Page: int # The page index. This value is simply for client state.
+  --PageToken: string # The page token. This is provided by the API.
+]: nothing -> record<esim_profiles: table<sid: string, account_sid: string, iccid: string, sim_sid: string, status: string, eid: string, smdp_plus_address: string, matching_id: string, activation_code: string, error_code: string, error_message: string, date_created: string, date_updated: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let qp = [(serialize-qp "Eid" $Eid "scalar") (serialize-qp "SimSid" $SimSid "scalar") (serialize-qp "Status" $Status "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/ESimProfiles" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Fetch an eSIM Profile.
+#
+# GET /v1/ESimProfiles/{Sid}
+# operationId: FetchEsimProfile
+export def "e-sim-profiles FetchEsimProfile" [
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> record<sid: string, account_sid: string, iccid: string, sim_sid: string, status: string, eid: string, smdp_plus_address: string, matching_id: string, activation_code: string, error_code: string, error_message: string, date_created: string, date_updated: string, url: string> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let full_url = (build-url $base $"/v1/ESimProfiles/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Create a Fleet
+#
+# POST /v1/Fleets
+# operationId: CreateFleet
+export def "fleets CreateFleet" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  NetworkAccessProfile: string # The SID or unique name of the Network Access Profile that will control which cellular networks the Fleet's SIMs can connect to.
+  --UniqueName: string # An application-defined string that uniquely identifies the resource. It can be used in place of the resource's `sid` in the URL to address the resource.
+  --DataEnabled: string@bool-completer # Defines whether SIMs in the Fleet are capable of using 2G/3G/4G/LTE/CAT-M data connectivity. Defaults to `true`.
+  --DataLimit: int # The total data usage (download and upload combined) in Megabytes that each Super SIM assigned to the Fleet can consume during a billing period (normally one month). Value must be between 1MB (1) and 2TB (2,000,000). Defaults to 1GB (1,000).
+  --IpCommandsUrl: string # The URL that will receive a webhook when a Super SIM in the Fleet is used to send an IP Command from your device to a special IP address. Your server should respond with an HTTP status code in the 200 range; any response body will be ignored. (format: uri)
+  --IpCommandsMethod: string@IpCommandsMethod-completer # A string representing the HTTP method to use when making a request to `ip_commands_url`. Can be one of `POST` or `GET`. Defaults to `POST`. (format: http-method)
+  --SmsCommandsEnabled: string@bool-completer # Defines whether SIMs in the Fleet are capable of sending and receiving machine-to-machine SMS via Commands. Defaults to `true`.
+  --SmsCommandsUrl: string # The URL that will receive a webhook when a Super SIM in the Fleet is used to send an SMS from your device to the SMS Commands number. Your server should respond with an HTTP status code in the 200 range; any response body will be ignored. (format: uri)
+  --SmsCommandsMethod: string@SmsCommandsMethod-completer # A string representing the HTTP method to use when making a request to `sms_commands_url`. Can be one of `POST` or `GET`. Defaults to `POST`. (format: http-method)
+]: any -> record<account_sid: string, sid: string, unique_name: string, date_created: string, date_updated: string, url: string, data_enabled: bool, data_limit: int, data_metering: string, sms_commands_enabled: bool, sms_commands_url: string, sms_commands_method: string, network_access_profile_sid: string, ip_commands_url: string, ip_commands_method: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let full_url = (build-url $base "/v1/Fleets")
+  let body = {NetworkAccessProfile: $NetworkAccessProfile, UniqueName: $UniqueName, DataEnabled: $DataEnabled, DataLimit: $DataLimit, IpCommandsUrl: $IpCommandsUrl, IpCommandsMethod: $IpCommandsMethod, SmsCommandsEnabled: $SmsCommandsEnabled, SmsCommandsUrl: $SmsCommandsUrl, SmsCommandsMethod: $SmsCommandsMethod} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
+
+# Retrieve a list of Fleets from your account.
+#
+# GET /v1/Fleets
+# operationId: ListFleet
+export def "fleets ListFleet" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --NetworkAccessProfile: string # The SID or unique name of the Network Access Profile that controls which cellular networks the Fleet's SIMs can connect to.
+  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
+  --Page: int # The page index. This value is simply for client state.
+  --PageToken: string # The page token. This is provided by the API.
+]: nothing -> record<fleets: table<account_sid: string, sid: string, unique_name: string, date_created: string, date_updated: string, url: string, data_enabled: bool, data_limit: int, data_metering: string, sms_commands_enabled: bool, sms_commands_url: string, sms_commands_method: string, network_access_profile_sid: string, ip_commands_url: string, ip_commands_method: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let qp = [(serialize-qp "NetworkAccessProfile" $NetworkAccessProfile "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/Fleets" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Fetch a Fleet instance from your account.
+#
+# GET /v1/Fleets/{Sid}
+# operationId: FetchFleet
+export def "fleets FetchFleet" [
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> record<account_sid: string, sid: string, unique_name: string, date_created: string, date_updated: string, url: string, data_enabled: bool, data_limit: int, data_metering: string, sms_commands_enabled: bool, sms_commands_url: string, sms_commands_method: string, network_access_profile_sid: string, ip_commands_url: string, ip_commands_method: string> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let full_url = (build-url $base $"/v1/Fleets/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Updates the given properties of a Super SIM Fleet instance from your account.
+#
+# POST /v1/Fleets/{Sid}
+# operationId: UpdateFleet
+export def "fleets UpdateFleet" [
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --UniqueName: string # An application-defined string that uniquely identifies the resource. It can be used in place of the resource's `sid` in the URL to address the resource.
+  --NetworkAccessProfile: string # The SID or unique name of the Network Access Profile that will control which cellular networks the Fleet's SIMs can connect to.
+  --IpCommandsUrl: string # The URL that will receive a webhook when a Super SIM in the Fleet is used to send an IP Command from your device to a special IP address. Your server should respond with an HTTP status code in the 200 range; any response body will be ignored. (format: uri)
+  --IpCommandsMethod: string@IpCommandsMethod-completer # A string representing the HTTP method to use when making a request to `ip_commands_url`. Can be one of `POST` or `GET`. Defaults to `POST`. (format: http-method)
+  --SmsCommandsUrl: string # The URL that will receive a webhook when a Super SIM in the Fleet is used to send an SMS from your device to the SMS Commands number. Your server should respond with an HTTP status code in the 200 range; any response body will be ignored. (format: uri)
+  --SmsCommandsMethod: string@SmsCommandsMethod-completer # A string representing the HTTP method to use when making a request to `sms_commands_url`. Can be one of `POST` or `GET`. Defaults to `POST`. (format: http-method)
+  --DataLimit: int # The total data usage (download and upload combined) in Megabytes that each Super SIM assigned to the Fleet can consume during a billing period (normally one month). Value must be between 1MB (1) and 2TB (2,000,000). Defaults to 1GB (1,000).
+]: any -> record<account_sid: string, sid: string, unique_name: string, date_created: string, date_updated: string, url: string, data_enabled: bool, data_limit: int, data_metering: string, sms_commands_enabled: bool, sms_commands_url: string, sms_commands_method: string, network_access_profile_sid: string, ip_commands_url: string, ip_commands_method: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let full_url = (build-url $base $"/v1/Fleets/($Sid)")
+  let body = {UniqueName: $UniqueName, NetworkAccessProfile: $NetworkAccessProfile, IpCommandsUrl: $IpCommandsUrl, IpCommandsMethod: $IpCommandsMethod, SmsCommandsUrl: $SmsCommandsUrl, SmsCommandsMethod: $SmsCommandsMethod, DataLimit: $DataLimit} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
+
+# Send an IP Command to a Super SIM.
+#
+# POST /v1/IpCommands
+# operationId: CreateIpCommand
+export def "ip-commands CreateIpCommand" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  Sim: string # The `sid` or `unique_name` of the [Super SIM](https://www.twilio.com/docs/iot/supersim/api/sim-resource) to send the IP Command to.
+  Payload: string # The data that will be sent to the device. The payload cannot exceed 1300 bytes. If the PayloadType is set to text, the payload is encoded in UTF-8. If PayloadType is set to binary, the payload is encoded in Base64.
+  DevicePort: int # The device port to which the IP Command will be sent.
+  --PayloadType: string@PayloadType-completer # Either “text” or “binary”. For an IP Command sent to a Super SIM, `payload_type` is configurable. For an IP Command sent from a Super SIM, `payload_type` is always “binary”.
+  --CallbackUrl: string # The URL we should call using the `callback_method` after we have sent the IP Command. (format: uri)
+  --CallbackMethod: string@CallbackMethod-completer # The HTTP method we should use to call `callback_url`. Can be `GET` or `POST`, and the default is `POST`. (format: http-method)
+]: any -> record<sid: string, account_sid: string, sim_sid: string, sim_iccid: string, status: string, direction: string, device_ip: string, device_port: int, payload_type: string, payload: string, date_created: string, date_updated: string, url: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let full_url = (build-url $base "/v1/IpCommands")
+  let body = {Sim: $Sim, Payload: $Payload, DevicePort: $DevicePort, PayloadType: $PayloadType, CallbackUrl: $CallbackUrl, CallbackMethod: $CallbackMethod} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
+
+# Retrieve a list of IP Commands from your account.
+#
+# GET /v1/IpCommands
+# operationId: ListIpCommand
+export def "ip-commands ListIpCommand" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --Sim: string # The SID or unique name of the Sim resource that IP Command was sent to or from.
+  --SimIccid: string # The ICCID of the Sim resource that IP Command was sent to or from.
+  --Status: string # The status of the IP Command. Can be: `queued`, `sent`, `received` or `failed`. See the [IP Command Status Values](https://www.twilio.com/docs/iot/supersim/api/ipcommand-resource#status-values) for a description of each.
+  --Direction: string # The direction of the IP Command. Can be `to_sim` or `from_sim`. The value of `to_sim` is synonymous with the term `mobile terminated`, and `from_sim` is synonymous with the term `mobile originated`.
+  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
+  --Page: int # The page index. This value is simply for client state.
+  --PageToken: string # The page token. This is provided by the API.
+]: nothing -> record<ip_commands: table<sid: string, account_sid: string, sim_sid: string, sim_iccid: string, status: string, direction: string, device_ip: string, device_port: int, payload_type: string, payload: string, date_created: string, date_updated: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let qp = [(serialize-qp "Sim" $Sim "scalar") (serialize-qp "SimIccid" $SimIccid "scalar") (serialize-qp "Status" $Status "scalar") (serialize-qp "Direction" $Direction "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/IpCommands" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Fetch IP Command instance from your account.
+#
+# GET /v1/IpCommands/{Sid}
+# operationId: FetchIpCommand
+export def "ip-commands FetchIpCommand" [
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> record<sid: string, account_sid: string, sim_sid: string, sim_iccid: string, status: string, direction: string, device_ip: string, device_port: int, payload_type: string, payload: string, date_created: string, date_updated: string, url: string> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let full_url = (build-url $base $"/v1/IpCommands/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Fetch a Network resource.
+#
+# GET /v1/Networks/{Sid}
+# operationId: FetchNetwork
+export def "networks FetchNetwork" [
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> record<sid: string, friendly_name: string, url: string, iso_country: string, identifiers: list<any>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let full_url = (build-url $base $"/v1/Networks/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Retrieve a list of Network resources.
+#
+# GET /v1/Networks
+# operationId: ListNetwork
+export def "networks ListNetwork" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --IsoCountry: string # The [ISO country code](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) of the Network resources to read.
+  --Mcc: string # The 'mobile country code' of a country. Network resources with this `mcc` in their `identifiers` will be read.
+  --Mnc: string # The 'mobile network code' of a mobile operator network. Network resources with this `mnc` in their `identifiers` will be read.
+  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
+  --Page: int # The page index. This value is simply for client state.
+  --PageToken: string # The page token. This is provided by the API.
+]: nothing -> record<networks: table<sid: string, friendly_name: string, url: string, iso_country: string, identifiers: list>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let qp = [(serialize-qp "IsoCountry" $IsoCountry "scalar") (serialize-qp "Mcc" $Mcc "scalar") (serialize-qp "Mnc" $Mnc "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/Networks" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Create a new Network Access Profile
+#
+# POST /v1/NetworkAccessProfiles
+# operationId: CreateNetworkAccessProfile
+export def "network-access-profiles CreateNetworkAccessProfile" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --UniqueName: string # An application-defined string that uniquely identifies the resource. It can be used in place of the resource's `sid` in the URL to address the resource.
+  --Networks: list # List of Network SIDs that this Network Access Profile will allow connections to.
+]: any -> record<sid: string, unique_name: string, account_sid: string, date_created: string, date_updated: string, url: string, links: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let full_url = (build-url $base "/v1/NetworkAccessProfiles")
+  let body = {UniqueName: $UniqueName, Networks: $Networks} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
+
+# Retrieve a list of Network Access Profiles from your account.
+#
+# GET /v1/NetworkAccessProfiles
+# operationId: ListNetworkAccessProfile
+export def "network-access-profiles ListNetworkAccessProfile" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
+  --Page: int # The page index. This value is simply for client state.
+  --PageToken: string # The page token. This is provided by the API.
+]: nothing -> record<network_access_profiles: table<sid: string, unique_name: string, account_sid: string, date_created: string, date_updated: string, url: string, links: record>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/NetworkAccessProfiles" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Fetch a Network Access Profile instance from your account.
+#
+# GET /v1/NetworkAccessProfiles/{Sid}
+# operationId: FetchNetworkAccessProfile
+export def "network-access-profiles FetchNetworkAccessProfile" [
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> record<sid: string, unique_name: string, account_sid: string, date_created: string, date_updated: string, url: string, links: record> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let full_url = (build-url $base $"/v1/NetworkAccessProfiles/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Updates the given properties of a Network Access Profile in your account.
+#
+# POST /v1/NetworkAccessProfiles/{Sid}
+# operationId: UpdateNetworkAccessProfile
+export def "network-access-profiles UpdateNetworkAccessProfile" [
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --UniqueName: string # The new unique name of the Network Access Profile.
+]: any -> record<sid: string, unique_name: string, account_sid: string, date_created: string, date_updated: string, url: string, links: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let full_url = (build-url $base $"/v1/NetworkAccessProfiles/($Sid)")
+  let body = {UniqueName: $UniqueName} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
+
+# Retrieve a list of Network Access Profile resource's Network resource.
+#
+# GET /v1/NetworkAccessProfiles/{NetworkAccessProfileSid}/Networks
+# operationId: ListNetworkAccessProfileNetwork
+export def "network-access-profiles-networks ListNetworkAccessProfileNetwork" [
+  NetworkAccessProfileSid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
+  --Page: int # The page index. This value is simply for client state.
+  --PageToken: string # The page token. This is provided by the API.
+]: nothing -> record<networks: table<sid: string, network_access_profile_sid: string, friendly_name: string, iso_country: string, identifiers: list, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/NetworkAccessProfiles/($NetworkAccessProfileSid)/Networks" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Add a Network resource to the Network Access Profile resource.
+#
+# POST /v1/NetworkAccessProfiles/{NetworkAccessProfileSid}/Networks
+# operationId: CreateNetworkAccessProfileNetwork
+export def "network-access-profiles-networks CreateNetworkAccessProfileNetwork" [
+  NetworkAccessProfileSid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  Network: string # The SID of the Network resource to be added to the Network Access Profile resource.
+]: any -> record<sid: string, network_access_profile_sid: string, friendly_name: string, iso_country: string, identifiers: list<any>, url: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let full_url = (build-url $base $"/v1/NetworkAccessProfiles/($NetworkAccessProfileSid)/Networks")
+  let body = {Network: $Network} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
+
+# Remove a Network resource from the Network Access Profile resource's.
+#
+# DELETE /v1/NetworkAccessProfiles/{NetworkAccessProfileSid}/Networks/{Sid}
+# operationId: DeleteNetworkAccessProfileNetwork
+export def "network-access-profiles-networks DeleteNetworkAccessProfileNetwork" [
+  NetworkAccessProfileSid: string
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> any {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let full_url = (build-url $base $"/v1/NetworkAccessProfiles/($NetworkAccessProfileSid)/Networks/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Fetch a Network Access Profile resource's Network resource.
+#
+# GET /v1/NetworkAccessProfiles/{NetworkAccessProfileSid}/Networks/{Sid}
+# operationId: FetchNetworkAccessProfileNetwork
+export def "network-access-profiles-networks FetchNetworkAccessProfileNetwork" [
+  NetworkAccessProfileSid: string
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> record<sid: string, network_access_profile_sid: string, friendly_name: string, iso_country: string, identifiers: list<any>, url: string> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let full_url = (build-url $base $"/v1/NetworkAccessProfiles/($NetworkAccessProfileSid)/Networks/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Retrieve a list of Settings Updates.
+#
+# GET /v1/SettingsUpdates
+# operationId: ListSettingsUpdate
+export def "settings-updates ListSettingsUpdate" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --Sim: string # Filter the Settings Updates by a Super SIM's SID or UniqueName.
+  --Status: string # Filter the Settings Updates by status. Can be `scheduled`, `in-progress`, `successful`, or `failed`.
+  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
+  --Page: int # The page index. This value is simply for client state.
+  --PageToken: string # The page token. This is provided by the API.
+]: nothing -> record<settings_updates: table<sid: string, iccid: string, sim_sid: string, status: string, packages: list, date_completed: string, date_created: string, date_updated: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let qp = [(serialize-qp "Sim" $Sim "scalar") (serialize-qp "Status" $Status "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/SettingsUpdates" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Register a Super SIM to your Account
+#
+# POST /v1/Sims
+# operationId: CreateSim
+export def "sims CreateSim" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  Iccid: string # The [ICCID](https://en.wikipedia.org/wiki/Subscriber_identity_module#ICCID) of the Super SIM to be added to your Account.
+  RegistrationCode: string # The 10-digit code required to claim the Super SIM for your Account.
+]: any -> record<sid: string, unique_name: string, account_sid: string, iccid: string, status: string, fleet_sid: string, date_created: string, date_updated: string, url: string, links: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let full_url = (build-url $base "/v1/Sims")
+  let body = {Iccid: $Iccid, RegistrationCode: $RegistrationCode} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
+
+# Retrieve a list of Super SIMs from your account.
+#
+# GET /v1/Sims
+# operationId: ListSim
+export def "sims ListSim" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --Status: string # The status of the Sim resources to read. Can be `new`, `ready`, `active`, `inactive`, or `scheduled`.
+  --Fleet: string # The SID or unique name of the Fleet to which a list of Sims are assigned.
+  --Iccid: string # The [ICCID](https://en.wikipedia.org/wiki/Subscriber_identity_module#ICCID) associated with a Super SIM to filter the list by. Passing this parameter will always return a list containing zero or one SIMs.
+  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
+  --Page: int # The page index. This value is simply for client state.
+  --PageToken: string # The page token. This is provided by the API.
+]: nothing -> record<sims: table<sid: string, unique_name: string, account_sid: string, iccid: string, status: string, fleet_sid: string, date_created: string, date_updated: string, url: string, links: record>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let qp = [(serialize-qp "Status" $Status "scalar") (serialize-qp "Fleet" $Fleet "scalar") (serialize-qp "Iccid" $Iccid "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/Sims" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Fetch a Super SIM instance from your account.
+#
+# GET /v1/Sims/{Sid}
+# operationId: FetchSim
+export def "sims FetchSim" [
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> record<sid: string, unique_name: string, account_sid: string, iccid: string, status: string, fleet_sid: string, date_created: string, date_updated: string, url: string, links: record> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let full_url = (build-url $base $"/v1/Sims/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Updates the given properties of a Super SIM instance from your account.
+#
+# POST /v1/Sims/{Sid}
+# operationId: UpdateSim
+export def "sims UpdateSim" [
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --UniqueName: string # An application-defined string that uniquely identifies the resource. It can be used in place of the resource's `sid` in the URL to address the resource.
+  --Status: string@Status-completer
+  --Fleet: string # The SID or unique name of the Fleet to which the SIM resource should be assigned.
+  --CallbackUrl: string # The URL we should call using the `callback_method` after an asynchronous update has finished. (format: uri)
+  --CallbackMethod: string@CallbackMethod-completer # The HTTP method we should use to call `callback_url`. Can be: `GET` or `POST` and the default is POST. (format: http-method)
+  --AccountSid: string # The SID of the Account to which the Sim resource should belong. The Account SID can only be that of the requesting Account or that of a Subaccount of the requesting Account. Only valid when the Sim resource's status is new.
+]: any -> record<sid: string, unique_name: string, account_sid: string, iccid: string, status: string, fleet_sid: string, date_created: string, date_updated: string, url: string, links: record> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let full_url = (build-url $base $"/v1/Sims/($Sid)")
+  let body = {UniqueName: $UniqueName, Status: $Status, Fleet: $Fleet, CallbackUrl: $CallbackUrl, CallbackMethod: $CallbackMethod, AccountSid: $AccountSid} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
+
+# Retrieve a list of IP Addresses for the given Super SIM.
+#
+# GET /v1/Sims/{SimSid}/IpAddresses
+# operationId: ListSimIpAddress
+export def "sims-ip-addresses ListSimIpAddress" [
+  SimSid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
+  --Page: int # The page index. This value is simply for client state.
+  --PageToken: string # The page token. This is provided by the API.
+]: nothing -> record<ip_addresses: table<ip_address: string, ip_address_version: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let qp = [(serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/v1/Sims/($SimSid)/IpAddresses" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Send SMS Command to a Sim.
+#
+# POST /v1/SmsCommands
+# operationId: CreateSmsCommand
+export def "sms-commands CreateSmsCommand" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  Sim: string # The `sid` or `unique_name` of the [SIM](https://www.twilio.com/docs/iot/supersim/api/sim-resource) to send the SMS Command to.
+  Payload: string # The message body of the SMS Command.
+  --CallbackMethod: string@CallbackMethod-completer # The HTTP method we should use to call `callback_url`. Can be: `GET` or `POST` and the default is POST. (format: http-method)
+  --CallbackUrl: string # The URL we should call using the `callback_method` after we have sent the command. (format: uri)
+]: any -> record<sid: string, account_sid: string, sim_sid: string, payload: string, status: string, direction: string, date_created: string, date_updated: string, url: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let full_url = (build-url $base "/v1/SmsCommands")
+  let body = {Sim: $Sim, Payload: $Payload, CallbackMethod: $CallbackMethod, CallbackUrl: $CallbackUrl} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/x-www-form-urlencoded" $body
+}
+
+# Retrieve a list of SMS Commands from your account.
+#
+# GET /v1/SmsCommands
+# operationId: ListSmsCommand
+export def "sms-commands ListSmsCommand" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --Sim: string # The SID or unique name of the Sim resource that SMS Command was sent to or from.
+  --Status: string # The status of the SMS Command. Can be: `queued`, `sent`, `delivered`, `received` or `failed`. See the [SMS Command Status Values](https://www.twilio.com/docs/iot/supersim/api/smscommand-resource#status-values) for a description of each.
+  --Direction: string # The direction of the SMS Command. Can be `to_sim` or `from_sim`. The value of `to_sim` is synonymous with the term `mobile terminated`, and `from_sim` is synonymous with the term `mobile originated`.
+  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
+  --Page: int # The page index. This value is simply for client state.
+  --PageToken: string # The page token. This is provided by the API.
+]: nothing -> record<sms_commands: table<sid: string, account_sid: string, sim_sid: string, payload: string, status: string, direction: string, date_created: string, date_updated: string, url: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let qp = [(serialize-qp "Sim" $Sim "scalar") (serialize-qp "Status" $Status "scalar") (serialize-qp "Direction" $Direction "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/SmsCommands" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Fetch SMS Command instance from your account.
+#
+# GET /v1/SmsCommands/{Sid}
+# operationId: FetchSmsCommand
+export def "sms-commands FetchSmsCommand" [
+  Sid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+]: nothing -> record<sid: string, account_sid: string, sim_sid: string, payload: string, status: string, direction: string, date_created: string, date_updated: string, url: string> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let full_url = (build-url $base $"/v1/SmsCommands/($Sid)")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# List UsageRecords
+#
+# GET /v1/UsageRecords
+# operationId: ListUsageRecord
+export def "usage-records ListUsageRecord" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --Sim: string # SID or unique name of a Sim resource. Only show UsageRecords representing usage incurred by this Super SIM.
+  --Fleet: string # SID or unique name of a Fleet resource. Only show UsageRecords representing usage for Super SIMs belonging to this Fleet resource at the time the usage occurred.
+  --Network: string # SID of a Network resource. Only show UsageRecords representing usage on this network.
+  --IsoCountry: string # Alpha-2 ISO Country Code. Only show UsageRecords representing usage in this country. (format: iso-country-code)
+  --Group: string # Dimension over which to aggregate usage records. Can be: `sim`, `fleet`, `network`, `isoCountry`. Default is to not aggregate across any of these dimensions, UsageRecords will be aggregated into the time buckets described by the `Granularity` parameter.
+  --Granularity: string # Time-based grouping that UsageRecords should be aggregated by. Can be: `hour`, `day`, or `all`. Default is `all`. `all` returns one UsageRecord that describes the usage for the entire period.
+  --StartTime: string # Only include usage that occurred at or after this time, specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. Default is one month before the `end_time`. (format: date-time)
+  --EndTime: string # Only include usage that occurred before this time (exclusive), specified in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format. Default is the current time. (format: date-time)
+  --PageSize: int # How many resources to return in each list page. The default is 50, and the maximum is 1000. (format: int64)
+  --Page: int # The page index. This value is simply for client state.
+  --PageToken: string # The page token. This is provided by the API.
+]: nothing -> record<usage_records: table<account_sid: string, sim_sid: string, network_sid: string, fleet_sid: string, iso_country: string, period: any, data_upload: int, data_download: int, data_total: int, data_total_billed: float, billed_unit: string>, meta: record<first_page_url: string, key: string, next_page_url: string, page: int, page_size: int, previous_page_url: string, url: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let base = ($base_url | default "https://supersim.twilio.com")
+  let qp = [(serialize-qp "Sim" $Sim "scalar") (serialize-qp "Fleet" $Fleet "scalar") (serialize-qp "Network" $Network "scalar") (serialize-qp "IsoCountry" $IsoCountry "scalar") (serialize-qp "Group" $Group "scalar") (serialize-qp "Granularity" $Granularity "scalar") (serialize-qp "StartTime" $StartTime "scalar") (serialize-qp "EndTime" $EndTime "scalar") (serialize-qp "PageSize" $PageSize "scalar") (serialize-qp "Page" $Page "scalar") (serialize-qp "PageToken" $PageToken "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/v1/UsageRecords" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}

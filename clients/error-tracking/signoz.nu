@@ -2778,7 +2778,7 @@ export def "dashboards ListDashboardsV2" [
 #
 # POST /api/v2/dashboards
 # operationId: CreateDashboardV2
-# --spec shape: {datasources?: record, display?: record, duration?: string, layouts?: list, links?: list, panels?: record, refreshInterval?: string, variables?: list}
+# --spec shape: {datasources?: record, display: record, duration?: string, layouts: list, links?: list, panels: record, refreshInterval?: string, variables: list}
 # --tags item shape: {key: string, value: string}
 export def "dashboards CreateDashboardV2" [
   --base-url(-b): string@base-url-completer # API base URL
@@ -2792,7 +2792,7 @@ export def "dashboards CreateDashboardV2" [
   --image: string
   --name: string
   schemaVersion: string
-  spec: record # shape: {datasources?: record, display?: record, duration?: string, layouts?: list, links?: list, panels?: record, refreshInterval?: string, variables?: list}
+  spec: record # shape: {datasources?: record, display: record, duration?: string, layouts: list, links?: list, panels: record, refreshInterval?: string, variables: list}
   --tags: list # nullable — item shape: {key: string, value: string}
 ]: any -> record<data: record<createdAt: string, createdBy: string, id: string, image: string, locked: bool, name: string, orgId: string, schemaVersion: string, source: record, spec: record<datasources: record, display: record, duration: string, layouts: list, links: list, panels: record, refreshInterval: string, variables: list>, tags: list<record>, updatedAt: string, updatedBy: string>, status: string> {
   let input = $in
@@ -2879,7 +2879,7 @@ export def "dashboards PatchDashboardV2" [
 #
 # PUT /api/v2/dashboards/{id}
 # operationId: UpdateDashboardV2
-# --spec shape: {datasources?: record, display?: record, duration?: string, layouts?: list, links?: list, panels?: record, refreshInterval?: string, variables?: list}
+# --spec shape: {datasources?: record, display: record, duration?: string, layouts: list, links?: list, panels: record, refreshInterval?: string, variables: list}
 # --tags item shape: {key: string, value: string}
 export def "dashboards UpdateDashboardV2" [
   id: string
@@ -2893,7 +2893,7 @@ export def "dashboards UpdateDashboardV2" [
   --image: string
   name: string
   schemaVersion: string
-  spec: record # shape: {datasources?: record, display?: record, duration?: string, layouts?: list, links?: list, panels?: record, refreshInterval?: string, variables?: list}
+  spec: record # shape: {datasources?: record, display: record, duration?: string, layouts: list, links?: list, panels: record, refreshInterval?: string, variables: list}
   --tags: list # nullable — item shape: {key: string, value: string}
 ]: any -> record<data: record<createdAt: string, createdBy: string, id: string, image: string, locked: bool, name: string, orgId: string, schemaVersion: string, source: record, spec: record<datasources: record, display: record, duration: string, layouts: list, links: list, panels: record, refreshInterval: string, variables: list>, tags: list<record>, updatedAt: string, updatedBy: string>, status: string> {
   let input = $in

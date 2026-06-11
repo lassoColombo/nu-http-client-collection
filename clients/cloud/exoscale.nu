@@ -6310,7 +6310,7 @@ export def "dbaas-valkey get-dbaas-service-valkey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<updated_at: string, node_count: int, connection_info: record<uri: list<string>, password: string, slave: list<string>>, node_cpu_count: int, prometheus_uri: record<host: string, port: int>, integrations: table<description: string, settings: record, type: string, is_enabled: bool, source: string, is_active: bool, status: string, id: string, dest: string>, zone: string, node_states: table<name: string, progress_updates: list, role: string, state: string>, name: string, type: string, state: string, valkey_settings: record<ssl: bool, lfu_log_factor: int, maxmemory_policy: string, io_threads: int, lfu_decay_time: int, pubsub_client_output_buffer_limit: int, notify_keyspace_events: string, persistence: string, timeout: int, acl_channels_default: string, number_of_databases: int>, ip_filter: list<string>, backups: table<backup_name: string, backup_time: string, data_size: int>, termination_protection: bool, notifications: table<level: string, message: string, type: string, metadata: record>, components: table<component: string, host: string, port: int, route: string, ssl: bool, usage: string>, maintenance: record<dow: string, time: string, updates: list<record>>, disk_size: int, node_memory: int, uri: string, uri_params: record, version: string, created_at: string, plan: string, users: table<type: string, username: string, password: string, access_control: record>> {
+]: nothing -> record<updated_at: string, node_count: int, connection_info: record<uri: list<string>, password: string, slave: list<string>>, node_cpu_count: int, prometheus_uri: record<host: string, port: int>, integrations: table<description: string, settings: record, type: string, is_enabled: bool, source: string, is_active: bool, status: string, id: string, dest: string>, zone: string, node_states: table<name: string, progress_updates: list, role: string, state: string>, name: string, type: string, state: string, valkey_settings: record<ssl: bool, lfu_log_factor: int, frequent_snapshots: bool, maxmemory_policy: string, io_threads: int, lfu_decay_time: int, pubsub_client_output_buffer_limit: int, active_expire_effort: int, notify_keyspace_events: string, persistence: string, timeout: int, acl_channels_default: string, number_of_databases: int>, ip_filter: list<string>, backups: table<backup_name: string, backup_time: string, data_size: int>, termination_protection: bool, notifications: table<level: string, message: string, type: string, metadata: record>, components: table<component: string, host: string, port: int, route: string, ssl: bool, usage: string>, maintenance: record<dow: string, time: string, updates: list<record>>, disk_size: int, node_memory: int, uri: string, uri_params: record, version: string, created_at: string, plan: string, users: table<type: string, username: string, password: string, access_control: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dbaas-valkey/($name)")
@@ -6323,9 +6323,9 @@ export def "dbaas-valkey get-dbaas-service-valkey" [
 #
 # POST /dbaas-valkey/{name}
 # operationId: create-dbaas-service-valkey
+# --valkey-settings shape: {ssl?: bool, lfu_log_factor?: int, frequent_snapshots?: bool, maxmemory_policy?: "noeviction"|"allkeys-lru"|"volatile-lru"|"allkeys-random"|"volatile-random"|"volatile-ttl"|"volatile-lfu"|"allkeys-lfu", io_threads?: int, lfu_decay_time?: int, pubsub_client_output_buffer_limit?: int, active_expire_effort?: int, notify_keyspace_events?: string, persistence?: "off"|"rdb", timeout?: int, acl_channels_default?: "allchannels"|"resetchannels", number_of_databases?: int}
 # --maintenance shape: {dow: "saturday"|"tuesday"|"never"|"wednesday"|"sunday"|"friday"|"monday"|"thursday", time: string}
 # --migration shape: {host: string, port: int, password?: string, ssl?: bool, username?: string, dbname?: string, ignore-dbs?: string, method?: "dump"|"replication"}
-# --valkey-settings shape: {ssl?: bool, lfu_log_factor?: int, maxmemory_policy?: "noeviction"|"allkeys-lru"|"volatile-lru"|"allkeys-random"|"volatile-random"|"volatile-ttl"|"volatile-lfu"|"allkeys-lfu", io_threads?: int, lfu_decay_time?: int, pubsub_client_output_buffer_limit?: int, notify_keyspace_events?: string, persistence?: "off"|"rdb", timeout?: int, acl_channels_default?: "allchannels"|"resetchannels", number_of_databases?: int}
 export def "dbaas-valkey create-dbaas-service-valkey" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6335,20 +6335,21 @@ export def "dbaas-valkey create-dbaas-service-valkey" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --maintenance: record # Automatic maintenance settings — shape: {dow: "saturday"|"tuesday"|"never"|"wednesday"|"sunday"|"friday"|"monday"|"thursday", time: string}
-  plan: string # Subscription plan
-  --termination-protection: string@bool-completer # Service is protected against termination and powering off
+  --valkey-settings: record # shape: {ssl?: bool, lfu_log_factor?: int, frequent_snapshots?: bool, maxmemory_policy?: "noeviction"|"allkeys-lru"|"volatile-lru"|"allkeys-random"|"volatile-random"|"volatile-ttl"|"volatile-lfu"|"allkeys-lfu", io_threads?: int, lfu_decay_time?: int, pubsub_client_output_buffer_limit?: int, active_expire_effort?: int, notify_keyspace_events?: string, persistence?: "off"|"rdb", timeout?: int, acl_channels_default?: "allchannels"|"resetchannels", number_of_databases?: int}
   --ip-filter: list # Allow incoming connections from CIDR address block, e.g. '10.20.0.0/16'
-  --migration: record # Migrate data from existing server — shape: {host: string, port: int, password?: string, ssl?: bool, username?: string, dbname?: string, ignore-dbs?: string, method?: "dump"|"replication"}
-  --valkey-settings: record # shape: {ssl?: bool, lfu_log_factor?: int, maxmemory_policy?: "noeviction"|"allkeys-lru"|"volatile-lru"|"allkeys-random"|"volatile-random"|"volatile-ttl"|"volatile-lfu"|"allkeys-lfu", io_threads?: int, lfu_decay_time?: int, pubsub_client_output_buffer_limit?: int, notify_keyspace_events?: string, persistence?: "off"|"rdb", timeout?: int, acl_channels_default?: "allchannels"|"resetchannels", number_of_databases?: int}
+  --termination-protection: string@bool-completer # Service is protected against termination and powering off
   --fork-from-service: string
+  --maintenance: record # Automatic maintenance settings — shape: {dow: "saturday"|"tuesday"|"never"|"wednesday"|"sunday"|"friday"|"monday"|"thursday", time: string}
+  --version: string # Valkey major version
   --recovery-backup-name: string # Name of a backup to recover from for services that support backup names
+  plan: string # Subscription plan
+  --migration: record # Migrate data from existing server — shape: {host: string, port: int, password?: string, ssl?: bool, username?: string, dbname?: string, ignore-dbs?: string, method?: "dump"|"replication"}
 ]: any -> record<id: string, reason: string, reference: record<id: string, link: string, command: string>, message: string, state: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/dbaas-valkey/($name)")
-  let body = {maintenance: $maintenance, plan: $plan, termination-protection: $termination_protection, ip-filter: $ip_filter, migration: $migration, valkey-settings: $valkey_settings, fork-from-service: $fork_from_service, recovery-backup-name: $recovery_backup_name} | compact
+  let body = {valkey-settings: $valkey_settings, ip-filter: $ip_filter, termination-protection: $termination_protection, fork-from-service: $fork_from_service, maintenance: $maintenance, version: $version, recovery-backup-name: $recovery_backup_name, plan: $plan, migration: $migration} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -6361,7 +6362,7 @@ export def "dbaas-valkey create-dbaas-service-valkey" [
 # operationId: update-dbaas-service-valkey
 # --maintenance shape: {dow: "saturday"|"tuesday"|"never"|"wednesday"|"sunday"|"friday"|"monday"|"thursday", time: string}
 # --migration shape: {host: string, port: int, password?: string, ssl?: bool, username?: string, dbname?: string, ignore-dbs?: string, method?: "dump"|"replication"}
-# --valkey-settings shape: {ssl?: bool, lfu_log_factor?: int, maxmemory_policy?: "noeviction"|"allkeys-lru"|"volatile-lru"|"allkeys-random"|"volatile-random"|"volatile-ttl"|"volatile-lfu"|"allkeys-lfu", io_threads?: int, lfu_decay_time?: int, pubsub_client_output_buffer_limit?: int, notify_keyspace_events?: string, persistence?: "off"|"rdb", timeout?: int, acl_channels_default?: "allchannels"|"resetchannels", number_of_databases?: int}
+# --valkey-settings shape: {ssl?: bool, lfu_log_factor?: int, frequent_snapshots?: bool, maxmemory_policy?: "noeviction"|"allkeys-lru"|"volatile-lru"|"allkeys-random"|"volatile-random"|"volatile-ttl"|"volatile-lfu"|"allkeys-lfu", io_threads?: int, lfu_decay_time?: int, pubsub_client_output_buffer_limit?: int, active_expire_effort?: int, notify_keyspace_events?: string, persistence?: "off"|"rdb", timeout?: int, acl_channels_default?: "allchannels"|"resetchannels", number_of_databases?: int}
 export def "dbaas-valkey update-dbaas-service-valkey" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6376,7 +6377,7 @@ export def "dbaas-valkey update-dbaas-service-valkey" [
   --termination-protection: string@bool-completer # Service is protected against termination and powering off
   --ip-filter: list # Allow incoming connections from CIDR address block, e.g. '10.20.0.0/16'
   --migration: record # Migrate data from existing server — shape: {host: string, port: int, password?: string, ssl?: bool, username?: string, dbname?: string, ignore-dbs?: string, method?: "dump"|"replication"}
-  --valkey-settings: record # shape: {ssl?: bool, lfu_log_factor?: int, maxmemory_policy?: "noeviction"|"allkeys-lru"|"volatile-lru"|"allkeys-random"|"volatile-random"|"volatile-ttl"|"volatile-lfu"|"allkeys-lfu", io_threads?: int, lfu_decay_time?: int, pubsub_client_output_buffer_limit?: int, notify_keyspace_events?: string, persistence?: "off"|"rdb", timeout?: int, acl_channels_default?: "allchannels"|"resetchannels", number_of_databases?: int}
+  --valkey-settings: record # shape: {ssl?: bool, lfu_log_factor?: int, frequent_snapshots?: bool, maxmemory_policy?: "noeviction"|"allkeys-lru"|"volatile-lru"|"allkeys-random"|"volatile-random"|"volatile-ttl"|"volatile-lfu"|"allkeys-lfu", io_threads?: int, lfu_decay_time?: int, pubsub_client_output_buffer_limit?: int, active_expire_effort?: int, notify_keyspace_events?: string, persistence?: "off"|"rdb", timeout?: int, acl_channels_default?: "allchannels"|"resetchannels", number_of_databases?: int}
 ]: any -> record<id: string, reason: string, reference: record<id: string, link: string, command: string>, message: string, state: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))

@@ -155,12 +155,13 @@ export def "me get" [
   --allow-errors(-e) # Return full response without error handling
   --checklist: string@bool-completer # default: false
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<uid: string, email: any, email_verified: bool, account_setup: bool, require_email_verified: bool, display_name: string, provider: string, picture: any, is_admin: bool, can_access_agents: bool, name: string, first_name: string, last_name: string, country: string, is_business_account: bool, company: string, website: string, title: string, is_team_account: bool, is_team_owner: bool, team_role: any, team_display_name: any, is_team_upgrade_enabled: bool, vercel_connection: any, checklist: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "checklist" $checklist "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/me" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -180,11 +181,12 @@ export def "me delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<uid: string, email: any, email_verified: bool, account_setup: bool, require_email_verified: bool, display_name: string, provider: string, picture: any, is_admin: bool, can_access_agents: bool, name: string, first_name: string, last_name: string, country: string, is_business_account: bool, company: string, website: string, title: string, is_team_account: bool, is_team_owner: bool, team_role: any, team_display_name: any, is_team_upgrade_enabled: bool, vercel_connection: any, checklist: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/me")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -204,6 +206,7 @@ export def "me patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   --name: any # Personal name
   --first-name: any # First name of the user
   --last-name: any # Last name of the user
@@ -225,7 +228,7 @@ export def "me patch" [
   let full_url = (build-url $base "/v1/me")
   let body = {name: $name, first_name: $first_name, last_name: $last_name, country: $country, email: $email, is_business_account: $is_business_account, company: $company, website: $website, title: $title, display_name: $display_name, use_case: $use_case, attribution: $attribution, marketing_emails: $marketing_emails, country_code: $country_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -245,11 +248,12 @@ export def "me-emails get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<emails: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/me/emails")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -269,6 +273,7 @@ export def "me-team-display-name post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   display_name: string # String with length between 1 and 39 characters. Only alphanumeric characters and dashes allowed. Must contain no leading, trailing or consecutive dashes.
 ]: any -> any {
   let input = $in
@@ -277,7 +282,7 @@ export def "me-team-display-name post" [
   let full_url = (build-url $base "/v1/me/team_display_name")
   let body = {display_name: $display_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -297,11 +302,12 @@ export def "me-rate-limit get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<rate_limit: int, tpm_rate_limit: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/me/rate_limit")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -321,6 +327,7 @@ export def "me-rate-limit-request post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   rate_limit: int
   --tpm-rate-limit: any
   reason: string
@@ -331,7 +338,7 @@ export def "me-rate-limit-request post" [
   let full_url = (build-url $base "/v1/me/rate_limit/request")
   let body = {rate_limit: $rate_limit, tpm_rate_limit: $tpm_rate_limit, reason: $reason} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -351,6 +358,7 @@ export def "deploy post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   --provider: string@provider-completer
   model_name: string # model name in specified provider
   --version: any # A specific revision, if left empty uses the last one
@@ -361,7 +369,7 @@ export def "deploy post" [
   let full_url = (build-url $base "/v1/deploy")
   let body = {provider: $provider, model_name: $model_name, version: $version} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -381,11 +389,12 @@ export def "me-gpu-limit get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<limits: record, pending_requests: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/me/gpu_limit")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -405,6 +414,7 @@ export def "me-gpu-limit-request post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   gpu_type: string
   requested_limit: int
   reason: string
@@ -415,7 +425,7 @@ export def "me-gpu-limit-request post" [
   let full_url = (build-url $base "/v1/me/gpu_limit/request")
   let body = {gpu_type: $gpu_type, requested_limit: $requested_limit, reason: $reason} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -435,6 +445,7 @@ export def "deploy-hf post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   model_name: string # Model Id from huggingface
   --task: any # Task
 ]: any -> record<deploy_id: string> {
@@ -444,7 +455,7 @@ export def "deploy-hf post" [
   let full_url = (build-url $base "/deploy/hf/")
   let body = {model_name: $model_name, task: $task} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -466,12 +477,13 @@ export def "deploy-llm-gpu-availability get" [
   --qp-source: string # default: 
   --base-model: string # default: 
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<gpus: table<gpu_config: string, usd_per_hour: float, available: bool, recommended: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "source" $qp_source "scalar") (serialize-qp "base_model" $base_model "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deploy/llm/gpu_availability" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -492,12 +504,13 @@ export def "deploy-llm-suggest-name get" [
   --allow-errors(-e) # Return full response without error handling
   --model-name: string
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<model_name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "model_name" $model_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deploy/llm/suggest_name" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -517,6 +530,7 @@ export def "deploy-llm post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   model_name: string # model name for deepinfra (username/mode-name format)
   gpu: string@gpu-completer
   --num-gpus: int # Number of GPUs used by one instance (default: 1)
@@ -534,7 +548,7 @@ export def "deploy-llm post" [
   let full_url = (build-url $base "/deploy/llm")
   let body = {model_name: $model_name, gpu: $gpu, num_gpus: $num_gpus, max_batch_size: $max_batch_size, hf: $hf, base_model: $base_model, container_image: $container_image, settings: $settings, extra_args: $extra_args, standard_args: $standard_args} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -557,12 +571,13 @@ export def "deploy-list get" [
   --allow-errors(-e) # Return full response without error handling
   --status: string # A list of statuses that should be returned, separated by comma. Allowed values in the list are: initializing,downloading,deploying,running,stopped,failed,deleted
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> table<type: string, deploy_id: string, model_name: string, version: string, task: string, status: string, fail_reason: string, created_at: string, updated_at: string, instances: any, config: any, settings: any, standard_args: any, extra_args: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deploy/list/" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -583,12 +598,13 @@ export def "deploy-list get-1" [
   --allow-errors(-e) # Return full response without error handling
   --status: string # A list of statuses that should be returned, separated by comma. Allowed values in the list are: initializing,downloading,deploying,running,stopped,failed,deleted
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> table<type: string, deploy_id: string, model_name: string, version: string, task: string, status: string, fail_reason: string, created_at: string, updated_at: string, instances: any, config: any, settings: any, standard_args: any, extra_args: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "status" $status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deploy/list" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -610,12 +626,13 @@ export def "deploy-stats list" [
   --qp-from: string # start of period, unix ts or 'now-5h', supported units s(ec), m(min), h(our), d(ay), w(eek), M(onth)
   --qp-to: string # end of period, unix ts or now-relative, check from, defaults to now (default: now)
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> table<model_name: string, requests: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/deploy/stats" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -636,11 +653,12 @@ export def "deploy get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<type: string, deploy_id: string, model_name: string, version: string, task: string, status: string, fail_reason: string, created_at: string, updated_at: string, instances: any, config: any, settings: any, standard_args: any, extra_args: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/deploy/($deploy_id)")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -661,6 +679,7 @@ export def "deploy put" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   --settings: any
   --standard-args: any # Engine tuning knobs. Replaces the whole set; omitted knobs are cleared.
   --extra-args: any # Extra engine-specific command-line args (custom-weight deploys only). Replaces the whole list; omitted args are cleared.
@@ -671,7 +690,7 @@ export def "deploy put" [
   let full_url = (build-url $base $"/deploy/($deploy_id)")
   let body = {settings: $settings, standard_args: $standard_args, extra_args: $extra_args} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -692,11 +711,12 @@ export def "deploy delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<deploy_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/deploy/($deploy_id)")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -719,12 +739,13 @@ export def "deploy-stats get" [
   --qp-from: string # start of period, unix ts or 'now-5h', supported units s(ec), m(min), h(our), d(ay), w(eek), M(onth)
   --qp-to: string # end of period, unix ts or now-relative, check from, defaults to now (default: now)
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<requests: int, total_time: int, total_tokens: int, input_tokens: int, output_tokens: int, total_amount: int, avg_time: float, avg95_time: float, errors: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/deploy/($deploy_id)/stats" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -747,12 +768,13 @@ export def "deploy-stats2 get" [
   --qp-from: string # start of period, unix ts or 'now-5h', supported units s, m, h, d, w
   --qp-to: string # end of period, unix ts or now-relative, check from, defaults to now (default: now)
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<llm: any, embeddings: any, time: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/deploy/($deploy_id)/stats2" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -773,11 +795,12 @@ export def "deploy-stop post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<deploy_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/deploy/($deploy_id)/stop")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -798,11 +821,12 @@ export def "deploy-start post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<deploy_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/deploy/($deploy_id)/start")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -822,11 +846,12 @@ export def "models-private-list get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> table<model_name: string, type: string, reported_type: string, description: string, cover_img_url: string, tags: list<string>, pricing: any, max_tokens: any, replaced_by: any, deprecated: any, quantization: any, mmlu: any, expected: any, create_ts: any, private: int, is_partner: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/models/private/list")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -846,6 +871,7 @@ export def "lora-model post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   hf_model_name: string
   --hf-token: any
   lora_model_name: string
@@ -857,7 +883,7 @@ export def "lora-model post" [
   let full_url = (build-url $base "/lora-model")
   let body = {hf_model_name: $hf_model_name, hf_token: $hf_token, lora_model_name: $lora_model_name, base_model_name: $base_model_name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -878,11 +904,12 @@ export def "lora-model delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/lora-model/($lora_model_name)")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -966,11 +993,12 @@ export def "models-deployment-list get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> table<model_name: string, type: string, reported_type: string, description: string, cover_img_url: string, tags: list<string>, pricing: any, max_tokens: any, replaced_by: any, deprecated: any, quantization: any, mmlu: any, expected: any, create_ts: any, private: int, is_partner: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/models/deployment/list")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1033,11 +1061,12 @@ export def "models-versions get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> table<model_name: string, version: string, uploaded_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/models/($model_name)/versions")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1058,6 +1087,7 @@ export def "models-publicity post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   --public: string@bool-completer # whether to make the model public of private
 ]: any -> any {
   let input = $in
@@ -1066,7 +1096,7 @@ export def "models-publicity post" [
   let full_url = (build-url $base $"/models/($model_name)/publicity")
   let body = {public: $public} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1087,6 +1117,7 @@ export def "models-meta post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   --description: any # short model description in plain text
   --github-url: any # source code project link (empty to delete)
   --paper-url: any # paper/research link (empty to delete)
@@ -1101,7 +1132,7 @@ export def "models-meta post" [
   let full_url = (build-url $base $"/models/($model_name)/meta")
   let body = {description: $description, github_url: $github_url, paper_url: $paper_url, license_url: $license_url, readme: $readme, cover_img_url: $cover_img_url, reported_type: $reported_type} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1123,12 +1154,13 @@ export def "models delete" [
   --allow-errors(-e) # Return full response without error handling
   --version: string # delete a particular version, pass 'ALL' to wipe everything
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/models/($model_name)" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1150,12 +1182,13 @@ export def "models get" [
   --allow-errors(-e) # Return full response without error handling
   --version: string
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<model_name: string, type: string, tags: list<string>, reported_type: string, version: string, description: any, mf_description: any, featured: bool, owner: bool, public: bool, curl_inv: string, cmdline_inv: string, txt_docs: string, out_example: string, out_docs: string, in_schema: any, out_schema: any, in_fields: any, pricing: any, doc_blocks: any, short_doc_block: any, schemas: table<key: string, url: string>, meta: record, max_tokens: any, max_output_tokens: any, replaced_by: any, deprecated: any, quantization: any, mmlu: any, expected: any, import_time: any, is_partner: bool, is_custom_deployable: bool, mf_name: any, mf_title: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/models/($model_name)" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1199,12 +1232,13 @@ export def "models-schema get" [
   --allow-errors(-e) # Return full response without error handling
   --version: string
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<variant: record<key: string, url: string>, schema_in: any, schema_out: any, schema_stream: any, fields_in: table<name: string, parent: any, ftype: string, description: any, allowed: any, default: any, examples: list, minimum: any, exclusiveMinimum: any, maximum: any, exclusiveMaximum: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/models/($model_name)/schema/($variantKey)" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1225,11 +1259,12 @@ export def "inference-deploy post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/inference/deploy/($deploy_id)")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1251,12 +1286,13 @@ export def "inference post" [
   --allow-errors(-e) # Return full response without error handling
   --version: string # model version to run inference against
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "version" $version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/v1/inference/($model_name)" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1276,6 +1312,7 @@ export def "tokenize post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   model: string # model name
   --prompt: any # text to tokenize (completion form)
   --messages: any # chat messages to tokenize (chat form)
@@ -1287,7 +1324,7 @@ export def "tokenize post" [
   let full_url = (build-url $base "/v1/tokenize")
   let body = {model: $model, prompt: $prompt, messages: $messages, return_token_strs: $return_token_strs} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1307,6 +1344,7 @@ export def "detokenize post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   model: string # model name
   --tokens: list # token ids to detokenize
 ]: any -> record<prompt: string> {
@@ -1316,7 +1354,7 @@ export def "detokenize post" [
   let full_url = (build-url $base "/v1/detokenize")
   let body = {model: $model, tokens: $tokens} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1335,11 +1373,11 @@ export def "anthropic-messages post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --authorization: string
-  --x-api-key: string
   --anthropic-version: string
   --anthropic-beta: string
   --x-deepinfra-source: string
+  --xi-api-key: string
+  --x-api-key: string
   model: string
   --max-tokens: any
   messages: list
@@ -1360,7 +1398,7 @@ export def "anthropic-messages post" [
   let full_url = (build-url $base "/anthropic/v1/messages")
   let body = {model: $model, max_tokens: $max_tokens, messages: $messages, system: $system, stop_sequences: $stop_sequences, stream: $stream, temperature: $temperature, top_p: $top_p, top_k: $top_k, metadata: $metadata, tools: $tools, tool_choice: $tool_choice, thinking: $thinking} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"authorization": $authorization, "x-api-key": $x_api_key, "anthropic-version": $anthropic_version, "anthropic-beta": $anthropic_beta, "x-deepinfra-source": $x_deepinfra_source} | compact
+  let extra_headers = {"anthropic-version": $anthropic_version, "anthropic-beta": $anthropic_beta, "x-deepinfra-source": $x_deepinfra_source, "xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1379,7 +1417,7 @@ export def "anthropic-messages-count-tokens post" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --authorization: string
+  --xi-api-key: string
   --x-api-key: string
   model: string
   messages: list
@@ -1394,7 +1432,7 @@ export def "anthropic-messages-count-tokens post" [
   let full_url = (build-url $base "/anthropic/v1/messages/count_tokens")
   let body = {model: $model, messages: $messages, system: $system, tools: $tools, thinking: $thinking, tool_choice: $tool_choice} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"authorization": $authorization, "x-api-key": $x_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1416,12 +1454,13 @@ export def "models list" [
   --sort-by: string
   --filter: string
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<object: string, data: table<id: string, object: string, created: int, owned_by: string, root: string, parent: any, metadata: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/models" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1441,6 +1480,7 @@ export def "images-generations post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   model: string # The model to use for image generation.
   --n: int # The number of images to generate. (default: 1)
   --response-format: any # The format in which the generated images are returned. Currently only b64_json is supported. (default: b64_json)
@@ -1456,7 +1496,7 @@ export def "images-generations post" [
   let full_url = (build-url $base "/v1/images/generations")
   let body = {model: $model, n: $n, response_format: $response_format, size: $size, user: $user, prompt: $prompt, quality: $quality, style: $style} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1476,6 +1516,7 @@ export def "images-variations post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   image: string # format: binary
   --inp: any
   model: string
@@ -1486,7 +1527,7 @@ export def "images-variations post" [
   let full_url = (build-url $base "/v1/images/variations")
   let body = {image: $image, inp: $inp, model: $model} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1506,6 +1547,7 @@ export def "images-edits post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   image: string # format: binary
   --inp: any
   prompt: string
@@ -1517,7 +1559,7 @@ export def "images-edits post" [
   let full_url = (build-url $base "/v1/images/edits")
   let body = {image: $image, inp: $inp, prompt: $prompt, model: $model} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1537,6 +1579,7 @@ export def "feedback post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   message: string # The message you'd like to send to deepinfra team
   --contact-email: any # Optional contact email to reach you back
 ]: any -> any {
@@ -1546,7 +1589,7 @@ export def "feedback post" [
   let full_url = (build-url $base "/v1/feedback")
   let body = {message: $message, contact_email: $contact_email} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1567,6 +1610,7 @@ export def "audio-speech post" [
   --allow-errors(-e) # Return full response without error handling
   --x-deepinfra-source: string
   --xi-api-key: string
+  --x-api-key: string
   --service-tier: any # The service tier used for processing the request. When set to 'priority', the request will be processed with higher priority (only applies to models that support it).
   model: string # model name
   input: string # Text to convert to speech
@@ -1581,7 +1625,7 @@ export def "audio-speech post" [
   let full_url = (build-url $base "/v1/audio/speech")
   let body = {service_tier: $service_tier, model: $model, input: $input, voice: $voice, response_format: $response_format, speed: $speed, extra_body: $extra_body} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-deepinfra-source": $x_deepinfra_source, "xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"x-deepinfra-source": $x_deepinfra_source, "xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1602,6 +1646,7 @@ export def "audio-transcriptions post" [
   --allow-errors(-e) # Return full response without error handling
   --x-deepinfra-source: string
   --xi-api-key: string
+  --x-api-key: string
   file: string # format: binary
   model: string
   --language: any
@@ -1616,7 +1661,7 @@ export def "audio-transcriptions post" [
   let full_url = (build-url $base "/v1/audio/transcriptions")
   let body = {file: $file, model: $model, language: $language, prompt: $prompt, response_format: $response_format, temperature: $temperature, timestamp_granularities: $timestamp_granularities} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-deepinfra-source": $x_deepinfra_source, "xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"x-deepinfra-source": $x_deepinfra_source, "xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1637,6 +1682,7 @@ export def "audio-translations post" [
   --allow-errors(-e) # Return full response without error handling
   --x-deepinfra-source: string
   --xi-api-key: string
+  --x-api-key: string
   file: string # format: binary
   model: string
   --prompt: any
@@ -1649,7 +1695,7 @@ export def "audio-translations post" [
   let full_url = (build-url $base "/v1/audio/translations")
   let body = {file: $file, model: $model, prompt: $prompt, response_format: $response_format, temperature: $temperature} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-deepinfra-source": $x_deepinfra_source, "xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"x-deepinfra-source": $x_deepinfra_source, "xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1673,12 +1719,13 @@ export def "logs-query get" [
   --qp-to: string # end of period, in fractional seconds since unix epoch (exclusive)
   --limit: int # how many items to return at most (default 100, in [1, 1000]) (default: 100)
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<entries: list<list<any>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "deploy_id" $deploy_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/logs/query" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1703,12 +1750,13 @@ export def "deployment-logs-query get" [
   --qp-to: string # end of period, in fractional seconds since unix epoch (exclusive)
   --limit: int # how many items to return at most (default 100, in [1, 1000]) (default: 100)
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<entries: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "deploy_id" $deploy_id "scalar") (serialize-qp "pod_name" $pod_name "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/deployment_logs/query" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1728,11 +1776,12 @@ export def "voices list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<voices: table<user_id: string, voice_id: string, name: string, description: string, created_at: int, updated_at: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/voices")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1754,6 +1803,7 @@ export def "text-to-speech-stream post" [
   --allow-errors(-e) # Return full response without error handling
   --output-format: string # e.g. wav
   --xi-api-key: string
+  --x-api-key: string
   text: string # Text to convert to speech
   --model-id: string # Model ID to use for the conversion (default: hexgrad/Kokoro-82M)
   --output-format: string@output-format-completer # Select the desired format for the speech output. Supported formats include mp3, opus, flac, wav, and pcm. (default: wav)
@@ -1766,7 +1816,7 @@ export def "text-to-speech-stream post" [
   let full_url = (build-url $base $"/v1/text-to-speech/($voice_id)/stream" $qp)
   let body = {text: $text, model_id: $model_id, output_format: $output_format, language_code: $language_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1788,6 +1838,7 @@ export def "text-to-speech post" [
   --allow-errors(-e) # Return full response without error handling
   --output-format: string # e.g. wav
   --xi-api-key: string
+  --x-api-key: string
   text: string # Text to convert to speech
   --model-id: string # Model ID to use for the conversion (default: hexgrad/Kokoro-82M)
   --output-format: string@output-format-completer # Select the desired format for the speech output. Supported formats include mp3, opus, flac, wav, and pcm. (default: wav)
@@ -1800,7 +1851,7 @@ export def "text-to-speech post" [
   let full_url = (build-url $base $"/v1/text-to-speech/($voice_id)" $qp)
   let body = {text: $text, model_id: $model_id, output_format: $output_format, language_code: $language_code} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1821,11 +1872,12 @@ export def "voices get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<user_id: string, voice_id: string, name: string, description: string, created_at: int, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/voices/($voice_id)")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1846,11 +1898,12 @@ export def "voices delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/voices/($voice_id)")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1870,6 +1923,7 @@ export def "voices-add post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   name: string
   description: string
   files: list
@@ -1880,7 +1934,7 @@ export def "voices-add post" [
   let full_url = (build-url $base "/v1/voices/add")
   let body = {name: $name, description: $description, files: $files} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1901,6 +1955,7 @@ export def "voices-edit post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   name: string
   description: string
 ]: any -> record<user_id: string, voice_id: string, name: string, description: string, created_at: int, updated_at: int> {
@@ -1910,7 +1965,7 @@ export def "voices-edit post" [
   let full_url = (build-url $base $"/v1/voices/($voice_id)/edit")
   let body = {name: $name, description: $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1931,6 +1986,7 @@ export def "lora-create post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   base_model: string
   lora_name: string
   --body-source: record # shape: {type: "civitai", civit_url?: any}
@@ -1943,7 +1999,7 @@ export def "lora-create post" [
   let full_url = (build-url $base "/v1/lora/create")
   let body = {base_model: $base_model, lora_name: $lora_name, source: $body_source, private: $private, description: $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1964,11 +2020,12 @@ export def "lora-status get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/lora/($lora_name)/status")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -1989,11 +2046,12 @@ export def "lora get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/lora/($lora_name)")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2014,6 +2072,7 @@ export def "lora patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   --private: any
   --description: any
 ]: any -> any {
@@ -2023,7 +2082,7 @@ export def "lora patch" [
   let full_url = (build-url $base $"/v1/lora/($lora_name)")
   let body = {private: $private, description: $description} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2044,11 +2103,12 @@ export def "lora delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/lora/($lora_name)")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2069,11 +2129,12 @@ export def "model-loras get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/model/($model_name)/loras")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2093,11 +2154,12 @@ export def "user-loras get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/user/loras")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2117,11 +2179,12 @@ export def "containers-params get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/containers/params")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2143,12 +2206,13 @@ export def "containers-gpu-availability get" [
   --qp-source: string # default: 
   --base-model: string # default: 
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<gpus: table<gpu_config: string, usd_per_hour: float, available: bool, recommended: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "source" $qp_source "scalar") (serialize-qp "base_model" $base_model "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/containers/gpu_availability" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2168,6 +2232,7 @@ export def "containers post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   name: string # Container Name
   gpu_config: string # GPU config
   container_image: string # Container Image
@@ -2179,7 +2244,7 @@ export def "containers post" [
   let full_url = (build-url $base "/v1/containers")
   let body = {name: $name, gpu_config: $gpu_config, container_image: $container_image, cloud_init_user_data: $cloud_init_user_data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2200,12 +2265,13 @@ export def "containers list" [
   --allow-errors(-e) # Return full response without error handling
   --state: string@state-completer # whether to return active or inactive containers (default: active)
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> table<id: string, name: string, state: string, start_ts: int, state_ts: int, stop_ts: any, ip: any, gpu_config: string, price_per_hour: float, container_image: string, fail_reason: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/containers" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2226,11 +2292,12 @@ export def "containers get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<id: string, name: string, state: string, start_ts: int, state_ts: int, stop_ts: any, ip: any, gpu_config: string, price_per_hour: float, container_image: string, fail_reason: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/containers/($container_id)")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2251,6 +2318,7 @@ export def "containers patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   name: string # Container Name
 ]: any -> any {
   let input = $in
@@ -2259,7 +2327,7 @@ export def "containers patch" [
   let full_url = (build-url $base $"/v1/containers/($container_id)")
   let body = {name: $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2280,11 +2348,12 @@ export def "containers delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/containers/($container_id)")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2304,6 +2373,7 @@ export def "request-costs post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   requestIds: list
 ]: any -> record<requests: table<requestId: string, costNanoUsd: int>> {
   let input = $in
@@ -2312,7 +2382,7 @@ export def "request-costs post" [
   let full_url = (build-url $base "/v1/request-costs")
   let body = {requestIds: $requestIds} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2333,12 +2403,13 @@ export def "hardware get" [
   --allow-errors(-e) # Return full response without error handling
   --model: string # Model name (NVIDIA NemoClaw format)
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<hardware: table<id: string, name: string, type: string, pricing: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "model" $model "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/hardware" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2359,6 +2430,7 @@ export def "completions post" [
   --allow-errors(-e) # Return full response without error handling
   --x-deepinfra-source: string
   --xi-api-key: string
+  --x-api-key: string
   --service-tier: any # The service tier used for processing the request. When set to 'priority', the request will be processed with higher priority (only applies to models that support it).
   model: string # model name
   prompt: any # input prompt - a single string is currently supported
@@ -2390,7 +2462,7 @@ export def "completions post" [
   let full_url = (build-url $base "/v1/completions")
   let body = {service_tier: $service_tier, model: $model, prompt: $prompt, max_tokens: $max_tokens, temperature: $temperature, top_p: $top_p, min_p: $min_p, top_k: $top_k, n: $n, stream: $stream, logprobs: $logprobs, echo: $echo, stop: $stop, presence_penalty: $presence_penalty, frequency_penalty: $frequency_penalty, response_format: $response_format, repetition_penalty: $repetition_penalty, user: $user, seed: $seed, stream_options: $stream_options, stop_token_ids: $stop_token_ids, return_tokens_as_token_ids: $return_tokens_as_token_ids, prompt_cache_key: $prompt_cache_key, data: $data} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-deepinfra-source": $x_deepinfra_source, "xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"x-deepinfra-source": $x_deepinfra_source, "xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2411,6 +2483,7 @@ export def "chat-completions post" [
   --allow-errors(-e) # Return full response without error handling
   --x-deepinfra-source: string
   --xi-api-key: string
+  --x-api-key: string
   --service-tier: any # The service tier used for processing the request. When set to 'priority', the request will be processed with higher priority (only applies to models that support it).
   model: string # model name
   messages: list # conversation messages: (user,assistant,tool)*,user including one system message anywhere
@@ -2445,7 +2518,7 @@ export def "chat-completions post" [
   let full_url = (build-url $base "/v1/chat/completions")
   let body = {service_tier: $service_tier, model: $model, messages: $messages, stream: $stream, temperature: $temperature, top_p: $top_p, min_p: $min_p, top_k: $top_k, max_tokens: $max_tokens, stop: $stop, stop_token_ids: $stop_token_ids, n: $n, presence_penalty: $presence_penalty, frequency_penalty: $frequency_penalty, tools: $tools, tool_choice: $tool_choice, response_format: $response_format, repetition_penalty: $repetition_penalty, user: $user, seed: $seed, logprobs: $logprobs, stream_options: $stream_options, reasoning_effort: $reasoning_effort, reasoning: $reasoning, prompt_cache_key: $prompt_cache_key, chat_template_kwargs: $chat_template_kwargs, continue_final_message: $continue_final_message} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-deepinfra-source": $x_deepinfra_source, "xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"x-deepinfra-source": $x_deepinfra_source, "xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2467,6 +2540,7 @@ export def "embeddings post" [
   --x-deepinfra-source: string
   --user-agent: string
   --xi-api-key: string
+  --x-api-key: string
   --service-tier: any # The service tier used for processing the request. When set to 'priority', the request will be processed with higher priority (only applies to models that support it).
   model: string # model name
   input: any # sequences to embed
@@ -2479,7 +2553,7 @@ export def "embeddings post" [
   let full_url = (build-url $base "/v1/embeddings")
   let body = {service_tier: $service_tier, model: $model, input: $input, encoding_format: $encoding_format, dimensions: $dimensions} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"x-deepinfra-source": $x_deepinfra_source, "user-agent": $user_agent, "xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"x-deepinfra-source": $x_deepinfra_source, "user-agent": $user_agent, "xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2573,11 +2647,12 @@ export def "api-tokens list" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> table<token: string, created_at: int, name: string, token_id: any, allowed_ips: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/api-tokens")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2597,6 +2672,7 @@ export def "api-tokens post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   name: string
 ]: any -> record<token: string, created_at: int, name: string, token_id: any, allowed_ips: any> {
   let input = $in
@@ -2605,7 +2681,7 @@ export def "api-tokens post" [
   let full_url = (build-url $base "/v1/api-tokens")
   let body = {name: $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2626,11 +2702,12 @@ export def "api-tokens get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<token: string, created_at: int, name: string, token_id: any, allowed_ips: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/api-tokens/($api_token)")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2651,11 +2728,12 @@ export def "api-tokens delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/api-tokens/($api_token)")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2676,6 +2754,7 @@ export def "api-tokens-vercel-export post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   project_id_or_name: string
   --is-sensitive: string@bool-completer
   --env-development: string@bool-completer
@@ -2688,7 +2767,7 @@ export def "api-tokens-vercel-export post" [
   let full_url = (build-url $base $"/v1/api-tokens/($api_token)/vercel_export")
   let body = {project_id_or_name: $project_id_or_name, is_sensitive: $is_sensitive, env_development: $env_development, env_preview: $env_preview, env_production: $env_production} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2708,6 +2787,7 @@ export def "scoped-jwt post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   api_key_name: string
   --models: any # allow inference only to the specified model names
   --expires-delta: any # how many seconds in the future should the token be valid for
@@ -2720,7 +2800,7 @@ export def "scoped-jwt post" [
   let full_url = (build-url $base "/v1/scoped-jwt")
   let body = {api_key_name: $api_key_name, models: $models, expires_delta: $expires_delta, expires_at: $expires_at, spending_limit: $spending_limit} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2741,12 +2821,13 @@ export def "scoped-jwt get" [
   --allow-errors(-e) # Return full response without error handling
   --jwtoken: string
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<expires_at: int, models: any, spending_limit: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jwtoken" $jwtoken "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/scoped-jwt" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2766,11 +2847,12 @@ export def "ssh-keys get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> table<id: string, name: string, key: string, created_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/ssh_keys")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2790,6 +2872,7 @@ export def "ssh-keys post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   name: string # SSH Key name
   key: string # SSH Key content
 ]: any -> record<id: string, name: string, key: string, created_at: int> {
@@ -2799,7 +2882,7 @@ export def "ssh-keys post" [
   let full_url = (build-url $base "/v1/ssh_keys")
   let body = {name: $name, key: $key} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2820,11 +2903,12 @@ export def "ssh-keys delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/ssh_keys/($ssh_key_id)")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2848,12 +2932,13 @@ export def "files list" [
   --order: string
   --limit: int # default: 100
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "purpose" $purpose "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/files" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2873,6 +2958,7 @@ export def "files post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   purpose: string
   file: list
 ]: any -> any {
@@ -2882,7 +2968,7 @@ export def "files post" [
   let full_url = (build-url $base "/v1/files")
   let body = {purpose: $purpose, file: $file} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2903,11 +2989,12 @@ export def "files get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<id: string, object: string, created_at: int, filename: string, bytes: int, purpose: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/files/($file_id)")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2928,11 +3015,12 @@ export def "files delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/files/($file_id)")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2953,11 +3041,12 @@ export def "files-content get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/files/($file_id)/content")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2979,12 +3068,13 @@ export def "batches list" [
   --after: string
   --limit: int # default: 20
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/batches" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3004,6 +3094,7 @@ export def "batches post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   input_file_id: string # The ID of an uploaded file that contains requests for the new batch.
   endpoint: string@endpoint-completer # The endpoint to be used for all requests in the batch. Currently /v1/chat/completions, /v1/completions, /v1/embeddings are supported.
   completion_window: string # The time frame within which the batch should be processed. Currently only 24h is supported.
@@ -3015,7 +3106,7 @@ export def "batches post" [
   let full_url = (build-url $base "/v1/batches")
   let body = {input_file_id: $input_file_id, endpoint: $endpoint, completion_window: $completion_window, metadata: $metadata} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3036,11 +3127,12 @@ export def "batches get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<id: string, object: string, endpoint: string, errors: any, input_file_id: string, completion_window: string, status: string, output_file_id: any, error_file_id: any, created_at: int, in_progress_at: any, expires_at: int, finalizing_at: any, completed_at: any, failed_at: any, expired_at: any, cancelling_at: any, cancelled_at: any, request_counts: any, metadata: any, model: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/batches/($batch_id)")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3061,11 +3153,12 @@ export def "batches-cancel post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<id: string, object: string, endpoint: string, errors: any, input_file_id: string, completion_window: string, status: string, output_file_id: any, error_file_id: any, created_at: int, in_progress_at: any, expires_at: int, finalizing_at: any, completed_at: any, failed_at: any, expired_at: any, cancelling_at: any, cancelled_at: any, request_counts: any, metadata: any, model: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/batches/($batch_id)/cancel")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3085,6 +3178,7 @@ export def "agents post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   name: string # Instance name
   --agent-type-id: string # Agent type identifier (default: openclaw)
   --plan-id: string # Plan identifier (default: standard)
@@ -3095,7 +3189,7 @@ export def "agents post" [
   let full_url = (build-url $base "/v1/agents")
   let body = {name: $name, agent_type_id: $agent_type_id, plan_id: $plan_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3116,12 +3210,13 @@ export def "agents list" [
   --allow-errors(-e) # Return full response without error handling
   --state: string@state-completer-1 # Which instances to return: active, inactive, or all (both) (default: active)
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> table<id: string, name: string, state: string, start_ts: int, state_ts: int, stop_ts: any, price_per_hour: float, region: string, last_backup_ts: any, ssh_port: int, fail_reason: any, public_ip: any, version: any, agent_type: string, ssh_user: string, plan_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/agents" $qp)
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3141,11 +3236,12 @@ export def "agents-catalog get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/agents/catalog")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3166,11 +3262,12 @@ export def "agents get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<id: string, name: string, state: string, start_ts: int, state_ts: int, stop_ts: any, price_per_hour: float, region: string, last_backup_ts: any, ssh_port: int, fail_reason: any, public_ip: any, version: any, agent_type: string, ssh_user: string, plan_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/agents/($instance_id)")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3191,6 +3288,7 @@ export def "agents patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
   name: string # Instance name
 ]: any -> any {
   let input = $in
@@ -3199,7 +3297,7 @@ export def "agents patch" [
   let full_url = (build-url $base $"/v1/agents/($instance_id)")
   let body = {name: $name} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3220,11 +3318,12 @@ export def "agents delete" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/agents/($instance_id)")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3245,11 +3344,12 @@ export def "agents-launch-token post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> record<dashboard_url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/agents/($instance_id)/launch_token")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3270,11 +3370,12 @@ export def "agents-stop post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/agents/($instance_id)/stop")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3295,11 +3396,12 @@ export def "agents-start post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/agents/($instance_id)/start")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3320,11 +3422,12 @@ export def "agents-update post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/agents/($instance_id)/update")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3345,11 +3448,12 @@ export def "agents-backups get" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> table<snapshot_name: string, size_in_gb: int, state: string, created_at_unix: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/agents/($instance_id)/backups")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3370,11 +3474,12 @@ export def "agents-backup post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/agents/($instance_id)/backup")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3396,11 +3501,12 @@ export def "agents-backups-restore post" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --xi-api-key: string
+  --x-api-key: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/v1/agents/($instance_id)/backups/($backup_id)/restore")
-  let extra_headers = {"xi-api-key": $xi_api_key} | compact
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

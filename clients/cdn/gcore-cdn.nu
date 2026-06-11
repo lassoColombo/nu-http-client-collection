@@ -1,4 +1,4 @@
-# Auto-generated client for Gcore OpenAPI – CDN API v2026-06-11T05:30:55.635813+00:00
+# Auto-generated client for Gcore OpenAPI – CDN API v2026-06-11T13:09:36.682110+00:00
 # Source: https://gcore.com/docs/api-reference/services_docs_mintlify/cdn_api.yaml
 # Auth: --token flag or $env.GCORE_OPENAPI_CDN_API_TOKEN
 

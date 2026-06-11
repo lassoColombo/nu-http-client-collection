@@ -1,4 +1,4 @@
-# Auto-generated client for Windmill API v1.721.0
+# Auto-generated client for Windmill API v1.722.0
 # Source: https://raw.githubusercontent.com/windmill-labs/windmill/main/backend/windmill-api/openapi.yaml
 # Auth: --token flag or $env.WINDMILL_API_TOKEN
 

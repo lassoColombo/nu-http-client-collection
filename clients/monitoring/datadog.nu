@@ -21779,6 +21779,59 @@ export def "replay-heatmap-snapshots UpdateReplayHeatmapSnapshot" [
   do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
 }
 
+# Create a report schedule
+#
+# POST /api/v2/reporting/schedule
+# operationId: CreateReportSchedule
+# --data shape: {attributes: record, type: "schedule"}
+export def "reporting-schedule CreateReportSchedule" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  data: record # The JSON:API data object for a report schedule creation request. — shape: {attributes: record, type: "schedule"}
+]: any -> record<data: record<attributes: record<delivery_format: string, description: string, next_recurrence: int, recipients: list, resource_id: string, resource_type: string, rrule: string, status: string, tab_id: string, template_variables: list, timeframe: string, timezone: string, title: string>, id: string, relationships: record<author: record>, type: string>, included: list<any>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/api/v2/reporting/schedule")
+  let body = {data: $data} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+}
+
+# Update a report schedule
+#
+# PATCH /api/v2/reporting/schedule/{schedule_uuid}
+# operationId: PatchReportSchedule
+# --data shape: {attributes: record, type: "schedule"}
+export def "reporting-schedule PatchReportSchedule" [
+  schedule_uuid: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  data: record # The JSON:API data object for a report schedule update request. — shape: {attributes: record, type: "schedule"}
+]: any -> record<data: record<attributes: record<delivery_format: string, description: string, next_recurrence: int, recipients: list, resource_id: string, resource_type: string, rrule: string, status: string, tab_id: string, template_variables: list, timeframe: string, timezone: string, title: string>, id: string, relationships: record<author: record>, type: string>, included: list<any>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/v2/reporting/schedule/($schedule_uuid)")
+  let body = {data: $data} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "patch" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+}
+
 # Delete a restriction policy
 #
 # DELETE /api/v2/restriction_policy/{resource_id}
@@ -25126,6 +25179,32 @@ export def "security-monitoring-configuration-integration-config-validate Valida
   do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
+# Test a notification rule
+#
+# POST /api/v2/security_monitoring/configuration/notification_rules/send_notification_preview
+# operationId: SendSecurityMonitoringNotificationPreview
+# --data shape: {attributes: record, type: "notification_rules"}
+export def "security-monitoring-configuration-notification-rules-send-notification-preview SendSecurityMonitoringNotificationPreview" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --data: record # Data of the notification rule create request: the rule type, and the rule attributes. All fields are required. — shape: {attributes: record, type: "notification_rules"}
+]: any -> record<data: record<attributes: record<preview_results: list>, id: string, type: string>> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base "/api/v2/security_monitoring/configuration/notification_rules/send_notification_preview")
+  let body = {data: $data} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+}
+
 # Get all security filters
 #
 # GET /api/v2/security_monitoring/configuration/security_filters
@@ -25795,6 +25874,32 @@ export def "security-monitoring-entity-context GetEntityContext" [
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $qp_query "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "as_of" $as_of "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "page_token" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/v2/security_monitoring/entity_context" $qp)
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Get a single entity context
+#
+# GET /api/v2/security_monitoring/entity_context/{id}
+# operationId: GetSingleEntityContext
+export def "security-monitoring-entity-context GetSingleEntityContext" [
+  id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --qp-from: string # The start of the time range to query, as an RFC3339 timestamp or a relative time (for example, `now-7d`). Defaults to `now-7d`. Ignored when `as_of` is set. (default: now-7d, e.g. now-7d)
+  --qp-to: string # The end of the time range to query, as an RFC3339 timestamp or a relative time (for example, `now`). Defaults to `now`. Ignored when `as_of` is set. (default: now, e.g. now)
+  --as-of: string # A point in time at which to query the entity revisions, as an RFC3339 timestamp, a Unix timestamp (in seconds), or a relative time (for example, `now-1d`). When set, `from` and `to` are ignored. Cannot be combined with custom `from` / `to` values. (e.g. now-1d)
+]: nothing -> record<data: record<attributes: record<revisions: list>, id: string, type: string>> {
+  let auth = (build-auth $token ($auth_scheme | default "dd-api-key"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "as_of" $as_of "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/v2/security_monitoring/entity_context/($id)" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"

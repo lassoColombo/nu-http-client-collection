@@ -10489,7 +10489,7 @@ export def "environments-hog-functions list" [
   --offset: int # The initial index from which to return the results.
   --type: list # Multiple values may be separated by commas.
   --updated-at: string # format: date-time
-]: nothing -> record<count: int, next: string, previous: string, results: table<id: string, type: string, name: string, description: string, created_at: string, created_by: record, updated_at: string, enabled: bool, hog: string, filters: any, icon_url: string, template: record, status: any, execution_order: int>> {
+]: nothing -> record<count: int, next: string, previous: string, results: table<id: string, type: string, name: string, description: string, created_at: string, created_by: record, updated_at: string, enabled: bool, hog: string, filters: any, icon_url: string, template: record, status: any, execution_order: int, search_match_type: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "created_at" $created_at "scalar") (serialize-qp "created_by" $created_by "scalar") (serialize-qp "enabled" $enabled "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "type" $type "csv") (serialize-qp "updated_at" $updated_at "scalar")] | flatten | str join "&"
@@ -10530,7 +10530,7 @@ export def "environments-hog-functions create" [
   --template-id: string # ID of the template to create this function from. (nullable)
   --execution-order: int # Execution priority for transformations. Lower values run first. (nullable)
   --create-in-folder: string
-]: any -> record<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: table<type: string, key: string, label: string, choices: list, searchable: bool, required: bool, default: any, secret: bool, hidden: bool, description: string, integration: string, integration_key: string, requires_field: string, integration_field: string, requiredScopes: string, templating: any>, inputs: record, filters: record<source: record, actions: list<record>, events: list<record>, data_warehouse: list<record>, properties: list<record>, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: table<name: string, inputs_schema: list, inputs: record, filters: record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list<record>>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string> {
+]: any -> record<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: table<type: string, key: string, label: string, choices: list, searchable: bool, required: bool, default: any, secret: bool, hidden: bool, description: string, integration: string, integration_key: string, requires_field: string, integration_field: string, requiredScopes: string, templating: any>, inputs: record, filters: record<source: record, actions: list<record>, events: list<record>, data_warehouse: list<record>, properties: list<record>, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: table<name: string, inputs_schema: list, inputs: record, filters: record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list<record>>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string, search_match_type: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10557,7 +10557,7 @@ export def "environments-hog-functions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: table<type: string, key: string, label: string, choices: list, searchable: bool, required: bool, default: any, secret: bool, hidden: bool, description: string, integration: string, integration_key: string, requires_field: string, integration_field: string, requiredScopes: string, templating: any>, inputs: record, filters: record<source: record, actions: list<record>, events: list<record>, data_warehouse: list<record>, properties: list<record>, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: table<name: string, inputs_schema: list, inputs: record, filters: record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list<record>>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string> {
+]: nothing -> record<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: table<type: string, key: string, label: string, choices: list, searchable: bool, required: bool, default: any, secret: bool, hidden: bool, description: string, integration: string, integration_key: string, requires_field: string, integration_field: string, requiredScopes: string, templating: any>, inputs: record, filters: record<source: record, actions: list<record>, events: list<record>, data_warehouse: list<record>, properties: list<record>, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: table<name: string, inputs_schema: list, inputs: record, filters: record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list<record>>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string, search_match_type: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/environments/($environment_id)/hog_functions/($id)/")
@@ -10598,7 +10598,7 @@ export def "environments-hog-functions update" [
   --template-id: string # ID of the template to create this function from. (nullable)
   --execution-order: int # Execution priority for transformations. Lower values run first. (nullable)
   --create-in-folder: string
-]: any -> record<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: table<type: string, key: string, label: string, choices: list, searchable: bool, required: bool, default: any, secret: bool, hidden: bool, description: string, integration: string, integration_key: string, requires_field: string, integration_field: string, requiredScopes: string, templating: any>, inputs: record, filters: record<source: record, actions: list<record>, events: list<record>, data_warehouse: list<record>, properties: list<record>, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: table<name: string, inputs_schema: list, inputs: record, filters: record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list<record>>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string> {
+]: any -> record<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: table<type: string, key: string, label: string, choices: list, searchable: bool, required: bool, default: any, secret: bool, hidden: bool, description: string, integration: string, integration_key: string, requires_field: string, integration_field: string, requiredScopes: string, templating: any>, inputs: record, filters: record<source: record, actions: list<record>, events: list<record>, data_warehouse: list<record>, properties: list<record>, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: table<name: string, inputs_schema: list, inputs: record, filters: record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list<record>>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string, search_match_type: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10642,7 +10642,7 @@ export def "environments-hog-functions patch" [
   --template-id: string # ID of the template to create this function from. (nullable)
   --execution-order: int # Execution priority for transformations. Lower values run first. (nullable)
   --create-in-folder: string
-]: any -> record<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: table<type: string, key: string, label: string, choices: list, searchable: bool, required: bool, default: any, secret: bool, hidden: bool, description: string, integration: string, integration_key: string, requires_field: string, integration_field: string, requiredScopes: string, templating: any>, inputs: record, filters: record<source: record, actions: list<record>, events: list<record>, data_warehouse: list<record>, properties: list<record>, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: table<name: string, inputs_schema: list, inputs: record, filters: record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list<record>>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string> {
+]: any -> record<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: table<type: string, key: string, label: string, choices: list, searchable: bool, required: bool, default: any, secret: bool, hidden: bool, description: string, integration: string, integration_key: string, requires_field: string, integration_field: string, requiredScopes: string, templating: any>, inputs: record, filters: record<source: record, actions: list<record>, events: list<record>, data_warehouse: list<record>, properties: list<record>, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: table<name: string, inputs_schema: list, inputs: record, filters: record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list<record>>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string, search_match_type: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10743,7 +10743,7 @@ export def "environments-hog-functions-invocations create" [
   --clickhouse-event: record # Mock ClickHouse event data to test the function with.
   --mock-async-functions: string@bool-completer # When true (default), async functions like fetch() are simulated. (default: true)
   --invocation-id: string # Optional invocation ID for correlation. (nullable)
-]: any -> record<configuration: record<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: list<record>, inputs: record, filters: record<source: record, actions: list, events: list, data_warehouse: list, properties: list, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: list<record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string>, globals: record, clickhouse_event: record, mock_async_functions: bool, status: string, logs: list<any>, invocation_id: string> {
+]: any -> record<configuration: record<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: list<record>, inputs: record, filters: record<source: record, actions: list, events: list, data_warehouse: list, properties: list, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: list<record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string, search_match_type: any>, globals: record, clickhouse_event: record, mock_async_functions: bool, status: string, logs: list<any>, invocation_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10912,7 +10912,7 @@ export def "environments-hog-functions-rearrange patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --orders: record # Map of hog function UUIDs to their new execution_order values.
-]: any -> table<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: list<record>, inputs: record, filters: record<source: record, actions: list, events: list, data_warehouse: list, properties: list, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: list<record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string> {
+]: any -> table<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: list<record>, inputs: record, filters: record<source: record, actions: list, events: list, data_warehouse: list, properties: list, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: list<record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string, search_match_type: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -19132,6 +19132,33 @@ export def "environments-tracing-spans-count create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/environments/($environment_id)/tracing/spans/count/")
+  let body = {query: $body_query} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+}
+
+# POST /api/environments/{environment_id}/tracing/spans/duration-histogram/
+#
+# DEPRECATED
+# operationId: environments_tracing_spans_duration_histogram_create
+@deprecated
+export def "environments-tracing-spans-duration-histogram create" [
+  environment_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --body-query: any # The tracing spans query to execute.
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/environments/($environment_id)/tracing/spans/duration-histogram/")
   let body = {query: $body_query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -42382,7 +42409,7 @@ export def "projects-hog-functions list" [
   --offset: int # The initial index from which to return the results.
   --type: list # Multiple values may be separated by commas.
   --updated-at: string # format: date-time
-]: nothing -> record<count: int, next: string, previous: string, results: table<id: string, type: string, name: string, description: string, created_at: string, created_by: record, updated_at: string, enabled: bool, hog: string, filters: any, icon_url: string, template: record, status: any, execution_order: int>> {
+]: nothing -> record<count: int, next: string, previous: string, results: table<id: string, type: string, name: string, description: string, created_at: string, created_by: record, updated_at: string, enabled: bool, hog: string, filters: any, icon_url: string, template: record, status: any, execution_order: int, search_match_type: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "created_at" $created_at "scalar") (serialize-qp "created_by" $created_by "scalar") (serialize-qp "enabled" $enabled "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "type" $type "csv") (serialize-qp "updated_at" $updated_at "scalar")] | flatten | str join "&"
@@ -42421,7 +42448,7 @@ export def "projects-hog-functions create" [
   --template-id: string # ID of the template to create this function from. (nullable)
   --execution-order: int # Execution priority for transformations. Lower values run first. (nullable)
   --create-in-folder: string
-]: any -> record<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: table<type: string, key: string, label: string, choices: list, searchable: bool, required: bool, default: any, secret: bool, hidden: bool, description: string, integration: string, integration_key: string, requires_field: string, integration_field: string, requiredScopes: string, templating: any>, inputs: record, filters: record<source: record, actions: list<record>, events: list<record>, data_warehouse: list<record>, properties: list<record>, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: table<name: string, inputs_schema: list, inputs: record, filters: record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list<record>>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string> {
+]: any -> record<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: table<type: string, key: string, label: string, choices: list, searchable: bool, required: bool, default: any, secret: bool, hidden: bool, description: string, integration: string, integration_key: string, requires_field: string, integration_field: string, requiredScopes: string, templating: any>, inputs: record, filters: record<source: record, actions: list<record>, events: list<record>, data_warehouse: list<record>, properties: list<record>, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: table<name: string, inputs_schema: list, inputs: record, filters: record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list<record>>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string, search_match_type: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -42446,7 +42473,7 @@ export def "projects-hog-functions get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> record<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: table<type: string, key: string, label: string, choices: list, searchable: bool, required: bool, default: any, secret: bool, hidden: bool, description: string, integration: string, integration_key: string, requires_field: string, integration_field: string, requiredScopes: string, templating: any>, inputs: record, filters: record<source: record, actions: list<record>, events: list<record>, data_warehouse: list<record>, properties: list<record>, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: table<name: string, inputs_schema: list, inputs: record, filters: record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list<record>>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string> {
+]: nothing -> record<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: table<type: string, key: string, label: string, choices: list, searchable: bool, required: bool, default: any, secret: bool, hidden: bool, description: string, integration: string, integration_key: string, requires_field: string, integration_field: string, requiredScopes: string, templating: any>, inputs: record, filters: record<source: record, actions: list<record>, events: list<record>, data_warehouse: list<record>, properties: list<record>, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: table<name: string, inputs_schema: list, inputs: record, filters: record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list<record>>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string, search_match_type: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/projects/($project_id)/hog_functions/($id)/")
@@ -42485,7 +42512,7 @@ export def "projects-hog-functions update" [
   --template-id: string # ID of the template to create this function from. (nullable)
   --execution-order: int # Execution priority for transformations. Lower values run first. (nullable)
   --create-in-folder: string
-]: any -> record<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: table<type: string, key: string, label: string, choices: list, searchable: bool, required: bool, default: any, secret: bool, hidden: bool, description: string, integration: string, integration_key: string, requires_field: string, integration_field: string, requiredScopes: string, templating: any>, inputs: record, filters: record<source: record, actions: list<record>, events: list<record>, data_warehouse: list<record>, properties: list<record>, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: table<name: string, inputs_schema: list, inputs: record, filters: record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list<record>>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string> {
+]: any -> record<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: table<type: string, key: string, label: string, choices: list, searchable: bool, required: bool, default: any, secret: bool, hidden: bool, description: string, integration: string, integration_key: string, requires_field: string, integration_field: string, requiredScopes: string, templating: any>, inputs: record, filters: record<source: record, actions: list<record>, events: list<record>, data_warehouse: list<record>, properties: list<record>, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: table<name: string, inputs_schema: list, inputs: record, filters: record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list<record>>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string, search_match_type: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -42527,7 +42554,7 @@ export def "projects-hog-functions patch" [
   --template-id: string # ID of the template to create this function from. (nullable)
   --execution-order: int # Execution priority for transformations. Lower values run first. (nullable)
   --create-in-folder: string
-]: any -> record<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: table<type: string, key: string, label: string, choices: list, searchable: bool, required: bool, default: any, secret: bool, hidden: bool, description: string, integration: string, integration_key: string, requires_field: string, integration_field: string, requiredScopes: string, templating: any>, inputs: record, filters: record<source: record, actions: list<record>, events: list<record>, data_warehouse: list<record>, properties: list<record>, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: table<name: string, inputs_schema: list, inputs: record, filters: record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list<record>>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string> {
+]: any -> record<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: table<type: string, key: string, label: string, choices: list, searchable: bool, required: bool, default: any, secret: bool, hidden: bool, description: string, integration: string, integration_key: string, requires_field: string, integration_field: string, requiredScopes: string, templating: any>, inputs: record, filters: record<source: record, actions: list<record>, events: list<record>, data_warehouse: list<record>, properties: list<record>, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: table<name: string, inputs_schema: list, inputs: record, filters: record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list<record>>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string, search_match_type: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -42622,7 +42649,7 @@ export def "projects-hog-functions-invocations create" [
   --clickhouse-event: record # Mock ClickHouse event data to test the function with.
   --mock-async-functions: string@bool-completer # When true (default), async functions like fetch() are simulated. (default: true)
   --invocation-id: string # Optional invocation ID for correlation. (nullable)
-]: any -> record<configuration: record<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: list<record>, inputs: record, filters: record<source: record, actions: list, events: list, data_warehouse: list, properties: list, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: list<record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string>, globals: record, clickhouse_event: record, mock_async_functions: bool, status: string, logs: list<any>, invocation_id: string> {
+]: any -> record<configuration: record<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: list<record>, inputs: record, filters: record<source: record, actions: list, events: list, data_warehouse: list, properties: list, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: list<record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string, search_match_type: any>, globals: record, clickhouse_event: record, mock_async_functions: bool, status: string, logs: list<any>, invocation_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -42779,7 +42806,7 @@ export def "projects-hog-functions-rearrange patch" [
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --orders: record # Map of hog function UUIDs to their new execution_order values.
-]: any -> table<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: list<record>, inputs: record, filters: record<source: record, actions: list, events: list, data_warehouse: list, properties: list, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: list<record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string> {
+]: any -> table<id: string, type: any, name: string, description: string, created_at: string, created_by: record<id: int, uuid: string, distinct_id: string, first_name: string, last_name: string, email: string, is_email_verified: bool, hedgehog_config: record, role_at_organization: any>, updated_at: string, enabled: bool, deleted: bool, hog: string, bytecode: any, transpiled: string, inputs_schema: list<record>, inputs: record, filters: record<source: record, actions: list, events: list, data_warehouse: list, properties: list, bytecode: any, transpiled: any, filter_test_accounts: bool, bytecode_error: string>, masking: any, mappings: list<record>, icon_url: string, template: record<id: string, name: string, description: string, code: string, code_language: string, inputs_schema: any, type: string, status: string, category: any, free: bool, icon_url: string, filters: any, masking: any, mapping_templates: list>, template_id: string, status: any, execution_order: int, _create_in_folder: string, batch_export_id: string, search_match_type: any> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -52327,13 +52354,42 @@ export def "projects-signals-scout-configs list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> table<id: string, skill_name: string, enabled: bool, emit: bool, run_interval_minutes: int, last_run_at: string, created_at: string> {
+]: nothing -> table<id: string, skill_name: string, description: string, enabled: bool, emit: bool, run_interval_minutes: int, last_run_at: string, created_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/projects/($project_id)/signals/scout/configs/")
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Create a scout config
+#
+# POST /api/projects/{project_id}/signals/scout/configs/
+# operationId: signals_scout_config_create
+export def "projects-signals-scout-configs create" [
+  project_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  skill_name: string # The `signals-scout-*` skill to register a config for. The skill must already exist on this project — author it via the skills store first.
+  --enabled: string@bool-completer # Whether this scout runs on its schedule. Defaults to true.
+  --emit: string@bool-completer # Whether the scout writes findings to the inbox. False = dry-run: it runs and logs but emits nothing. Defaults to true.
+  --run-interval-minutes: int # Minutes between runs (10–43200). Defaults to 60 (hourly).
+]: any -> record<id: string, skill_name: string, description: string, enabled: bool, emit: bool, run_interval_minutes: int, last_run_at: string, created_at: string> {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/projects/($project_id)/signals/scout/configs/")
+  let body = {skill_name: $skill_name, enabled: $enabled, emit: $emit, run_interval_minutes: $run_interval_minutes} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
 }
 
 # Update a scout config
@@ -52353,7 +52409,7 @@ export def "projects-signals-scout-configs update" [
   --enabled: string@bool-completer # Whether this scout runs on its schedule. Disabled scouts are skipped by the coordinator.
   --emit: string@bool-completer # Whether the scout writes findings to the inbox. False = dry-run: it runs and logs but emits nothing.
   --run-interval-minutes: int # Minutes between runs (10–43200). The scout runs once this interval has elapsed since its last run.
-]: any -> record<id: string, skill_name: string, enabled: bool, emit: bool, run_interval_minutes: int, last_run_at: string, created_at: string> {
+]: any -> record<id: string, skill_name: string, description: string, enabled: bool, emit: bool, run_interval_minutes: int, last_run_at: string, created_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -52456,7 +52512,7 @@ export def "projects-signals-scout-runs-emissions emissions" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-]: nothing -> table<id: string, run_id: string, finding_id: string, description: string, weight: float, confidence: float, severity: any, source_id: string, emitted_at: string> {
+]: nothing -> table<id: string, run_id: string, finding_id: string, description: string, weight: float, confidence: float, severity: any, tags: list<string>, source_id: string, emitted_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/projects/($project_id)/signals/scout/runs/($run_id)/emissions/")
@@ -52486,6 +52542,7 @@ export def "projects-signals-scout-runs-emit-signal signal" [
   --hypothesis: string # Optional one-line hypothesis the finding tests. (nullable)
   --severity: any # Optional severity tag — one of P0, P1, P2, P3, P4. Informational only.  * `P0` - P0 * `P1` - P1 * `P2` - P2 * `P3` - P3 * `P4` - P4
   --dedupe-keys: list # Optional keys for downstream dedupe (e.g. `error_tracking_issue:<id>`).
+  --tags: list # Optional category tags as lowercase kebab-case slugs (e.g. `cost-spike`, `silent-failure`), max 10. Reuse the vocabulary in your `tags:<domain>:taxonomy` scratchpad entry when a tag fits; coin a new slug when a genuinely new category emerges. Near-miss formats are normalized to slugs; persisted in the signal's `extra.tags` and on the emission row.
   --time-range: any # Optional time window the finding refers to.
   --mcp-trace-id: string # Optional MCP trace id for cross-system debugging. (nullable)
   --finding-id: string # Stable id for this finding, baked into the signal's source_id for traceability. NOT a dedupe key — re-emitting the same id creates another signal. (nullable)
@@ -52494,7 +52551,7 @@ export def "projects-signals-scout-runs-emit-signal signal" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/projects/($project_id)/signals/scout/runs/($run_id)/emit-signal/")
-  let body = {description: $description, confidence: $confidence, evidence: $evidence, hypothesis: $hypothesis, severity: $severity, dedupe_keys: $dedupe_keys, time_range: $time_range, mcp_trace_id: $mcp_trace_id, finding_id: $finding_id} | compact
+  let body = {description: $description, confidence: $confidence, evidence: $evidence, hypothesis: $hypothesis, severity: $severity, dedupe_keys: $dedupe_keys, tags: $tags, time_range: $time_range, mcp_trace_id: $mcp_trace_id, finding_id: $finding_id} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -54411,33 +54468,6 @@ export def "projects-tasks delete" [
   do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
-# File a task into the project tree
-#
-# POST /api/projects/{project_id}/tasks/{id}/file/
-# operationId: tasks_file_create
-export def "projects-tasks-file create" [
-  id: string
-  project_id: string
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-  --folder: string # Destination folder path in the project tree (e.g. 'Tasks/Bugs'). Defaults to 'Tasks'.
-]: any -> record<id: string, path: string, type: string, ref: string, href: string> {
-  let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/projects/($project_id)/tasks/($id)/file/")
-  let body = {folder: $folder} | compact
-  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
-}
-
 # Beacon presence for a device watching this task
 #
 # POST /api/projects/{project_id}/tasks/{id}/presence/
@@ -54582,29 +54612,6 @@ export def "projects-tasks-staged-artifacts-prepare-upload create" [
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
-}
-
-# Remove a task from the project tree
-#
-# POST /api/projects/{project_id}/tasks/{id}/unfile/
-# operationId: tasks_unfile_create
-export def "projects-tasks-unfile create" [
-  id: string
-  project_id: string
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/projects/($project_id)/tasks/($id)/unfile/")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
 # List task runs
@@ -55313,6 +55320,31 @@ export def "projects-tracing-spans-count create" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/projects/($project_id)/tracing/spans/count/")
+  let body = {query: $body_query} | compact
+  let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "post" $full_url $auth $insecure $raw $max_time $allow_errors "application/json" $body
+}
+
+# POST /api/projects/{project_id}/tracing/spans/duration-histogram/
+#
+# operationId: tracing_spans_duration_histogram_create
+export def "projects-tracing-spans-duration-histogram create" [
+  project_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --body-query: any # The tracing spans query to execute.
+]: any -> any {
+  let input = $in
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let full_url = (build-url $base $"/api/projects/($project_id)/tracing/spans/duration-histogram/")
   let body = {query: $body_query} | compact
   let body = if ($input | describe | str starts-with "record") { $input | merge deep ($body | default {}) } else { $body }
   let accept_val = "application/json"
@@ -58927,6 +58959,31 @@ export def "projects-wizard-sessions get" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base $"/api/projects/($project_id)/wizard/sessions/($session_id)/")
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
+# Return the single most-recent wizard session for a workflow (and optional skill), or 204 if none exists. Unlike `list`, this is a point lookup the app shell uses to decide whether to open the live SSE stream — it never returns a collection, and 'no run' is a 204 rather than a 404 so clients don't conflate it with a missing endpoint.
+#
+# GET /api/projects/{project_id}/wizard/sessions/latest/
+# operationId: wizard_sessions_latest_retrieve
+export def "projects-wizard-sessions-latest get" [
+  project_id: string
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --skill-id: string # Filter to a single skill within the workflow (e.g. 'nextjs').
+  --workflow-id: string # Filter to a single workflow (e.g. 'posthog-integration').
+]: nothing -> record<session_id: string, team_id: int, workflow_id: string, skill_id: string, started_at: string, run_phase: string, tasks: table<id: string, title: string, status: string>, event_plan: record, error: record, created_at: string, updated_at: string, is_stale: bool> {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "skill_id" $skill_id "scalar") (serialize-qp "workflow_id" $workflow_id "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base $"/api/projects/($project_id)/wizard/sessions/latest/" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"

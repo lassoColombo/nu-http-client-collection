@@ -1,4 +1,4 @@
-# Auto-generated client for TIDAL API v1.10.32
+# Auto-generated client for TIDAL API v1.10.33
 # Source: https://tidal-music.github.io/tidal-api-reference/tidal-api-oas.json
 # Auth: --token flag or $env.TIDAL_API_TOKEN
 
