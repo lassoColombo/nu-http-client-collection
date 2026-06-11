@@ -6,10 +6,11 @@
 # Pass --force to regenerate regardless.
 #
 # Examples:
-#   nu scripts/generate.nu               # generate every missing client
-#   nu scripts/generate.nu --force       # regenerate every client
-#   nu scripts/generate.nu countries     # generate `countries` if missing
-#   nu scripts/generate.nu countries --force  # regenerate `countries`
+#   nu scripts/generate.nu                              # generate every missing client
+#   nu scripts/generate.nu --force                      # regenerate every client
+#   nu scripts/generate.nu --name countries             # generate `countries` if missing
+#   nu scripts/generate.nu --name countries --force     # regenerate `countries`
+#   nu scripts/generate.nu --category ai --force        # regenerate every client in `ai`
 #
 # Clients are written to `<out-dir>/<category>/<name>.nu`. Names must be
 # unique across categories (validated at startup).
@@ -19,7 +20,8 @@
 #   git clone https://github.com/lassoColombo/nu-http-client-generator _generator
 
 def main [
-    client?: string                          # client name to regenerate; omit, "", or "all" to regenerate all
+    --name: string                           # restrict to a single client by name (mutually exclusive with --category)
+    --category: string                       # restrict to every client in this category (mutually exclusive with --name)
     --config: path = "clients.yaml"          # path to the registry file
     --generator: path = "_generator"         # path to the nu-http-client-generator directory
     --out-dir: path = "clients"              # where to write generated `.nu` files
@@ -27,6 +29,9 @@ def main [
     --list-only                              # skip generation; only refresh the list file from `clients.yaml`
     --force                                  # regenerate even if the output file already exists (default: skip existing)
 ] {
+    if ($name != null) and ($category != null) {
+        error make { msg: "--name and --category are mutually exclusive" }
+    }
     if not ($config | path exists) {
         error make { msg: $"config file not found: ($config)" }
     }
@@ -48,7 +53,7 @@ def main [
         error make { msg: $"generator not found at ($generator). Clone it with: git clone https://github.com/lassoColombo/nu-http-client-generator ($generator)" }
     }
 
-    let matched = (filter-clients $all_clients $client)
+    let matched = (filter-clients $all_clients $name $category)
     mkdir $out_dir
 
     let generator_path = ($generator | into string)
@@ -128,16 +133,24 @@ def validate-unique-names [clients: list] {
     }
 }
 
-def filter-clients [clients: list, name: any]: nothing -> list {
-    if ($name == null or $name == "" or $name == "all") {
-        return $clients
+def filter-clients [clients: list, name: any, category: any]: nothing -> list {
+    if $name != null and $name != "" {
+        let matched = ($clients | where name == $name)
+        if ($matched | is-empty) {
+            let known = ($clients | each {|c| $"($c.category)/($c.name)" } | str join ", ")
+            error make { msg: $"no client named '($name)'. Known clients: ($known)" }
+        }
+        return $matched
     }
-    let matched = ($clients | where name == $name)
-    if ($matched | is-empty) {
-        let known = ($clients | each {|c| $"($c.category)/($c.name)" } | str join ", ")
-        error make { msg: $"no client named '($name)'. Known clients: ($known)" }
+    if $category != null and $category != "" {
+        let matched = ($clients | where category == $category)
+        if ($matched | is-empty) {
+            let known = ($clients | get category | uniq | str join ", ")
+            error make { msg: $"no clients in category '($category)'. Known categories: ($known)" }
+        }
+        return $matched
     }
-    $matched
+    $clients
 }
 
 def generate-one [

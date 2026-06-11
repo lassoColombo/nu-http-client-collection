@@ -1,28 +1,28 @@
 name: Generate clients
 
 on:
+  schedule:
+    - cron: "0 4 * * *"   # 04:00 UTC daily — regenerates all
   workflow_dispatch:
     inputs:
-      client:
-        description: 'Client to regenerate (leave empty or "all" to regenerate everything).'
+      name:
+        description: "Single client name to regenerate. Leave empty to regenerate all (or use 'category')."
         required: false
-        default: "all"
+        default: ""
+        type: string
+      category:
+        description: "Category to regenerate. Mutually exclusive with 'name'."
+        required: false
+        default: ""
         type: string
       generator_ref:
         description: "nu-http-client-generator ref to use (branch, tag, or SHA)."
         required: false
         default: "main"
         type: string
-  push:
-    branches: [main]
-    paths:
-      - "clients.yaml"
-      - "scripts/generate.nu"
-      - "scripts/diff-clients.nu"
-      - ".github/workflows/generate.yml"
 
 concurrency:
-  group: generate-${{ github.event.inputs.client || github.event_name }}
+  group: generate-${{ github.event.inputs.name || github.event.inputs.category || 'all' }}
   cancel-in-progress: false
 
 permissions:
@@ -32,11 +32,9 @@ jobs:
   generate:
     runs-on: ubuntu-latest
     env:
-      EVENT_NAME: ${{ github.event_name }}
-      DISPATCH_CLIENT: ${{ github.event.inputs.client || 'all' }}
+      INPUT_NAME: ${{ github.event.inputs.name }}
+      INPUT_CATEGORY: ${{ github.event.inputs.category }}
       GENERATOR_REF: ${{ github.event.inputs.generator_ref || 'main' }}
-      BEFORE: ${{ github.event.before }}
-      AFTER: ${{ github.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -53,50 +51,23 @@ jobs:
           git clone --depth=1 --branch "$GENERATOR_REF" \
             https://github.com/lassoColombo/nu-http-client-generator.git _generator
 
+      - name: Snapshot HEAD pre-commit
+        id: presha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Generate clients
-        id: gen
         run: |
           set -e
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "scope=$DISPATCH_CLIENT" >> "$GITHUB_OUTPUT"
-            nu scripts/generate.nu "$DISPATCH_CLIENT" --force
-            exit 0
-          fi
-
-          # Push event — regenerate only entries that changed in clients.yaml.
-          out=$(nu scripts/diff-clients.nu "$BEFORE" "$AFTER")
-          regen=$(printf '%s\n' "$out" | sed -n 's/^regen: //p')
-          delete=$(printf '%s\n' "$out" | sed -n 's/^delete: //p')
-
-          for p in $delete; do
-            echo "Removing $p"
-            rm -f "$p"
-          done
-
-          if [ -z "$regen" ] && [ -z "$delete" ]; then
-            echo "No client entries changed."
-            echo "scope=none" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [ -z "$regen" ]; then
-            # Only deletions — still refresh CLIENTS.md.
-            nu scripts/generate.nu --list-only
-            echo "scope=deletions" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "Regenerating: $regen"
-          echo "scope=$regen" >> "$GITHUB_OUTPUT"
-          failed=""
-          for n in $regen; do
-            if ! nu scripts/generate.nu "$n" --force; then
-              failed="$failed $n"
-            fi
-          done
-          if [ -n "$failed" ]; then
-            echo "Failed to generate:$failed" >&2
+          if [ -n "$INPUT_NAME" ] && [ -n "$INPUT_CATEGORY" ]; then
+            echo "Cannot pass both 'name' and 'category' inputs." >&2
             exit 1
+          fi
+          if [ -n "$INPUT_NAME" ]; then
+            nu scripts/generate.nu --force --name "$INPUT_NAME"
+          elif [ -n "$INPUT_CATEGORY" ]; then
+            nu scripts/generate.nu --force --category "$INPUT_CATEGORY"
+          else
+            nu scripts/generate.nu --force
           fi
 
       - name: Commit & push
@@ -112,24 +83,37 @@ jobs:
             echo "No changes — nothing to commit."
             exit 0
           fi
-          scope="${{ steps.gen.outputs.scope }}"
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            if [ "$scope" = "" ] || [ "$scope" = "all" ]; then
-              msg="chore(clients): regenerate all"
-            else
-              msg="chore(clients): regenerate ${scope}"
-            fi
+          if [ -n "$INPUT_NAME" ]; then
+            msg="chore(clients): regenerate ${INPUT_NAME}"
+          elif [ -n "$INPUT_CATEGORY" ]; then
+            msg="chore(clients): regenerate category ${INPUT_CATEGORY}"
           else
-            if [ "$scope" = "deletions" ]; then
-              msg="chore(clients): apply registry deletions"
-            else
-              count=$(printf '%s\n' $scope | wc -w | tr -d ' ')
-              if [ "$count" = "1" ]; then
-                msg="chore(clients): regenerate ${scope}"
-              else
-                msg="chore(clients): regenerate ${count} clients"$'\n\n'"${scope// /$'\n'}"
-              fi
-            fi
+            msg="chore(clients): regenerate all"
           fi
           git commit -m "$msg"
           git push
+
+      - name: Tag datever
+        if: success()
+        env:
+          TZ: UTC
+          PRE_SHA: ${{ steps.presha.outputs.sha }}
+        run: |
+          set -e
+          # Only tag if this run actually produced a new commit.
+          if [ "$(git rev-parse HEAD)" = "$PRE_SHA" ]; then
+            echo "No new commit produced — skipping tag."
+            exit 0
+          fi
+          git fetch --tags
+          base="v$(date -u +'%Y.%m.%d')"
+          tag="$base"
+          n=1
+          while git rev-parse -q --verify "refs/tags/$tag" >/dev/null \
+             || git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; do
+            n=$((n+1))
+            tag="${base}.${n}"
+          done
+          git tag -a "$tag" -m "$tag"
+          git push origin "$tag"
+          echo "Tagged $tag"
