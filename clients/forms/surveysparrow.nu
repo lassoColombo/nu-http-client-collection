@@ -4995,7 +4995,7 @@ export def "channels-create-unique-links links" [
   --contacts: list # Array of contact objects — item shape: {full_name?: string, phone?: string, mobile?: string, email?: string, job_title?: string, contact_type?: "contact"|"employee", variables?: record, expires_at?: string}
   --contact-list-ids: list # Id's of Contact Lists
   --short-url: string@bool-completer # Create short link for the survey (default: false, e.g. false)
-  --expires-at: string # expiry time of link in UTC (format: date, e.g. 2026-08-10T19:56:03Z)
+  --expires-at: string # expiry time of link in UTC (format: date, e.g. 2026-08-10T20:20:54Z)
   --body-variables: record
 ]: any -> record<data: table<contact_id: float, survey_link: string, short_url: string, variables: record, expires_at: string>> {
   let input = $in

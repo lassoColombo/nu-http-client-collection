@@ -518,6 +518,33 @@ export def "deploy-llm-suggest-name get" [
   do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
+# Deploy Llm Standard Args
+#
+# GET /deploy/llm/standard_args
+# operationId: deploy_llm_standard_args_deploy_llm_standard_args_get
+export def "deploy-llm-standard-args get" [
+  --base-url(-b): string@base-url-completer # API base URL
+  --token(-t): string # Auth token
+  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --insecure(-k) # Skip TLS verification
+  --max-time(-m): duration # Timeout
+  --raw(-r) # Fetch as text
+  --allow-errors(-e) # Return full response without error handling
+  --engine: string # default: vllm
+  --xi-api-key: string
+  --x-api-key: string
+]: nothing -> record {
+  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let base = ($base_url | default $BASE_URL)
+  let qp = [(serialize-qp "engine" $engine "scalar")] | flatten | str join "&"
+  let full_url = (build-url $base "/deploy/llm/standard_args" $qp)
+  let extra_headers = {"xi-api-key": $xi_api_key, "x-api-key": $x_api_key} | compact
+  let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
+  let accept_val = "application/json"
+  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
+  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
+}
+
 # Deploy Create Llm
 #
 # POST /deploy/llm

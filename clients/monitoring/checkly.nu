@@ -2226,8 +2226,8 @@ export def "checks-heartbeats-availability get" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --startTime: string # format: date, default: 2026-06-10T20:38:13.836Z
-  --endTime: string # format: date, default: 2026-06-11T20:38:13.836Z
+  --startTime: string # format: date, default: 2026-06-10T21:04:36.064Z
+  --endTime: string # format: date, default: 2026-06-11T21:04:36.065Z
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> record<successRatio: record<previousPeriod: float, currentPeriod: float>, totalEntitiesCurrentPeriod: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
@@ -2254,8 +2254,8 @@ export def "checks-heartbeats-events list" [
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
-  --startTime: string # format: date, default: 2026-06-10T20:38:13.839Z
-  --endTime: string # format: date, default: 2026-06-11T20:38:13.839Z
+  --startTime: string # format: date, default: 2026-06-10T21:04:36.068Z
+  --endTime: string # format: date, default: 2026-06-11T21:04:36.068Z
   --limit: float # default: 10
   --x-checkly-account: string # Your Checkly account ID, you can find it at https://app.checklyhq.com/settings/account/general
 ]: nothing -> table<events: list<record>, stats: record<last24Hours: record, last7Days: record>> {
@@ -4819,7 +4819,7 @@ export def "status-pages-incidents-incident-updates post" [
   --id: string
   description: string
   --status: string@status-completer-4
-  --publicIncidentUpdateDate: string # format: date-time, default: 2026-06-11T20:38:15.172Z
+  --publicIncidentUpdateDate: string # format: date-time, default: 2026-06-11T21:04:37.568Z
   --created-at: string # format: date
   --notifySubscribers: string@bool-completer # default: false
 ]: any -> record<id: string, description: string, status: string, publicIncidentUpdateDate: string, created_at: string, notifySubscribers: bool> {
@@ -4906,7 +4906,7 @@ export def "status-pages-incidents-incident-updates put" [
   --id: string
   description: string
   --status: string@status-completer-4
-  --publicIncidentUpdateDate: string # format: date-time, default: 2026-06-11T20:38:15.172Z
+  --publicIncidentUpdateDate: string # format: date-time, default: 2026-06-11T21:04:37.568Z
   --created-at: string # format: date
   --notifySubscribers: string@bool-completer # default: false
 ]: any -> record<id: string, description: string, status: string, publicIncidentUpdateDate: string, created_at: string, notifySubscribers: bool> {

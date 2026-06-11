@@ -76038,6 +76038,8 @@ export def "zones-custom-hostnames custom-hostname-for-a-zone-list-custom-hostna
   --raw(-r) # Fetch as text
   --allow-errors(-e) # Return full response without error handling
   --hostname: string # e.g. app.example.com
+  --hostnameexact: string # e.g. app.example.com
+  --hostnamestartsWith: string # e.g. app
   --hostnamecontain: string # e.g. example.com
   --id: string # e.g. 0d89c70d-ad9f-4843-b99f-6cc0252067e9
   --page: float # default: 1
@@ -76053,7 +76055,7 @@ export def "zones-custom-hostnames custom-hostname-for-a-zone-list-custom-hostna
 ]: nothing -> record<errors: table<code: int, documentation_url: string, message: string, source: record>, messages: list<string>, success: bool, result: table<hostname: string, id: string, ssl: record>, result_info: record<count: float, page: float, per_page: float, total_count: float, total_pages: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
-  let qp = [(serialize-qp "hostname" $hostname "scalar") (serialize-qp "hostname.contain" $hostnamecontain "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "ssl_status" $ssl_status "scalar") (serialize-qp "hostname_status" $hostname_status "scalar") (serialize-qp "certificate_authority" $certificate_authority "scalar") (serialize-qp "wildcard" $wildcard "scalar") (serialize-qp "custom_origin_server" $custom_origin_server "scalar") (serialize-qp "ssl" $ssl "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "hostname" $hostname "scalar") (serialize-qp "hostname.exact" $hostnameexact "scalar") (serialize-qp "hostname.startsWith" $hostnamestartsWith "scalar") (serialize-qp "hostname.contain" $hostnamecontain "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "ssl_status" $ssl_status "scalar") (serialize-qp "hostname_status" $hostname_status "scalar") (serialize-qp "certificate_authority" $certificate_authority "scalar") (serialize-qp "wildcard" $wildcard "scalar") (serialize-qp "custom_origin_server" $custom_origin_server "scalar") (serialize-qp "ssl" $ssl "scalar")] | flatten | str join "&"
   let full_url = (build-url $base $"/zones/($zone_id)/custom_hostnames" $qp)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))

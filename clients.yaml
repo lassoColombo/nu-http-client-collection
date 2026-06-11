@@ -234,17 +234,6 @@ clients:
       type: openapi
       source: https://deep-index.moralis.io/api-docs-2.2/v2.2/swagger.json
 
-  browser-automation:
-    - name: browserless
-      type: openapi
-      source: https://docs.browserless.io/redocusaurus/plugin-redoc-0.yaml
-    - name: browserbase
-      type: openapi
-      source: https://storage.googleapis.com/stainless-sdk-openapi-specs/browserbase/browserbase-f39b852755134d01a440f7c37701f6c5397f43d13740d9ba08739cae488382a7.yml
-    - name: apify
-      type: openapi
-      source: https://api.apify.com/v2/openapi.json
-
   calendar:
     - name: google-calendar
       type: openapi
@@ -465,6 +454,12 @@ clients:
       source: https://api.apis.guru/v2/specs/azure.com/automation-runbook/2018-06-30/swagger.json
 
   cloud:
+    - name: render
+      type: openapi
+      source: https://api-docs.render.com/openapi/render-public-api-1.json
+    - name: dokploy
+      type: openapi
+      source: https://docs.dokploy.com/openapi.json
     - name: digitalocean
       type: openapi
       source: https://raw.githubusercontent.com/digitalocean/openapi/main/specification/DigitalOcean-public.v2.yaml
@@ -495,14 +490,6 @@ clients:
     - name: koyeb
       type: openapi
       source: https://raw.githubusercontent.com/koyeb/koyeb-api-client-go/master/api/v1/koyeb/api/openapi.yaml
-
-  collaboration:
-    - name: miro
-      type: openapi
-      source: https://raw.githubusercontent.com/miroapp/api-clients/main/packages/generator/spec.json
-    - name: bluescape
-      type: openapi
-      source: https://api.apps.us.bluescape.com/v3/openapi.json
 
   commerce:
     - name: square
@@ -745,7 +732,7 @@ clients:
       type: openapi
       source: https://raw.githubusercontent.com/kestra-io/client-sdk/main/kestra-ee.yml
 
-  data-warehouse:
+  database:
     - name: snowflake-account
       type: openapi
       source: https://raw.githubusercontent.com/snowflakedb/snowflake-rest-api-specs/main/specifications/account.yaml
@@ -761,8 +748,6 @@ clients:
     - name: bigquery
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/bigquery/v2/openapi.json
-
-  database:
     - name: neon
       type: openapi
       source: https://neon.com/api_spec/release/v2.json
@@ -1251,6 +1236,12 @@ clients:
       source: https://api.apis.guru/v2/specs/twinehealth.com/v7.78.1/openapi.json
 
   identity:
+    - name: onepassword-connect
+      type: openapi
+      source: https://raw.githubusercontent.com/1Password/connect/main/docs/openapi/spec.yaml
+    - name: onepassword-events-api
+      type: openapi
+      source: https://api.apis.guru/v2/specs/1password.com/events/1.0.0/openapi.json
     - name: auth0
       type: openapi
       source: https://auth0.com/docs/api/management/openapi.json
@@ -1790,14 +1781,6 @@ clients:
       type: openapi
       source: https://api.apis.guru/v2/specs/sportsdata.io/mlb-v3-rotoballer-premium-news/1.0/openapi.json
 
-  password-manager:
-    - name: onepassword-connect
-      type: openapi
-      source: https://raw.githubusercontent.com/1Password/connect/main/docs/openapi/spec.yaml
-    - name: onepassword-events-api
-      type: openapi
-      source: https://api.apis.guru/v2/specs/1password.com/events/1.0.0/openapi.json
-
   payments:
     - name: stripe
       type: openapi
@@ -1880,6 +1863,18 @@ clients:
       source: https://raw.githubusercontent.com/tebexio/TebexCheckout-OpenAPI/main/sdks/openapi/openapi.json
 
   project-mgmt:
+    - name: miro
+      type: openapi
+      source: https://raw.githubusercontent.com/miroapp/api-clients/main/packages/generator/spec.json
+    - name: bluescape
+      type: openapi
+      source: https://api.apps.us.bluescape.com/v3/openapi.json
+    - name: toggl-track
+      type: openapi
+      source: https://engineering.toggl.com/assets/files/api-d56ecbd7b19d9020283019e0581d80ca.json
+    - name: clockify
+      type: openapi
+      source: https://docs.clockify.me/openapi.json
     - name: asana
       type: openapi
       source: https://raw.githubusercontent.com/Asana/openapi/master/defs/asana_oas.yaml
@@ -2609,6 +2604,15 @@ clients:
       source: https://raw.githubusercontent.com/twilio/twilio-oai/main/spec/json/twilio_supersim_v1.json
 
   testing:
+    - name: browserless
+      type: openapi
+      source: https://docs.browserless.io/redocusaurus/plugin-redoc-0.yaml
+    - name: browserbase
+      type: openapi
+      source: https://storage.googleapis.com/stainless-sdk-openapi-specs/browserbase/browserbase-f39b852755134d01a440f7c37701f6c5397f43d13740d9ba08739cae488382a7.yml
+    - name: apify
+      type: openapi
+      source: https://api.apify.com/v2/openapi.json
     - name: httpbin
       type: openapi
       source: https://httpbin.org/spec.json
@@ -2845,6 +2849,9 @@ clients:
       type: openapi
       source: https://api.apis.guru/v2/specs/googleapis.com/videointelligence/v1/openapi.json
   arr:
+    - name: qbittorrent
+      type: openapi
+      source: https://raw.githubusercontent.com/qbittorrent-ecosystem/webui-api-openapi/master/specs/v2.8.3/build/openapi.yaml
     - name: sonarr
       type: openapi
       source: https://raw.githubusercontent.com/Sonarr/Sonarr/develop/src/Sonarr.Api.V3/openapi.json
@@ -2860,19 +2867,6 @@ clients:
     - name: whisparr
       type: openapi
       source: https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/Whisparr.Api.V3/openapi.json
-
-  time-tracking:
-    - name: toggl-track
-      type: openapi
-      source: https://engineering.toggl.com/assets/files/api-d56ecbd7b19d9020283019e0581d80ca.json
-    - name: clockify
-      type: openapi
-      source: https://docs.clockify.me/openapi.json
-
-  torrent:
-    - name: qbittorrent
-      type: openapi
-      source: https://raw.githubusercontent.com/qbittorrent-ecosystem/webui-api-openapi/master/specs/v2.8.3/build/openapi.yaml
 
   weather:
     - name: weather-gov
@@ -2906,20 +2900,10 @@ clients:
       type: openapi
       source: https://api.apis.guru/v2/specs/meteosource.com/v1/openapi.json
 
-  web-hosting:
-    - name: render
-      type: openapi
-      source: https://api-docs.render.com/openapi/render-public-api-1.json
-    - name: dokploy
-      type: openapi
-      source: https://docs.dokploy.com/openapi.json
-
-  webhooks:
+  automation:
     - name: svix
       type: openapi
       source: https://api.svix.com/api/v1/openapi.json
-
-  workflow-automation:
     - name: n8n
       type: openapi
       source: https://docs.n8n.io/api/v1/openapi.yml

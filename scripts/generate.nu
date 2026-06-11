@@ -203,7 +203,8 @@ def build-flag-args [flags: record]: nothing -> string {
 # Overwrite `list_path` with a markdown document listing every client in `clients`,
 # one table per category. Fully owned by this script — do not edit by hand.
 def write-list-file [list_path: path, clients: list, out_dir: path] {
-    let header = "# Available clients\n\n_This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do not edit by hand._\n"
+    let count = ($clients | length)
+    let header = $"# Available clients\n\n_This file is auto-generated from `clients.yaml` by `scripts/generate.nu`. Do not edit by hand._\n\nThis collection contains ($count) clients.\n"
     let body = (render-clients-sections $clients $out_dir)
     $header + "\n" + $body + "\n" | save -f $list_path
 }

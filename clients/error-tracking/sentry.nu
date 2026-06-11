@@ -1835,29 +1835,6 @@ export def "0-organizations-preprodartifacts-snapshots Delete-a-Snapshot" [
   do-request "delete" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
 }
 
-# Download all images in a snapshot as a ZIP archive.  The response is a streaming `application/zip` file. Images that share the same content hash are deduplicated during fetch but written under their original filenames in the archive.  This endpoint requires a bearer token with `project:read` access.
-#
-# GET /api/0/organizations/{organization_id_or_slug}/preprodartifacts/snapshots/{snapshot_id}/download/
-# operationId: Download Snapshot images as ZIP
-export def "0-organizations-preprodartifacts-snapshots-download Download-Snapshot-images-as-ZIP" [
-  organization_id_or_slug: string
-  snapshot_id: string
-  --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
-  --insecure(-k) # Skip TLS verification
-  --max-time(-m): duration # Timeout
-  --raw(-r) # Fetch as text
-  --allow-errors(-e) # Return full response without error handling
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
-  let base = ($base_url | default $BASE_URL)
-  let full_url = (build-url $base $"/api/0/organizations/($organization_id_or_slug)/preprodartifacts/snapshots/($snapshot_id)/download/")
-  let accept_val = "application/json"
-  let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  do-request "get" $full_url $auth $insecure $raw $max_time $allow_errors "application/json"
-}
-
 # Retrieve detailed information for a single image within a snapshot.  The `image_identifier` can be either the image filename or its content hash. The response includes head and base image metadata, comparison status, diff image URL, diff percentage, and previous filename for renames.  This endpoint uses a flat response format with nullable fields designed for LLM/MCP consumers.  This endpoint requires a bearer token with `project:read` access.
 #
 # GET /api/0/organizations/{organization_id_or_slug}/preprodartifacts/snapshots/{snapshot_id}/images/{image_identifier}/
