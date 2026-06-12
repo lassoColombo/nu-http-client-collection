@@ -2,7 +2,7 @@ name: Generate clients
 
 on:
   schedule:
-    - cron: "0 4 * * *"   # 04:00 UTC daily — regenerates all
+    - cron: "0 4 * * *" # 04:00 UTC daily — regenerates all
   workflow_dispatch:
     inputs:
       name:
@@ -78,7 +78,7 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A clients/ CLIENTS.md
+          git add -A clients/
           if git diff --cached --quiet; then
             echo "No changes — nothing to commit."
             exit 0
